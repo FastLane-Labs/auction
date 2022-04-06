@@ -293,21 +293,14 @@ contract fastLaneAuction {
                         if (bidList[i].bidAmount > top_bid_amount) {
                             top_bid_amount = bidList[i].bidAmount;
                         }
-                    }
-
-                    //if this is incremental bid, identify the previous bid
-                    if (isIncrementalBid == true) {
-                        if (
-                            //identify the original bid
-                            bidList[i].searcherPayableAddress == bid.searcherPayableAddress &&
+                    
+                        //identify the original bid
+                        if (bidList[i].searcherPayableAddress == bid.searcherPayableAddress &&
                             bidList[i].searcherContractAddress == bid.searcherContractAddress
                             ) {
                                 //verify there aren't two incremental bids out there
                                 require(incremental_bid_index == -1, 'hey now');
 
-                                //make sure that incremental bids are being submitted from msg.sender
-                                require(msg.sender == bid.searcherPayableAddress, 'incremental bids must be sent from the payor EOA'); //this is a redundant check
-                                
                                 //grab the bid delta and check funding capacity
                                 bid_delta = bid.bidAmount - bidList[i].bidAmount;
                                 require(bid_delta >= bid_increment, 'bidding increment too small');
@@ -327,7 +320,7 @@ contract fastLaneAuction {
                 require(incremental_bid_index != -1, 'initial bid not found - please save this TX Hash and contact fastlane support via discord');
 
                 //for incremental bids, transfer the incremental increase amount
-                bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid.bidAmount);
+                bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid_delta);
                 require(bid_token.balanceOf(address(this)) == _startBalance + bid_delta, 'im not angry im just disappointed'); 
 
                 //update the existing Bid struct rather than adding a new one
