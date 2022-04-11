@@ -337,18 +337,20 @@ contract fastLaneAuction {
         }
     }
 
-    //PUBLIC VIEW-ONLY FUNCTIONS (for frontend)
+    //PUBLIC VIEW-ONLY FUNCTIONS (for frontend / backend)
 
     //function for determining the current top bid for an ongoing (live) auction
-    function find_top_bid_ongoing(address validatorAddress, address opportunityAddress)
-        public view returns (Bid memory topBid) {
-            require(auction_live == true, 'auction is not currently live');
+    function find_top_bid(address validatorAddress, address opportunityAddress)
+        public view returns (bool, Bid memory topBid) {
 
             //get the list of bids for this specific pair
             Bid[] memory bidList = currentAuctionMap[validatorAddress][opportunityAddress];
 
             //make sure there's at least 1 bid
-            require(bidList.length > 0, 'no bids exist for this validator/opportunity pair');
+            if(bidList.length < 1) {
+                topBid = Bid(validatorAddress, opportunityAddress, address(this), address(this), 0);
+                return (false, topBid);
+            }
 
             //initialize topBid variable to help with identifying top bid while iterating
             uint256 topBidAmount = 0;
@@ -365,42 +367,13 @@ contract fastLaneAuction {
                     topBid = bidList[i];
                 }
             }
-        return topBid;
-        }
-    
-    //function for determining the top bid for a completed auction
-    function find_top_bid_complete(address validatorAddress, address opportunityAddress)
-        public view returns (Bid memory topBid) {
-            require(auction_live == false, 'auction is currently live');
-
-            //get the list of bids for this specific pair
-            Bid[] memory bidList = currentAuctionMap[validatorAddress][opportunityAddress];
-
-            //make sure there's at least 1 bid
-            require(bidList.length > 0, 'no bids exist for this validator/opportunity pair');
-
-            //initialize topBid variable to help with identifying top bid while iterating
-            uint256 topBidAmount = 0;
-
-            //iterate through the list of bids
-            for (uint256 i = 0 ; i < bidList.length; i++) {
-
-                //check and see if bid is higher than high watermark
-                if(bidList[i].bidAmount > topBidAmount) {
-
-                    //if it's higher than the previous high watermark, save it
-                    //todo: gas comparison on saving the bid vs declaring a new var (index) and saving the index?
-                    topBidAmount = bidList[i].bidAmount;
-                    topBid = bidList[i];
-                }
-            }
-        return topBid;
+            //return true and the topBid
+            return (true, topBid);
         }
 
     //function for determining the winner of a completed auction
     function find_auction_winner(address validatorAddress, address opportunityAddress)
         public view returns (bool, address) {
-            require(auction_live == false, 'auction is currently live');
 
             //get the winning searcher
             address winningSearcher = auctionResultsMap[validatorAddress][opportunityAddress];
