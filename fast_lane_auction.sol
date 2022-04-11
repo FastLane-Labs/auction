@@ -82,9 +82,9 @@ contract fastLaneAuction {
             require(auction_live == false, 'auction ongoing');
 
             //remove the validator address from the array of participating validators
-            int256 index = findElementIndexInArray(opportunityAddress, opportunityAddressList);
-            if (index != -1) { 
-                removeElementFromArray(uint256(index), opportunityAddressList);
+            (bool foundIndex, uint256 index) = findElementIndexInArray(opportunityAddress, opportunityAddressList);
+            if (foundIndex) { 
+                removeElementFromStorageArray(index, opportunityAddressList);
             }
 
             //delete the opportunity from the auctionResultsMap and the currentAuctionMap to prevent state bloat
@@ -110,9 +110,9 @@ contract fastLaneAuction {
             require(auction_live == false, 'auction ongoing');
 
             //remove the validator address from the array of participating validators
-            int256 index = findElementIndexInArray(validatorAddress, validatorAddressList);
-            if (index != -1) { 
-                removeElementFromArray(uint256(index), validatorAddressList);
+            (bool foundIndex, uint256 index) = findElementIndexInArray(validatorAddress, validatorAddressList);
+            if (foundIndex) { 
+                removeElementFromStorageArray(index, validatorAddressList);
             }
 
             //delete the validator from the auctionResultsMap and the currentAuctionMap to prevent state bloat
@@ -211,24 +211,19 @@ contract fastLaneAuction {
         }
 
     // ARRAY AND MAP HELPER FUNCTIONS
-
-    //TODO there's some int to uint fuckery in these that needs to be fixed
     function findElementIndexInArray(address element, address[] storage arr) 
-        internal view returns(int256) {
-            require(msg.sender == owner, 'no hack plz');
+        internal view returns(bool, uint) {
             for (uint256 i = 0 ; i < arr.length; i++) {
                 if (arr[i] == element) {
-                    return int256(i);
+                    return (true, i);
                 }
             }
-            return -1;
+            return (false, 0);
         }
 
-    function removeElementFromArray(uint index, address[] storage arr) 
+    function removeElementFromStorageArray(uint index, address[] storage arr) 
         internal {
-            require(msg.sender == owner, 'no hack plz');
             if (index >= arr.length) return;
-
             for (uint i = index; i<arr.length-1; i++){
                 arr[i] = arr[i+1];
             }
@@ -237,7 +232,6 @@ contract fastLaneAuction {
 
     function verifyAddressInArray(address element, address[] storage arr) 
         internal view returns(bool) {
-            require(msg.sender == owner, 'no hack plz');
             for (uint256 i = 0 ; i < arr.length; i++) {
                 if (arr[i] == element) {
                     return true;
@@ -342,4 +336,92 @@ contract fastLaneAuction {
             }
         }
     }
+
+    //PUBLIC VIEW-ONLY FUNCTIONS (for frontend)
+
+    //function for determining the current top bid for an ongoing (live) auction
+    function find_top_bid_ongoing(address validatorAddress, address opportunityAddress)
+        public view returns (Bid memory topBid) {
+            require(auction_live == true, 'auction is not currently live');
+
+            //get the list of bids for this specific pair
+            Bid[] memory bidList = currentAuctionMap[validatorAddress][opportunityAddress];
+
+            //make sure there's at least 1 bid
+            require(bidList.length > 0, 'no bids exist for this validator/opportunity pair');
+
+            //initialize topBid variable to help with identifying top bid while iterating
+            uint256 topBidAmount = 0;
+
+            //iterate through the list of bids
+            for (uint256 i = 0 ; i < bidList.length; i++) {
+
+                //check and see if bid is higher than high watermark
+                if(bidList[i].bidAmount > topBidAmount) {
+
+                    //if it's higher than the previous high watermark, save it
+                    //todo: gas comparison on saving the bid vs declaring a new var (index) and saving the index?
+                    topBidAmount = bidList[i].bidAmount;
+                    topBid = bidList[i];
+                }
+            }
+        return topBid;
+        }
+    
+    //function for determining the top bid for a completed auction
+    function find_top_bid_complete(address validatorAddress, address opportunityAddress)
+        public view returns (Bid memory topBid) {
+            require(auction_live == false, 'auction is currently live');
+
+            //get the list of bids for this specific pair
+            Bid[] memory bidList = currentAuctionMap[validatorAddress][opportunityAddress];
+
+            //make sure there's at least 1 bid
+            require(bidList.length > 0, 'no bids exist for this validator/opportunity pair');
+
+            //initialize topBid variable to help with identifying top bid while iterating
+            uint256 topBidAmount = 0;
+
+            //iterate through the list of bids
+            for (uint256 i = 0 ; i < bidList.length; i++) {
+
+                //check and see if bid is higher than high watermark
+                if(bidList[i].bidAmount > topBidAmount) {
+
+                    //if it's higher than the previous high watermark, save it
+                    //todo: gas comparison on saving the bid vs declaring a new var (index) and saving the index?
+                    topBidAmount = bidList[i].bidAmount;
+                    topBid = bidList[i];
+                }
+            }
+        return topBid;
+        }
+
+    //function for determining the winner of a completed auction
+    function find_auction_winner(address validatorAddress, address opportunityAddress)
+        public view returns (bool, address) {
+            require(auction_live == false, 'auction is currently live');
+
+            //get the winning searcher
+            address winningSearcher = auctionResultsMap[validatorAddress][opportunityAddress];
+
+            //check if there is a winning searcher (no bids mean the winner is address(this))
+            if (winningSearcher != address(this)) {
+                return (true, winningSearcher);
+            } else {
+                return (false, winningSearcher);
+            }
+        }
+
+    //function for getting the list of approved opportunity addresses
+    function get_opportunity_list()
+        public view returns (address[] memory _opportunityAddressList) {
+            _opportunityAddressList = opportunityAddressList;
+        }
+    
+    //function for getting the list of participating validator addresses
+    function get_validator_list()
+        public view returns (address[] memory _validatorAddressList) {
+            _validatorAddressList = validatorAddressList;
+        }
 }
