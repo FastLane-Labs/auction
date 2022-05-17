@@ -16,6 +16,18 @@ struct Bid{
     uint256 bidAmount;
 }
 
+struct initializedAddress {
+    address _address;
+    bool _isInitialized;
+}
+
+struct initializedIndexAddress {
+    address _address;
+    bool _previouslyInitialized;
+    uint _index;
+    bool _isInitialized;
+}
+
 contract fastLaneAuction {
     //Immutable variables
     address public immutable owner;
@@ -31,13 +43,30 @@ contract fastLaneAuction {
     uint256 bid_increment = 10 * (10 ** 18); //minimum bid increment in WMATIC
     uint256 fast_lane_fee = 50000; //out of one million
     bool auction_live = false;
+    bool processing_ongoing = false;
+    uint256 auction_number = 0;
+    uint256 current_balance = 0;
 
     //array and map declarations
     address[] public opportunityAddressList;
-    address[] public validatorAddressList;
+    mapping(address => initializedIndexAddress) opportunityAddressMap;
 
-    mapping(address => mapping(address => Bid[])) currentAuctionMap;
-    mapping(address => mapping(address => address)) auctionResultsMap;
+    address[] public validatorAddressList;
+    mapping(address => initializedIndexAddress) validatorAddressMap;
+
+    mapping(uint => mapping(address => mapping(address => Bid))) currentAuctionMap;
+
+    mapping(uint => mapping(address => initializedAddress)) currentInitializedValidatorsMap;
+
+    mapping(uint => mapping(address => mapping(address => initializedAddress))) currentInitializedValOppMap;
+
+    mapping(uint => address[]) currentValidatorsArrayMap;
+    mapping(uint => uint) currentValidatorsCountMap;
+    
+    mapping(uint => mapping(address => address[])) currentPairsArrayMap;
+    mapping(uint => mapping(address => uint)) currentPairsCountMap;
+
+    mapping(uint => mapping(address => mapping(address => address))) auctionResultsMap;
 
     // OWNER-ONLY CONTROL FUNCTIONS
 
@@ -71,8 +100,17 @@ contract fastLaneAuction {
         public {
             require(msg.sender == owner, 'no hack plz');
 
-            //add opportunity address to valid opportunity array
-            opportunityAddressList.push(opportunityAddress);
+            initializedIndexAddress memory oldData = opportunityAddressMap[opportunityAddress];
+
+            if (oldData._previouslyInitialized == true) {
+                opportunityAddressList[oldData._index] = opportunityAddress;
+                opportunityAddressMap[opportunityAddress] = initializedIndexAddress(opportunityAddress, true, oldData._index, true);
+            
+            } else {
+                opportunityAddressList.push(opportunityAddress);
+                uint listLength = opportunityAddressList.length;
+                opportunityAddressMap[opportunityAddress] = initializedIndexAddress(opportunityAddress, true, listLength, true);
+            }
         }
     
     //remove an address from the opportunity address array
@@ -81,17 +119,12 @@ contract fastLaneAuction {
             require(msg.sender == owner, 'no hack plz');
             require(auction_live == false, 'auction ongoing');
 
-            //remove the validator address from the array of participating validators
-            (bool foundIndex, uint256 index) = findElementIndexInArray(opportunityAddress, opportunityAddressList);
-            if (foundIndex) { 
-                removeElementFromStorageArray(index, opportunityAddressList);
-            }
+            initializedIndexAddress memory oldData = opportunityAddressMap[opportunityAddress];
 
-            //delete the opportunity from the auctionResultsMap and the currentAuctionMap to prevent state bloat
-            for (uint256 x = 0 ; x < validatorAddressList.length; x++) {
-               delete auctionResultsMap[validatorAddressList[x]][opportunityAddress];
-               delete currentAuctionMap[validatorAddressList[x]][opportunityAddress];
-            }
+            delete opportunityAddressList[oldData._index];
+
+            //remove the opportunity address from the array of participating validators
+            opportunityAddressMap[opportunityAddress] = initializedIndexAddress(opportunityAddress, true, oldData._index, false);
         }
     
     //add an address to the participating validator address array
@@ -99,8 +132,18 @@ contract fastLaneAuction {
         public {
             require(msg.sender == owner, 'no hack plz');
 
-            //add validator to participating validator array
-            validatorAddressList.push(validatorAddress);
+            //see if its a reinit
+            initializedIndexAddress memory oldData = validatorAddressMap[validatorAddress];
+
+            if (oldData._previouslyInitialized == true) {
+                validatorAddressList[oldData._index] = validatorAddress;
+                validatorAddressMap[validatorAddress] = initializedIndexAddress(validatorAddress, true, oldData._index, true);
+            
+            } else {
+                validatorAddressList.push(validatorAddress);
+                uint listLength = validatorAddressList.length;
+                validatorAddressMap[validatorAddress] = initializedIndexAddress(validatorAddress, true, listLength, true);
+            }
         }
     
     //remove an address from the participating validator address array
@@ -109,17 +152,12 @@ contract fastLaneAuction {
             require(msg.sender == owner, 'no hack plz');
             require(auction_live == false, 'auction ongoing');
 
-            //remove the validator address from the array of participating validators
-            (bool foundIndex, uint256 index) = findElementIndexInArray(validatorAddress, validatorAddressList);
-            if (foundIndex) { 
-                removeElementFromStorageArray(index, validatorAddressList);
-            }
+            initializedIndexAddress memory oldData = validatorAddressMap[validatorAddress];
 
-            //delete the validator from the auctionResultsMap and the currentAuctionMap to prevent state bloat
-            for (uint256 y = 0 ; y < opportunityAddressList.length; y++) {
-               delete auctionResultsMap[validatorAddress][opportunityAddressList[y]];
-               delete currentAuctionMap[validatorAddress][opportunityAddressList[y]];
-            }
+            delete validatorAddressList[oldData._index];
+
+            //remove the validator address from the array of participating validators
+            validatorAddressMap[validatorAddress] = initializedIndexAddress(validatorAddress, true, oldData._index, false);
         }
     
     //start auction / enable bidding
@@ -128,247 +166,236 @@ contract fastLaneAuction {
         public {
             require(msg.sender == owner, 'no hack plz');
             require(auction_live == false, 'auction already started');
+            require(processing_ongoing == false, 'last auction results are unprocessed');
 
-            //clear out the map of the last auction's bids
-            for (uint256 x = 0 ; x < validatorAddressList.length; x++) {
-                for (uint256 y = 0 ; y < opportunityAddressList.length; y++) {
-                    delete currentAuctionMap[validatorAddressList[x]][opportunityAddressList[y]];
-                }
-            }
+            // increment up the auction_count number
+            auction_number++;
+
+            // set initialized validators
+            currentValidatorsCountMap[auction_number] = 0;
+
             //enable bidding
             auction_live = true;
         }
     
-    //end auction / disable bidding
-    function endAuction() 
-        public {
-            require(msg.sender == owner, 'no hack plz');
-            require(auction_live == true, 'auction already ended');
+    function stopBidding() public {
+        require(msg.sender == owner, 'no hack plz');
+        require(auction_live == true, 'auction already stopped');
 
-            //disable bidding
-            auction_live = false;
-        }
+        //disable bidding
+        auction_live = false;
+
+        //enable result processing
+        processing_ongoing = true;
+    }
+
     
-    //process the results of the auction, set the winners into the contract's state, refund the losers, and send revenue to validators
-    //note that this will clear out the state from the prior auction's results but will not clear out this auction's bidding data
-    function processAuctionResults()
-        public {
+    function processPartialAuctionResults(address _validatorAddress, address _opportunityAddress)
+        public returns(bool isSuccessful) {
+
             require(msg.sender == owner, 'no hack plz');
 
             // make sure we're not stopping too soon
             require(auction_live = false, 'on your own contract, too'); 
+            require(processing_ongoing = true, 'processing must be ongoing');
+            
+            //make sure the pair hasnt already been processed
+            require(currentInitializedValidatorsMap[auction_number][_validatorAddress]._isInitialized == true, 'validator already completely processed');
+            require(currentInitializedValOppMap[auction_number][_validatorAddress][_opportunityAddress]._isInitialized == true, 'opp already processed');
 
-            // update the results map
-            for (uint256 x = 0 ; x < validatorAddressList.length; x++) {
-                for (uint256 y = 0 ; y < opportunityAddressList.length; y++) {
-                    //check and see if there are bids - otherwise, set the winner to address(this) as the null address
-                    if (currentAuctionMap[validatorAddressList[x]][opportunityAddressList[y]].length > 0){
-                        
-                        //declare initial variables for top bid and index in list of winner
-                        uint256 top_bid = 0;
-                        uint256 winner_index = 0;
+            //find top bid for pairing
+            Bid memory top_user_bid = currentAuctionMap[auction_number][_validatorAddress][_opportunityAddress];
+            
+            // mark things already updated
+            if (currentPairsCountMap[auction_number][_validatorAddress] > 1) {
 
-                        //iterate through the list of Bid structs to find the real winner
-                        for (uint256 z = 0 ; z < currentAuctionMap[validatorAddressList[x]][opportunityAddressList[y]].length; z++) {
-                            Bid memory user_bid = currentAuctionMap[validatorAddressList[x]][opportunityAddressList[y]][z];
-                            if (user_bid.bidAmount > top_bid) {
-                                top_bid = user_bid.bidAmount;
-                                winner_index = z;
-                            }
-                        }
-                        
-                        //iterate through the list of Bid structs again to set the winner in the results map, refund the losers, and pay the validators
-                        for (uint256 z = 0 ; z < currentAuctionMap[validatorAddressList[x]][opportunityAddressList[y]].length; z++) {
-                            Bid memory user_bid = currentAuctionMap[validatorAddressList[x]][opportunityAddressList[y]][z];
-                            
-                            // make sure bid belongs to the winner
-                            if (z == winner_index) {
-                                //check and make sure the bid aligns with the state keys
-                                if (user_bid.validatorAddress == validatorAddressList[x]) {
-                                    //update the auction map and xfer the proceeds minus our fee to the validator
-                                    auctionResultsMap[validatorAddressList[x]][opportunityAddressList[y]] = user_bid.searcherContractAddress;
-                                    bid_token.transferFrom(address(this), user_bid.validatorAddress, ((user_bid.bidAmount * 1000000) - fast_lane_fee) / 1000000);
-                                } 
-                                //TODO handle situation in which bid validator address doesnt match state keys. we can always xfer the $ later.
+                //increment it down
+                currentPairsCountMap[auction_number][_validatorAddress]--;
 
-                            // if not winner, refund the auction losers
-                            } else {
-                                bid_token.transferFrom(address(this), user_bid.searcherPayableAddress, user_bid.bidAmount);
-                                //TODO explore taking a smalllll % of the failed bids as a fee too to decrease spam
-                            }
-                        }
+            } else if (currentPairsCountMap[auction_number][_validatorAddress] == 1) {
+                
+                if (currentValidatorsCountMap[auction_number] > 1) {
+                    currentValidatorsCountMap[auction_number]--;
+                    isSuccessful = true;
 
-                    // if there were no bids for the validator/opportunity pairing, set addressThis as the winner
-                    } else {
-                        auctionResultsMap[validatorAddressList[x]][opportunityAddressList[y]] = address(this);
-                    }
+                } else if (currentValidatorsCountMap[auction_number] == 1) {
+                    currentValidatorsCountMap[auction_number] = 0;
+                    isSuccessful = true;
+                
+                } else {
+                    isSuccessful = false;
+
                 }
+
+                if (isSuccessful == true) {
+                    //since this is the last opp for this validator, uninitialize the validator from the current round's validator map
+                    currentInitializedValidatorsMap[auction_number][_validatorAddress] = initializedAddress(_validatorAddress, false);
+                    currentPairsCountMap[auction_number][_validatorAddress] = 0;
+                }
+                
+            } else {
+                isSuccessful = false;
             }
 
-            //At the end of processing, transfer the collected fees to owner. If an error was made, logs will be parsed on backend and owner will
-            //transfer the surplus to the impacted address
+            if (isSuccessful == true ) {
+                //mark it already updated
+                currentInitializedValOppMap[auction_number][_validatorAddress][_opportunityAddress] = initializedAddress(_opportunityAddress, false);
+
+                //handle the transfers
+                bid_token.transferFrom(address(this), top_user_bid.validatorAddress, ((top_user_bid.bidAmount * 1000000) - fast_lane_fee) / 1000000);
+
+                //update the auction contract
+                auctionResultsMap[auction_number][_validatorAddress][_opportunityAddress] = top_user_bid.searcherContractAddress;
+            }
+
+            return isSuccessful;
+        }
+    
+    function finishAuctionProcess() public returns(bool) {
+        require(msg.sender == owner, 'no hack plz');
+
+        // make sure we're not stopping too soon
+        require(auction_live = false, 'on your own contract, too');
+
+        // make sure processing is ongoing
+        require(processing_ongoing = true, 'processing must be ongoing');
+
+        // make sure all pairs have been processed first
+        if (currentValidatorsCountMap[auction_number] < 1) {
+
+            //transfer to PFL the sorely needed $ to cover our high infra costs
             bid_token.transferFrom(address(this), owner, bid_token.balanceOf(address(this)));
-        }
 
-    // ARRAY AND MAP HELPER FUNCTIONS
-    function findElementIndexInArray(address element, address[] storage arr) 
-        internal view returns(bool, uint) {
-            for (uint256 i = 0 ; i < arr.length; i++) {
-                if (arr[i] == element) {
-                    return (true, i);
-                }
-            }
-            return (false, 0);
-        }
+            processing_ongoing = false;
+            current_balance = 0;
+            return true;
 
-    function removeElementFromStorageArray(uint index, address[] storage arr) 
-        internal {
-            if (index >= arr.length) return;
-            for (uint i = index; i<arr.length-1; i++){
-                arr[i] = arr[i+1];
-            }
-            delete arr[arr.length-1];
-        }
-
-    function verifyAddressInArray(address element, address[] storage arr) 
-        internal view returns(bool) {
-            for (uint256 i = 0 ; i < arr.length; i++) {
-                if (arr[i] == element) {
-                    return true;
-                }
-            }
+        } else {
             return false;
         }
+    }
 
+    function emergencyWithdraw(address _tokenAddress) public {
+        require(msg.sender == owner, 'no hack plz');
+
+        IERC20 oopsToken = IERC20(_tokenAddress);
+        uint oopsTokenBalance = oopsToken.balanceOf(address(this));
+
+        if (oopsTokenBalance > 0) {
+            bid_token.transferFrom(address(this), owner, oopsTokenBalance);
+        }
+    }
+    
     // PUBLIC FACING FUNCTIONS
 
     //bidding function for searchers to submit their bids
-    //note that each bid pulls funds on submission and that searchers are not refunded for failed bidsuntil the results are processed
-    function submit_bid(Bid calldata bid, bool isIncrementalBid)
-        public returns (bool result) {
+    //note that each bid pulls funds on submission and that searchers are not refunded for failed bids until they are outbid
+    function submit_bid(Bid calldata bid)
+        public returns (bool) {
 
             require(auction_live == true, 'auction is not currently live');
-
-            //initiate starting balance for later security checks
-            uint256 _startBalance = bid_token.balanceOf(address(this));
-            result = false;
 
             //verify that the bid is coming from the EOA that's paying
             require(msg.sender == bid.searcherPayableAddress, 'Please only send bids from the payor EOA');
 
-            //verify the bidder has the balance. If this is an incremental bid, the balance check will happen further into the function
-            if (isIncrementalBid == false) {
-                require(bid_token.balanceOf(bid.searcherPayableAddress) > bid.bidAmount, 'no funny business');
+            //verify that the opportunity and the validator are both participating addresses
+            require(validatorAddressMap[bid.validatorAddress]._isInitialized == true, 'invalid validator address');
+            require(opportunityAddressMap[bid.opportunityAddress]._isInitialized  == true, 'invalid opportunity address - submit via discord');
+
+            //Determine is pair is initialized
+            bool is_validator_initialized = currentInitializedValidatorsMap[auction_number][bid.validatorAddress]._isInitialized;
+
+            bool is_opportunity_initialized;
+            if (is_validator_initialized) {
+                is_opportunity_initialized = currentInitializedValOppMap[auction_number][bid.validatorAddress][bid.opportunityAddress]._isInitialized;
+            } else {
+                is_opportunity_initialized = false;
             }
 
-            //verify that the opportunity and the validator are both participating addresses
-            require(verifyAddressInArray(bid.validatorAddress, validatorAddressList) == true, 'that one is for VIPs only');
-            require(verifyAddressInArray(bid.opportunityAddress, opportunityAddressList) == true, 'Submit this address via discord');
+            if (is_validator_initialized && is_opportunity_initialized) {
+                Bid memory current_top_bid = currentAuctionMap[auction_number][bid.validatorAddress][bid.opportunityAddress];
+                
+                //verify the bid exceeds previous bid + minimum increment
+                require(bid.bidAmount >= current_top_bid.bidAmount + bid_increment, 'bid too low');
 
+                //verify the new bidder isnt the previous bidder
+                require(bid.searcherPayableAddress != current_top_bid.searcherPayableAddress, 'you already are the top bidder');
 
-            //Access the array of bids for the targetted validator/opportunity pair
-            Bid[] memory bidList = currentAuctionMap[bid.validatorAddress][bid.opportunityAddress];
+                //verify the bidder has the balance.
+                require(bid_token.balanceOf(bid.searcherPayableAddress) >= bid.bidAmount, 'no funny business');
 
-            //check each existing bid and make sure the new bid is higher than existing + minimum bidding increment
-            if (bidList.length > 0) {
+                //TODO MAKE SURE THE EOA APPROVES THE AUCTION CONTRACT... FRONT END STUFF?
 
-                //set top bid amount variable (used for incremental bids)
-                uint256 top_bid_amount = 0;
-                uint256 bid_delta = 0;
-                int incremental_bid_index = -1;
+                //transfer the bid amount
+                bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid.bidAmount);
+                require(bid_token.balanceOf(address(this)) == current_balance + bid.bidAmount, 'im not angry im just disappointed'); 
 
-                for (uint256 i = 0 ; i < bidList.length; i++) {
-
-                    //verify the bid amount exceeds the current bids
-                    require(bidList[i].bidAmount + bid_increment < bid.bidAmount, 'bid too low');
-
-                    //keep track of the top bid amount if this is an incremental bid
-                    if (isIncrementalBid == true) {
-                        if (bidList[i].bidAmount > top_bid_amount) {
-                            top_bid_amount = bidList[i].bidAmount;
-                        }
-                    
-                        //identify the original bid
-                        if (bidList[i].searcherPayableAddress == bid.searcherPayableAddress &&
-                            bidList[i].searcherContractAddress == bid.searcherContractAddress
-                            ) {
-                                //verify there aren't two incremental bids out there
-                                require(incremental_bid_index == -1, 'hey now');
-
-                                //grab the bid delta and check funding capacity
-                                bid_delta = bid.bidAmount - bidList[i].bidAmount;
-                                require(bid_delta >= bid_increment, 'bidding increment too small');
-                                require(bid_token.balanceOf(bid.searcherPayableAddress) > bid_delta, 'no funny business');
-
-                                //save the index of the original bid
-                                incremental_bid_index = int(i);
-                        }
-                    }
-                }
-
-            //TODO MAKE SURE THE EOA APPROVES THE AUCTION CONTRACT... FRONT END STUFF?
-
-            //handle fund transfers and state changes for incremental bids
-            if (isIncrementalBid == true) {
-                //verify the first bid was found
-                require(incremental_bid_index != -1, 'initial bid not found - please save this TX Hash and contact fastlane support via discord');
-
-                //for incremental bids, transfer the incremental increase amount
-                bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid_delta);
-                require(bid_token.balanceOf(address(this)) == _startBalance + bid_delta, 'im not angry im just disappointed'); 
+                //refund the previous top bid
+                bid_token.transferFrom(address(this), current_top_bid.searcherPayableAddress, current_top_bid.bidAmount);
+                require(bid_token.balanceOf(address(this)) == current_balance + bid.bidAmount - current_top_bid.bidAmount, 'im not angry im just disappointed');
 
                 //update the existing Bid struct rather than adding a new one
-                currentAuctionMap[bid.validatorAddress][bid.opportunityAddress][uint256(incremental_bid_index)] = bid;
-                result = true;
-                return result;
-            
-            //handle fund transfers and state changes for initial bids
+                currentAuctionMap[auction_number][bid.validatorAddress][bid.opportunityAddress]= bid;
+                current_balance = bid_token.balanceOf(address(this));
+                return true;
+
             } else {
+                    //verify the bidder has the balance.
+                    require(bid_token.balanceOf(bid.searcherPayableAddress) >= bid.bidAmount, 'no funny business');
 
-                // transfer the bid amount in to the auction. We will hold funds for ALL bids and then return the losing bids at auction end
-                bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid.bidAmount);
-                require(bid_token.balanceOf(address(this)) == _startBalance + bid.bidAmount, 'im not angry im just disappointed');
+                    //TODO MAKE SURE THE EOA APPROVES THE AUCTION CONTRACT... FRONT END STUFF?
 
-                // if there are existing bids, add this bid to the array, otherwise start a new array... or just push all? idk how to solidity
-                currentAuctionMap[bid.validatorAddress][bid.opportunityAddress].push(bid);
-                result = true;
-                return result;
+                    //transfer the bid amount
+                    bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid.bidAmount);
+                    require(bid_token.balanceOf(address(this)) == current_balance + bid.bidAmount, 'im not angry im just disappointed'); 
+
+                    if (is_validator_initialized == false) {
+                        currentInitializedValidatorsMap[auction_number][bid.validatorAddress] = initializedAddress(bid.validatorAddress, true);
+                        currentValidatorsArrayMap[auction_number].push(bid.validatorAddress);
+                        currentValidatorsCountMap[auction_number]++;
+                        currentPairsCountMap[auction_number][bid.validatorAddress] = 0;
+                        }
+                    
+                    if (is_opportunity_initialized == false) {
+                        currentInitializedValOppMap[auction_number][bid.validatorAddress][bid.opportunityAddress] = initializedAddress(bid.opportunityAddress, true);
+                        currentPairsArrayMap[auction_number][bid.validatorAddress].push(bid.opportunityAddress);
+                        currentPairsCountMap[auction_number][bid.validatorAddress]++;
+                        }
+                    
+                    //update the existing Bid struct rather than adding a new one
+                    currentAuctionMap[auction_number][bid.validatorAddress][bid.opportunityAddress] = bid;
+                    current_balance = bid_token.balanceOf(address(this));
+                    return true;
+                }
             }
-        }
-    }
 
     //PUBLIC VIEW-ONLY FUNCTIONS (for frontend / backend)
+    function find_auction_count() public view returns (uint _auction_number) {
+        _auction_number = auction_number;
+    }
 
     //function for determining the current top bid for an ongoing (live) auction
     function find_top_bid(address validatorAddress, address opportunityAddress)
-        public view returns (bool, Bid memory topBid) {
+        public view returns (bool, uint256) {
 
-            //get the list of bids for this specific pair
-            Bid[] memory bidList = currentAuctionMap[validatorAddress][opportunityAddress];
+            //Determine is pair is initialized
+            bool is_validator_initialized = currentInitializedValidatorsMap[auction_number][validatorAddress]._isInitialized;
 
-            //make sure there's at least 1 bid
-            if(bidList.length < 1) {
-                topBid = Bid(validatorAddress, opportunityAddress, address(this), address(this), 0);
-                return (false, topBid);
+            bool is_opportunity_initialized;
+            
+            if (is_validator_initialized) {
+                is_opportunity_initialized = currentInitializedValOppMap[auction_number][validatorAddress][opportunityAddress]._isInitialized;
+            } else {
+                is_opportunity_initialized = false;
             }
 
-            //initialize topBid variable to help with identifying top bid while iterating
-            uint256 topBidAmount = 0;
-
-            //iterate through the list of bids
-            for (uint256 i = 0 ; i < bidList.length; i++) {
-
-                //check and see if bid is higher than high watermark
-                if(bidList[i].bidAmount > topBidAmount) {
-
-                    //if it's higher than the previous high watermark, save it
-                    //todo: gas comparison on saving the bid vs declaring a new var (index) and saving the index?
-                    topBidAmount = bidList[i].bidAmount;
-                    topBid = bidList[i];
-                }
+            if (is_validator_initialized && is_opportunity_initialized) {
+                Bid memory topBid = currentAuctionMap[auction_number][validatorAddress][opportunityAddress];
+                return (true, topBid.bidAmount);
+            } else {
+                uint256 _zero = 0;
+                return (false, _zero);
             }
-            //return true and the topBid
-            return (true, topBid);
         }
 
     //function for determining the winner of a completed auction
@@ -376,7 +403,7 @@ contract fastLaneAuction {
         public view returns (bool, address) {
 
             //get the winning searcher
-            address winningSearcher = auctionResultsMap[validatorAddress][opportunityAddress];
+            address winningSearcher = auctionResultsMap[auction_number][validatorAddress][opportunityAddress];
 
             //check if there is a winning searcher (no bids mean the winner is address(this))
             if (winningSearcher != address(this)) {
@@ -389,12 +416,83 @@ contract fastLaneAuction {
     //function for getting the list of approved opportunity addresses
     function get_opportunity_list()
         public view returns (address[] memory _opportunityAddressList) {
+            //might not be reliable - might run out of gas
             _opportunityAddressList = opportunityAddressList;
         }
     
     //function for getting the list of participating validator addresses
     function get_validator_list()
         public view returns (address[] memory _validatorAddressList) {
+            //might not be reliable - might run out of gas
             _validatorAddressList = validatorAddressList;
         }
+
+    function get_initialized_validators()
+        public view returns (address[] memory _initializedValidatorList) {
+            _initializedValidatorList = currentValidatorsArrayMap[auction_number];
+        }
+    
+    function get_initialized_opportunities(address _validatorAddress)
+        public view returns (address[] memory _initializedOpportunityList) {
+            _initializedOpportunityList = currentPairsArrayMap[auction_number][_validatorAddress];
+        }
+    
+    function get_unprocessed_validators()
+        public view returns (address[] memory) {
+            //MIGHT RUN OUT OF GAS - only use if convenient, do not rely on.
+
+            address[] memory _unprocessedValidatorList;
+
+            if (processing_ongoing == false) {
+                return _unprocessedValidatorList;
+            }
+
+            uint _listIndex = 0;
+
+            address[] memory _initializedValidatorList = currentValidatorsArrayMap[auction_number];
+
+            for (uint256 i = 0 ; i < _initializedValidatorList.length; i++) {
+                if (currentInitializedValidatorsMap[auction_number][_initializedValidatorList[i]]._isInitialized == true) {
+                    _unprocessedValidatorList[_listIndex] = _initializedValidatorList[i];
+                    _listIndex++;
+                }
+            }
+            return _unprocessedValidatorList;
+        }
+    
+    function get_unprocessed_opportunities(address _validatorAddress)
+        public view returns (address[] memory) {
+            //MIGHT RUN OUT OF GAS - only use if convenient, do not rely on.
+
+            address[] memory _unprocessedOpportunityList;
+
+            if (processing_ongoing == false) {
+                return _unprocessedOpportunityList;
+            }
+
+            uint _listIndex = 0;
+
+            address[] memory _initializedOpportunityList = currentPairsArrayMap[auction_number][_validatorAddress];
+            
+            for (uint256 i = 0 ; i < _initializedOpportunityList.length; i++) {
+                if (currentInitializedValOppMap[auction_number][_validatorAddress][_initializedOpportunityList[i]]._isInitialized == true) {
+                    _unprocessedOpportunityList[_listIndex] = _initializedOpportunityList[i];
+                    _listIndex++;
+                }
+            }
+            return _unprocessedOpportunityList;
+
+        }
+    
+    function check_if_pair_initialized(address _validatorAddress, address _opportunityAddress)
+        public view returns (bool isInitialized) {
+            isInitialized = currentInitializedValOppMap[auction_number][_validatorAddress][_opportunityAddress]._isInitialized;
+
+        }
+    
+    function check_if_validator_initialized(address _validatorAddress)
+        public view returns (bool isInitialized) {
+            isInitialized = currentInitializedValidatorsMap[auction_number][_validatorAddress]._isInitialized;
+        }
+
 }
