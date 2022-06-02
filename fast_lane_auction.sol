@@ -189,15 +189,16 @@ contract fastLaneAuction {
         processing_ongoing = true;
     }
 
-    
+    //process auction results for a specific validator/opportunity pair. Cant do loops on all pairs due to size.
+    //use view-only functions to get arrays of unprocessed pairs to submit as args for this function. 
     function processPartialAuctionResults(address _validatorAddress, address _opportunityAddress)
         public returns(bool isSuccessful) {
-
+            
             require(msg.sender == owner, 'no hack plz');
 
             // make sure we're not stopping too soon
-            require(auction_live = false, 'on your own contract, too'); 
-            require(processing_ongoing = true, 'processing must be ongoing');
+            require(auction_live == false, 'on your own contract, too'); 
+            require(processing_ongoing == true, 'processing must be ongoing');
             
             //make sure the pair hasnt already been processed
             require(currentInitializedValidatorsMap[auction_number][_validatorAddress]._isInitialized == true, 'validator already completely processed');
@@ -205,11 +206,14 @@ contract fastLaneAuction {
 
             //find top bid for pairing
             Bid memory top_user_bid = currentAuctionMap[auction_number][_validatorAddress][_opportunityAddress];
-            
+
+            require(top_user_bid.validatorAddress == _validatorAddress, 'address mismatch');
+
             // mark things already updated
             if (currentPairsCountMap[auction_number][_validatorAddress] > 1) {
 
                 //increment it down
+                //the pairs / validator count maps are to make sure we dont miss payment on any validators before collecting the PFL fee
                 currentPairsCountMap[auction_number][_validatorAddress]--;
 
             } else if (currentPairsCountMap[auction_number][_validatorAddress] == 1) {
@@ -224,7 +228,6 @@ contract fastLaneAuction {
                 
                 } else {
                     isSuccessful = false;
-
                 }
 
                 if (isSuccessful == true) {
@@ -242,9 +245,10 @@ contract fastLaneAuction {
                 currentInitializedValOppMap[auction_number][_validatorAddress][_opportunityAddress] = initializedAddress(_opportunityAddress, false);
 
                 //handle the transfers
+                //we assume validator addresses are trusted b/c if not then we're kinda fucked anyway
                 bid_token.transferFrom(address(this), top_user_bid.validatorAddress, ((top_user_bid.bidAmount * 1000000) - fast_lane_fee) / 1000000);
 
-                //update the auction contract
+                //update the auction results map
                 auctionResultsMap[auction_number][_validatorAddress][_opportunityAddress] = top_user_bid.searcherContractAddress;
             }
 
@@ -267,6 +271,7 @@ contract fastLaneAuction {
             bid_token.transferFrom(address(this), owner, bid_token.balanceOf(address(this)));
 
             processing_ongoing = false;
+            require(bid_token.balanceOf(address(this)) == 0, 'funds remain');
             current_balance = 0;
             return true;
 
@@ -289,7 +294,7 @@ contract fastLaneAuction {
     // PUBLIC FACING FUNCTIONS
 
     //bidding function for searchers to submit their bids
-    //note that each bid pulls funds on submission and that searchers are not refunded for failed bids until they are outbid
+    //note that each bid pulls funds on submission and that searchers are refunded when they are outbid
     function submit_bid(Bid calldata bid)
         public returns (bool) {
 
@@ -331,10 +336,14 @@ contract fastLaneAuction {
                 require(bid_token.balanceOf(address(this)) == current_balance + bid.bidAmount, 'im not angry im just disappointed'); 
 
                 //refund the previous top bid
+                //should be OK on forced stalls b/c we're requiring that people bid from EOAs and not smart contracts so no fallback functions
+                //it warrants more consideration though. Is there a way to safely allow smart contracts here w/o opening the protocol
+                //up to being stalled out by a fallback function that blocks a bid return and therefore prevents all future bids?
+                //pretty sure it's fine due to the gas limits on fallbacks, but 'pretty sure' isn't good enough
                 bid_token.transferFrom(address(this), current_top_bid.searcherPayableAddress, current_top_bid.bidAmount);
                 require(bid_token.balanceOf(address(this)) == current_balance + bid.bidAmount - current_top_bid.bidAmount, 'im not angry im just disappointed');
 
-                //update the existing Bid struct rather than adding a new one
+                //update the existing Bid mapping
                 currentAuctionMap[auction_number][bid.validatorAddress][bid.opportunityAddress]= bid;
                 current_balance = bid_token.balanceOf(address(this));
                 return true;
@@ -344,11 +353,13 @@ contract fastLaneAuction {
                     require(bid_token.balanceOf(bid.searcherPayableAddress) >= bid.bidAmount, 'no funny business');
 
                     //TODO MAKE SURE THE EOA APPROVES THE AUCTION CONTRACT... FRONT END STUFF?
+                    //TFW AN MEV BOT/BACKEND GUY IS WRITING A PUBLIC-FACING AUCTION CONTRACT
 
                     //transfer the bid amount
                     bid_token.transferFrom(bid.searcherPayableAddress, address(this), bid.bidAmount);
                     require(bid_token.balanceOf(address(this)) == current_balance + bid.bidAmount, 'im not angry im just disappointed'); 
 
+                    //flag the validator / opportunity combination as initialized 
                     if (is_validator_initialized == false) {
                         currentInitializedValidatorsMap[auction_number][bid.validatorAddress] = initializedAddress(bid.validatorAddress, true);
                         currentValidatorsArrayMap[auction_number].push(bid.validatorAddress);
@@ -362,7 +373,7 @@ contract fastLaneAuction {
                         currentPairsCountMap[auction_number][bid.validatorAddress]++;
                         }
                     
-                    //update the existing Bid struct rather than adding a new one
+                    //add the bid mapping 
                     currentAuctionMap[auction_number][bid.validatorAddress][bid.opportunityAddress] = bid;
                     current_balance = bid_token.balanceOf(address(this));
                     return true;
@@ -378,7 +389,7 @@ contract fastLaneAuction {
     function find_top_bid(address validatorAddress, address opportunityAddress)
         public view returns (bool, uint256) {
 
-            //Determine is pair is initialized
+            //Determine if pair is initialized
             bool is_validator_initialized = currentInitializedValidatorsMap[auction_number][validatorAddress]._isInitialized;
 
             bool is_opportunity_initialized;
@@ -389,6 +400,7 @@ contract fastLaneAuction {
                 is_opportunity_initialized = false;
             }
 
+            //if it is initialized, grab the top bid amount from the bid struct
             if (is_validator_initialized && is_opportunity_initialized) {
                 Bid memory topBid = currentAuctionMap[auction_number][validatorAddress][opportunityAddress];
                 return (true, topBid.bidAmount);
