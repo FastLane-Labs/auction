@@ -21,16 +21,17 @@ Codes:
     E-100 - [--Unused--]
     E-101 - PAUSED
     E-102 - NOT_OWNER, transfer of token that is not own
-    E-103 - NOT_OWNER_OR_ADMIN, NOT FUNDER
-    E-104 - NOT_TOKEN_CREATOR, NOT_CREATOR
-    E-105 - INVALID_OPERATOR, NOT_TOKEN_OPERATOR, NOT_OWNER_OR_OPERATOR, transfer caller is not owner nor approved, approve caller is not owner nor approved for all
-    E-106 - CANNOT_BE_SELF
-
+    E-103 - Only send bids from the payor EOA
+    E-104 - Invalid Validator address
+    E-105 - Invalid opportunity address - Submit via discord
 
   2. Find, Inequalities & Range
     E-200 - [--Unused--]
     E-201 - INVALID_INDEX,
     E-202 - address mismatch
+    E-203 - bid too low
+    E-205 - already top bidder
+    E-206 - not enough funds
 
   3. Availability & Time
     E-300 - [--Unused--]
@@ -45,4 +46,5 @@ Codes:
   4. Tokens, Funds & Finance
     E-400 - [--Unused--]
     E-401 - TRANSFER_FAILED, SEND_FAILED
+    E-402 - funds remain
 

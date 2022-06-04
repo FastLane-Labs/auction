@@ -90,6 +90,7 @@ contract FastLaneAuction is Ownable {
     event AuctionPartiallyProcessed(address indexed validator, address indexed opportunity);
     event AuctionEnded(uint256 indexed auction_number, uint256 amount);
     event EmergencyWithdrawn(address indexed receiver, address indexed token, uint256 amount);
+    event BidAdded(address indexed bidder, address indexed validator, address indexed opportunity, uint256 amount);
    
     /***********************************|
     |             Owner-only            |
@@ -355,7 +356,6 @@ contract FastLaneAuction is Ownable {
             require(bid_token.balanceOf(address(this)) == 0, "FL:E-402");
             current_balance = 0;
 
-            
             return true;
         } else {
             return false;
@@ -380,24 +380,23 @@ contract FastLaneAuction is Ownable {
 
     //bidding function for searchers to submit their bids
     //note that each bid pulls funds on submission and that searchers are refunded when they are outbid
-    function submit_bid(Bid calldata bid) public returns (bool) {
-        require(auction_live == true, "auction is not currently live");
+    function submit_bid(Bid calldata bid) external atLiveStage whenNotPaused returns (bool) {
 
         //verify that the bid is coming from the EOA that's paying
         require(
             msg.sender == bid.searcherPayableAddress,
-            "Please only send bids from the payor EOA"
+            "FL:E-103"
         );
 
         //verify that the opportunity and the validator are both participating addresses
         require(
             validatorAddressMap[bid.validatorAddress]._isInitialized == true,
-            "invalid validator address"
+            "FL:E-104"
         );
         require(
             opportunityAddressMap[bid.opportunityAddress]._isInitialized ==
                 true,
-            "invalid opportunity address - submit via discord"
+            "FL:E-104"
         );
 
         //Determine is pair is initialized
@@ -422,26 +421,24 @@ contract FastLaneAuction is Ownable {
             //verify the bid exceeds previous bid + minimum increment
             require(
                 bid.bidAmount >= current_top_bid.bidAmount + bid_increment,
-                "bid too low"
+                "FL:E-203"
             );
 
             //verify the new bidder isnt the previous bidder
             require(
                 bid.searcherPayableAddress !=
                     current_top_bid.searcherPayableAddress,
-                "you already are the top bidder"
+                "FL:E-204"
             );
 
             //verify the bidder has the balance.
             require(
                 bid_token.balanceOf(bid.searcherPayableAddress) >=
                     bid.bidAmount,
-                "no funny business"
+                "FL:E-206"
             );
 
-            //TODO MAKE SURE THE EOA APPROVES THE AUCTION CONTRACT... FRONT END STUFF?
-
-            //transfer the bid amount
+            //transfer the bid amount (requires approval)
             bid_token.transferFrom(
                 bid.searcherPayableAddress,
                 address(this),
@@ -450,14 +447,12 @@ contract FastLaneAuction is Ownable {
             require(
                 bid_token.balanceOf(address(this)) ==
                     current_balance + bid.bidAmount,
-                "im not angry im just disappointed"
+                "FL:E-207"
             );
 
+            // @audit ERC20 transfers of wMatic are safe
+            // be very careful about changing bid token to any ERC777
             //refund the previous top bid
-            //should be OK on forced stalls b/c we're requiring that people bid from EOAs and not smart contracts so no fallback functions
-            //it warrants more consideration though. Is there a way to safely allow smart contracts here w/o opening the protocol
-            //up to being stalled out by a fallback function that blocks a bid return and therefore prevents all future bids?
-            //pretty sure it's fine due to the gas limits on fallbacks, but 'pretty sure' isn't good enough
             bid_token.transferFrom(
                 address(this),
                 current_top_bid.searcherPayableAddress,
@@ -466,7 +461,7 @@ contract FastLaneAuction is Ownable {
             require(
                 bid_token.balanceOf(address(this)) ==
                     current_balance + bid.bidAmount - current_top_bid.bidAmount,
-                "im not angry im just disappointed"
+                "FL:E-207"
             );
 
             //update the existing Bid mapping
@@ -480,11 +475,8 @@ contract FastLaneAuction is Ownable {
             require(
                 bid_token.balanceOf(bid.searcherPayableAddress) >=
                     bid.bidAmount,
-                "no funny business"
+                "FL:E-207"
             );
-
-            //TODO MAKE SURE THE EOA APPROVES THE AUCTION CONTRACT... FRONT END STUFF?
-            //TFW AN MEV BOT/BACKEND GUY IS WRITING A PUBLIC-FACING AUCTION CONTRACT
 
             //transfer the bid amount
             bid_token.transferFrom(
@@ -495,7 +487,7 @@ contract FastLaneAuction is Ownable {
             require(
                 bid_token.balanceOf(address(this)) ==
                     current_balance + bid.bidAmount,
-                "im not angry im just disappointed"
+                "FL:E-207"
             );
 
             //flag the validator / opportunity combination as initialized
@@ -532,14 +524,9 @@ contract FastLaneAuction is Ownable {
         }
     }
 
-    //PUBLIC VIEW-ONLY FUNCTIONS (for frontend / backend)
-    function find_auction_count()
-        public
-        view
-        returns (uint256 _auction_number)
-    {
-        _auction_number = auction_number;
-    }
+    /***********************************|
+    |             Views                 |
+    |__________________________________*/
 
     //function for determining the current top bid for an ongoing (live) auction
     function find_top_bid(address validatorAddress, address opportunityAddress)
