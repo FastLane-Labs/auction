@@ -6,4 +6,6 @@ typechain
 
 #Hardhat files
 cache
+out
 artifacts
+typechain-types/
