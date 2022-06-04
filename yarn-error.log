@@ -1,0 +1,41 @@
+Arguments: 
+  /Users/lx0/.nvm/versions/node/v14.17.1/bin/node /Users/lx0/.nvm/versions/node/v14.17.1/bin/yarn add -D hardhat hardhat-preprocessor hardhat-abi-exporter hardhat-gas-exporter lodash solc solhint solidity-coverage solidity-docgen @nomiclabs/hardhat-ethers @nomiclabs/hardhat-etherscan chai chalk debug dotenv eslint eslint-plugin-jest ethers ganache-cli
+
+PATH: 
+  /Users/lx0/Library/Python/3.8/bin:/Users/lx0/.cargo/bin:/Users/lx0/.nvm/versions/node/v14.17.1/bin:/Users/lx0/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/MacGPG2/bin:/Library/Apple/usr/bin:/Users/lx0/.cargo/bin:/Applications/Visual Studio Code.app/Contents/Resources/app/bin:/Applications/Visual Studio Code.app/Contents/Resources/app/bin:/Users/lx0/.foundry/bin
+
+Yarn version: 
+  1.22.17
+
+Node version: 
+  14.17.1
+
+Platform: 
+  darwin x64
+
+Trace: 
+  Error: https://registry.yarnpkg.com/hardhat-gas-exporter: Not found
+      at Request.params.callback [as _callback] (/Users/lx0/.nvm/versions/node/v14.17.1/lib/node_modules/yarn/lib/cli.js:67029:18)
+      at Request.self.callback (/Users/lx0/.nvm/versions/node/v14.17.1/lib/node_modules/yarn/lib/cli.js:140883:22)
+      at Request.emit (events.js:375:28)
+      at Request.<anonymous> (/Users/lx0/.nvm/versions/node/v14.17.1/lib/node_modules/yarn/lib/cli.js:141855:10)
+      at Request.emit (events.js:375:28)
+      at IncomingMessage.<anonymous> (/Users/lx0/.nvm/versions/node/v14.17.1/lib/node_modules/yarn/lib/cli.js:141777:12)
+      at Object.onceWrapper (events.js:481:28)
+      at IncomingMessage.emit (events.js:387:35)
+      at endReadableNT (internal/streams/readable.js:1317:12)
+      at processTicksAndRejections (internal/process/task_queues.js:82:21)
+
+npm manifest: 
+  {
+    "name": "pflsc",
+    "version": "1.0.0",
+    "main": "index.js",
+    "license": "MIT"
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
