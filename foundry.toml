@@ -2,6 +2,8 @@
 src = 'src'
 out = 'out'
 libs = ['lib','node_modules']
+ffi = true
+initial_balance = '0xe22ea493b30310a770000000' # 70000000000000000000000000000
 remappings = [
     'eth-gas-reporter/=node_modules/eth-gas-reporter/',
     'hardhat/=node_modules/hardhat/',
