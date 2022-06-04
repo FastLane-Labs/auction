@@ -86,10 +86,11 @@ contract FastLaneAuction is Ownable {
     event ValidatorAddressAdded(address indexed validator);
     event ValidatorAddressRemoved(address indexed validator);
     event AuctionStarted(uint256 indexed auction_number);
-    event AuctionProcessing(uint256 indexed auction_number);
-    event AuctionStopped(uint256 indexed auction_number);
+    event AuctionProcessingBiddingStopped(uint256 indexed auction_number);
     event AuctionPartiallyProcessed(address indexed validator, address indexed opportunity);
-
+    event AuctionEnded(uint256 indexed auction_number, uint256 amount);
+    event EmergencyWithdrawn(address indexed receiver, address indexed token, uint256 amount);
+   
     /***********************************|
     |             Owner-only            |
     |__________________________________*/
@@ -223,16 +224,12 @@ contract FastLaneAuction is Ownable {
             oldData._index,
             false
         );
-        ValidatorAddressRemoved(validatorAddress);
+        emit ValidatorAddressRemoved(validatorAddress);
     }
 
     //start auction / enable bidding
     //note that this also cleans out the bid history for the previous auction
-    function startAuction() onlyOwner notLiveStage public {
-        require(
-            processing_ongoing == false,
-            "last auction results are unprocessed"
-        );
+    function startAuction() onlyOwner notLiveStage notProcessingStage external {
 
         // increment up the auction_count number
         auction_number++;
@@ -253,7 +250,7 @@ contract FastLaneAuction is Ownable {
         //enable result processing
         processing_ongoing = true;
 
-        emit AuctionProcessing(auction_number);
+        emit AuctionProcessingBiddingStopped(auction_number);
     }
 
     //process auction results for a specific validator/opportunity pair. Cant do loops on all pairs due to size.
@@ -261,7 +258,7 @@ contract FastLaneAuction is Ownable {
     function processPartialAuctionResults(
         address _validatorAddress,
         address _opportunityAddress
-    ) public onlyOwner notLiveStage atProcessingStage returns (bool isSuccessful) {
+    ) external onlyOwner notLiveStage atProcessingStage returns (bool isSuccessful) {
 
         //make sure the pair hasnt already been processed
         require(
@@ -333,50 +330,53 @@ contract FastLaneAuction is Ownable {
             auctionResultsMap[auction_number][_validatorAddress][
                 _opportunityAddress
             ] = top_user_bid.searcherContractAddress;
+
             emit AuctionPartiallyProcessed(_validatorAddress, _opportunityAddress);
         }
 
         return isSuccessful;
     }
 
-    function finishAuctionProcess() public onlyOwner returns (bool) {
-
-        // make sure we're not stopping too soon
-        require(auction_live = false, "on your own contract, too");
-
-        // make sure processing is ongoing
-        require(processing_ongoing = true, "processing must be ongoing");
+    // @audit What to do if a pair is locked forever
+    function finishAuctionProcess() external onlyOwner notLiveStage atProcessingStage returns (bool) {
 
         // make sure all pairs have been processed first
         if (currentValidatorsCountMap[auction_number] < 1) {
             //transfer to PFL the sorely needed $ to cover our high infra costs
             bid_token.transferFrom(
                 address(this),
-                owner,
+                owner(),
                 bid_token.balanceOf(address(this))
             );
 
+            emit AuctionEnded(auction_number, bid_token.balanceOf(address(this)));
+
             processing_ongoing = false;
-            require(bid_token.balanceOf(address(this)) == 0, "funds remain");
+            require(bid_token.balanceOf(address(this)) == 0, "FL:E-402");
             current_balance = 0;
+
+            
             return true;
         } else {
             return false;
         }
     }
 
-    function emergencyWithdraw(address _tokenAddress) public {
-        require(msg.sender == owner, "E-101");
+    // @audit Deny bid token?
+    function emergencyWithdraw(address _tokenAddress) onlyOwner external {
 
         IERC20 oopsToken = IERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
         if (oopsTokenBalance > 0) {
-            bid_token.transferFrom(address(this), owner, oopsTokenBalance);
+            bid_token.transferFrom(address(this), owner(), oopsTokenBalance);
+            emit EmergencyWithdrawn(address(this), owner(), oopsTokenBalance);
         }
     }
 
-    // PUBLIC FACING FUNCTIONS
+    /***********************************|
+    |             Public                |
+    |__________________________________*/
 
     //bidding function for searchers to submit their bids
     //note that each bid pulls funds on submission and that searchers are refunded when they are outbid
@@ -733,6 +733,11 @@ contract FastLaneAuction is Ownable {
 
     modifier atProcessingStage() {
         require(processing_ongoing == true, "FL:E-303");
+        _;
+    }
+
+    modifier notProcessingStage() {
+        require(processing_ongoing == false, "FL:E-306");
         _;
     }
 
