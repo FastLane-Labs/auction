@@ -32,6 +32,7 @@ Codes:
     E-203 - bid too low
     E-205 - already top bidder
     E-206 - not enough funds
+    E-207 - balances mismatch
 
   3. Availability & Time
     E-300 - [--Unused--]
