@@ -1,0 +1,50 @@
+
+Categories:
+  0. General
+  1. Permission & Control
+  2. Find, Inequalities & Range
+  3. Availability & Time
+  4. Tokens, Funds & Finance
+
+
+
+Codes:
+
+  0. General
+    E-000 - Failure
+    E-001 - Success
+    E-002 - ALREADY_INIT
+    E-003 - Requires Migration
+    E-004 - Already Migrated
+
+  1. Permission & Control
+    E-100 - [--Unused--]
+    E-101 - PAUSED
+    E-102 - NOT_OWNER, transfer of token that is not own
+    E-103 - NOT_OWNER_OR_ADMIN, NOT FUNDER
+    E-104 - NOT_TOKEN_CREATOR, NOT_CREATOR
+    E-105 - INVALID_OPERATOR, NOT_TOKEN_OPERATOR, NOT_OWNER_OR_OPERATOR, transfer caller is not owner nor approved, approve caller is not owner nor approved for all
+    E-106 - CANNOT_BE_SELF
+
+
+  2. Find, Inequalities & Range
+    E-200 - [--Unused--]
+    E-201 - INVALID_INDEX,
+    E-202 - array length mismatch
+    E-203 - invalid id
+    E-204 - invalid chronological order
+    E-205 - amount must be positive
+
+  3. Availability & Time
+    E-300 - [--Unused--]
+    E-301 - release time is before current time
+    E-302 - TOKEN_TIMELOCKED
+    E-303 - TOKEN_TEMP_LOCKED
+    E-304 - emergency withdraw too soon
+    E-305 - previous epoch not initialized
+    E-306 - epoch is in the future
+
+  4. Tokens, Funds & Finance
+    E-400 - [--Unused--]
+    E-401 - TRANSFER_FAILED, SEND_FAILED
+
