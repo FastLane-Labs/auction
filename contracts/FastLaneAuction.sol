@@ -28,6 +28,9 @@ struct InitializedIndexAddress {
 }
 
 contract FastLaneAuction is Ownable {
+
+    using SafeERC20 for IERC20;
+    
     IERC20 public bid_token;
 
     bool internal _paused;
