@@ -7,6 +7,7 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-preprocessor";
+import fs from "fs";
 
 dotenv.config();
 
@@ -127,7 +128,7 @@ const config: HardhatUserConfig = {
     tests: "./test",
     cache: "./cache",
     artifacts: "./build/contracts",
-    deploy: "./deploy",
+    deploy: "./deploy", // @todo See ts complaining here
     deployments: "./deployments"
   },
   abiExporter: {
@@ -137,7 +138,7 @@ const config: HardhatUserConfig = {
     // and https://github.com/ItsNickBarry/hardhat-abi-exporter/pull/35 as they heavily change behavior around this package
     clear: true,
     flat: true,
-    only: ["Universe"]
+    only: ["FastLaneAuction"]
   },
   watcher: {
     compilation: {
