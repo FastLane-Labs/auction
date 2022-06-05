@@ -1,0 +1,13 @@
+.env
+*.txt
+
+# Foundry
+out
+cache
+
+# Mac OSX
+.DS_Store
+
+# VSCode
+workspace.code-workspace
+.vscode/
