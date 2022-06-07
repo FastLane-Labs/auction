@@ -51,6 +51,8 @@ contract FastLaneAuction is Ownable {
     uint256 public current_balance = 0;
 
     //array and map declarations
+
+
     address[] internal opportunityAddressList;
     mapping(address => InitializedIndexAddress) internal opportunityAddressMap;
 
@@ -345,7 +347,7 @@ contract FastLaneAuction is Ownable {
     }
 
     // @audit What to do if a pair is locked forever
-    function finishAuctionProcess() external onlyOwner notLiveStage atProcessingStage returns (bool) {
+    function endAuction() external onlyOwner notLiveStage atProcessingStage returns (bool) {
 
         // make sure all pairs have been processed first
         if (currentValidatorsCountMap[auction_number] < 1) {
