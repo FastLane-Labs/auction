@@ -28,6 +28,11 @@ struct InitializedIndexAddress {
     bool _isInitialized;
 }
 
+struct ProcessingJobs {
+    address validatorToProcess;
+    address[] opportunitiesToProcessForValidator;
+}
+
 contract FastLaneAuction is Ownable {
 
     using Address for address payable;
@@ -46,6 +51,9 @@ contract FastLaneAuction is Ownable {
 
     uint256 public auction_number = 0;
     uint128 public processing_batch_size = 100;
+
+    uint128 public checker_max_gas_price = 0;
+
     bool public auction_live = false;
     bool public processing_ongoing = false;
     bool internal _paused;
@@ -95,12 +103,12 @@ contract FastLaneAuction is Ownable {
     event OpportunityAddressRemoved(address indexed router);
     event ValidatorAddressAdded(address indexed validator);
     event ValidatorAddressRemoved(address indexed validator);
-    event ValidatorAddedBalance(address indexed validator, uint256 amount);
     event ValidatorWithdrawnBalance(address indexed validator, uint256 amount, address indexed caller);
     event AuctionStarted(uint256 indexed auction_number);
     event AuctionProcessingBiddingStopped(uint256 indexed auction_number);
-    event AuctionPartiallyProcessed(uint256 indexed auction_number, address indexed validator, address opportunity, address indexed searcher);
-    event AuctionEnded(uint256 indexed auction_number, uint256 amount);
+    event AuctionPartiallyProcessed(uint256 indexed auction_number, address indexed validator, address indexed opportunity, address searcher, uint256 cut);
+    event PartialAuctionBatchProcessed(uint256 indexed auction_number, uint256 processed, uint256 errors);
+    event AuctionEnded(uint256 indexed auction_number);
     event WithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
     event WithdrawStuckNativeToken(address indexed receiver, uint256 amount);
     event BidAdded(address indexed bidder, address indexed validator, address indexed opportunity, uint256 amount, uint256 auction_number);
@@ -284,7 +292,7 @@ contract FastLaneAuction is Ownable {
 
             outstandingFLBalance = 0;
             processing_ongoing = false;
-            
+
             return true;
         } else {
             return false;
@@ -293,6 +301,10 @@ contract FastLaneAuction is Ownable {
 
     function setProcessingBatchSize(uint256 size) external onlyOwner {
         processing_batch_size = size;
+    }
+
+    function setMaxGasPrice(uint256 gasPrice) external onlyOwner {
+        checker_max_gas_price = gasPrice;
     }
 
     // @audit Assuming owner() is to become a multisig, maybe safer to emergency withdraw to owner, than add a receiver param
@@ -546,15 +558,18 @@ contract FastLaneAuction is Ownable {
 
             //handle the cuts
             uint256 cut = ((top_user_bid.bidAmount * 1000000) - fast_lane_fee) / 1000000;
+            uint256 flCut = top_user_bid.bidAmount - cut;
+
+            // @audit : tbd if better at processing or submitBit
             outstandingValidatorsBalance[top_user_bid.validatorAddress] += cut;
-            emit ValidatorAddedBalance(top_user_bid.validatorAddress, cut);
+            outstandingFLBalance += flCut;
 
             //update the auction results map
             auctionResultsMap[auction_number][_validatorAddress][
                 _opportunityAddress
             ] = top_user_bid.searcherContractAddress;
 
-            emit AuctionPartiallyProcessed(auction_number, _validatorAddress, _opportunityAddress, top_user_bid.searcherContractAddress);
+            emit AuctionPartiallyProcessed(auction_number, _validatorAddress, _opportunityAddress, top_user_bid.searcherContractAddress, cut);
         }
 
         return isSuccessful;
@@ -579,7 +594,7 @@ contract FastLaneAuction is Ownable {
 
 
     /***********************************|
-    |             Resolvers             |
+    |       Public Resolvers            |
     |__________________________________*/
 
     /// @notice Gelato Offchain Resolver
@@ -587,18 +602,45 @@ contract FastLaneAuction is Ownable {
     /// @return {bool} canExec - should the worker trigger, {bytes} execPayload - the payload if canExec is true
     function checker() external view returns (bool canExec, bytes memory execPayload)  {
         if (_paused || auction_live) return (false, "");
-        
+        // @todo: Prevent/delay checker if gas spike? if (checker_max_gas_price > 0 && tx.gas > checker_max_gas_price) return (false, "");
+
         // Go workers go
         if (processing_ongoing) {
             canExec = false;
-            (hasJobs, _validatorsJobsList, _opportunitiesJobsList) = getPendingProcessingJobs();
+            (bool hasJobs, ProcessingJobs[] memory jobs) = getPendingProcessingJobs(processing_batch_size);
             if (hasJobs) {
                 canExec = true;
-                execPayload = abi.encodeWithSelector(this.processPartialAuctionBatch.selector,_validatorsJobsList, _opportunitiesJobsList);
+                execPayload = abi.encodeWithSelector(this.processPartialAuctionBatch.selector, jobs);
                 return (canExec, execPayload);
             }
         }
         return (false, "");
+    }
+
+    function processPartialAuctionBatch(ProcessingJobs[] memory jobs) public {
+        uint256 errors = 0;
+        uint256 processed = 0;
+        for (uint256 i = 0; i < jobs.length; ++i) {
+          ProcessingJobs memory currentJob = jobs[i];
+          for (uint256 j = 0; j < currentJob.opportunitiesToProcessForValidator.length; ++j) {
+            try this.processPartialAuctionResults(currentJob.validatorToProcess, currentJob.opportunitiesToProcessForValidator[j]) returns (bool isSuccessful) {
+                if (isSuccessful) {
+                    processed++;
+                } else {
+                    errors++;
+                }
+            } catch {
+                errors++;
+            }
+          }
+        }
+        emit PartialAuctionBatchProcessed(auction_number, processed, errors);
+    }
+
+    // Usually OffChain Called to gather a list of opp-valid to process
+    function getPendingProcessingJobs(uint256 batch_size) public returns (bool hasJobs, ProcessingJobs[] memory jobs) {
+        // @todo: Get next in line validator to process + opportunities, pad with next valid + opps if room.
+        // might need last processing indexes information from the batch after a processPartialAuctionBatch
     }
 
 
@@ -642,7 +684,7 @@ contract FastLaneAuction is Ownable {
     function findAuctionWinner(
         address validatorAddress,
         address opportunityAddress
-    ) public view returns (bool, address) {
+    ) public view returns (bool, address, uint256) {
         //get the winning searcher
         address winningSearcher = auctionResultsMap[auction_number][
             validatorAddress
@@ -650,9 +692,9 @@ contract FastLaneAuction is Ownable {
 
         //check if there is a winning searcher (no bids mean the winner is address(this))
         if (winningSearcher != address(this)) {
-            return (true, winningSearcher);
+            return (true, winningSearcher, auction_number);
         } else {
-            return (false, winningSearcher);
+            return (false, winningSearcher, auction_number);
         }
     }
 
@@ -687,6 +729,7 @@ contract FastLaneAuction is Ownable {
         _initializedValidatorList = currentValidatorsArrayMap[auction_number];
     }
 
+    // @audit Potentially Remove?
     function getInitializedOpportunities(address _validatorAddress)
         public
         view
