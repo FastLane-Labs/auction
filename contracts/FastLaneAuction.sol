@@ -50,10 +50,11 @@ contract FastLaneAuction is Ownable {
     uint256 public fast_lane_fee = 50000; //out of one million
 
     uint256 public auction_number = 0;
-    uint128 public processing_batch_size = 100;
+
 
     uint128 public checker_max_gas_price = 0;
-
+    uint16 public processing_batch_size = 100;
+    
     bool public auction_live = false;
     bool public processing_ongoing = false;
     bool internal _paused;
@@ -88,7 +89,7 @@ contract FastLaneAuction is Ownable {
 
     // Validators cuts to be withdraw or dispatched regularly
     mapping(address => uint256) public outstandingValidatorsBalance;
-    uint256 public outstandingFLBalance;
+    uint256 public outstandingFLBalance = 0;
 
     /***********************************|
     |             Events                |
@@ -288,7 +289,7 @@ contract FastLaneAuction is Ownable {
             );
 
            
-            emit AuctionEnded(auction_number, outstandingFLBalance);
+            emit AuctionEnded(auction_number);
 
             outstandingFLBalance = 0;
             processing_ongoing = false;
@@ -299,11 +300,11 @@ contract FastLaneAuction is Ownable {
         }
     }
 
-    function setProcessingBatchSize(uint256 size) external onlyOwner {
+    function setProcessingBatchSize(uint16 size) external onlyOwner {
         processing_batch_size = size;
     }
 
-    function setMaxGasPrice(uint256 gasPrice) external onlyOwner {
+    function setMaxGasPrice(uint128 gasPrice) external onlyOwner {
         checker_max_gas_price = gasPrice;
     }
 
