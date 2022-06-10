@@ -22,6 +22,8 @@ abstract contract PFLHelper {
     address public BIDDER3 = 0xFba52cDB2B36eCc27ac229b8feb2455B6aE3014b;
     address public BIDDER4 = 0xc4208Be0F01C8DBB57D0269887ccD5D269dEFf3B;
 
+    // @todo: Payable Addresses
+    
     address[] public BIDDERS = [BIDDER1,BIDDER2,BIDDER3,BIDDER4];
 
     constructor() {

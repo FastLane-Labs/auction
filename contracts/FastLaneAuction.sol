@@ -35,21 +35,20 @@ contract FastLaneAuction is Ownable {
 
     IERC20 public bid_token;
 
-    bool internal _paused;
-
     constructor(address initial_bid_token) {
         setBidToken(initial_bid_token);
     }
 
     //Variables mutable by owner via function calls
-    // @audit Natspec everything - current_balance internal?
+    // @audit Natspec everything
     uint256 public bid_increment = 10 * (10**18); //minimum bid increment in WMATIC
     uint256 public fast_lane_fee = 50000; //out of one million
+
+    uint256 public auction_number = 0;
+    uint128 public processing_batch_size = 100;
     bool public auction_live = false;
     bool public processing_ongoing = false;
-    uint256 public auction_number = 0;
-    uint256 public current_balance = 0;
-
+    bool internal _paused;
     //array and map declarations
 
 
@@ -79,6 +78,10 @@ contract FastLaneAuction is Ownable {
     mapping(uint256 => mapping(address => mapping(address => address)))
         internal auctionResultsMap;
 
+    // Validators cuts to be withdraw or dispatched regularly
+    mapping(address => uint256) public outstandingValidatorsBalance;
+    uint256 public outstandingFLBalance;
+
     /***********************************|
     |             Events                |
     |__________________________________*/
@@ -92,6 +95,8 @@ contract FastLaneAuction is Ownable {
     event OpportunityAddressRemoved(address indexed router);
     event ValidatorAddressAdded(address indexed validator);
     event ValidatorAddressRemoved(address indexed validator);
+    event ValidatorAddedBalance(address indexed validator, uint256 amount);
+    event ValidatorWithdrawnBalance(address indexed validator, uint256 amount, address indexed caller);
     event AuctionStarted(uint256 indexed auction_number);
     event AuctionProcessingBiddingStopped(uint256 indexed auction_number);
     event AuctionPartiallyProcessed(uint256 indexed auction_number, address indexed validator, address opportunity, address indexed searcher);
@@ -262,90 +267,6 @@ contract FastLaneAuction is Ownable {
         emit AuctionProcessingBiddingStopped(auction_number);
     }
 
-    //process auction results for a specific validator/opportunity pair. Cant do loops on all pairs due to size.
-    //use view-only functions to get arrays of unprocessed pairs to submit as args for this function.
-    function processPartialAuctionResults(
-        address _validatorAddress,
-        address _opportunityAddress
-    ) external onlyOwner notLiveStage atProcessingStage returns (bool isSuccessful) {
-
-        //make sure the pair hasnt already been processed
-        require(
-            currentInitializedValidatorsMap[auction_number][_validatorAddress]
-                ._isInitialized == true,
-            "FL:E-304"
-        );
-        require(
-            currentInitializedValOppMap[auction_number][_validatorAddress][
-                _opportunityAddress
-            ]._isInitialized == true,
-            "FL:E-305"
-        );
-
-        //find top bid for pairing
-        Bid memory top_user_bid = currentAuctionMap[auction_number][
-            _validatorAddress
-        ][_opportunityAddress];
-
-        require(
-            top_user_bid.validatorAddress == _validatorAddress,
-            "FL:E-202"
-        );
-
-        // mark things already updated
-        if (currentPairsCountMap[auction_number][_validatorAddress] > 1) {
-            //increment it down
-            //the pairs / validator count maps are to make sure we dont miss payment on any validators before collecting the PFL fee
-            currentPairsCountMap[auction_number][_validatorAddress]--;
-        } else if (
-            currentPairsCountMap[auction_number][_validatorAddress] == 1
-        ) {
-            if (currentValidatorsCountMap[auction_number] > 1) {
-                currentValidatorsCountMap[auction_number]--;
-                isSuccessful = true;
-            } else if (currentValidatorsCountMap[auction_number] == 1) {
-                currentValidatorsCountMap[auction_number] = 0;
-                isSuccessful = true;
-            } else {
-                isSuccessful = false;
-            }
-
-            if (isSuccessful == true) {
-                //since this is the last opp for this validator, uninitialize the validator from the current round's validator map
-                currentInitializedValidatorsMap[auction_number][
-                    _validatorAddress
-                ] = InitializedAddress(_validatorAddress, false);
-                currentPairsCountMap[auction_number][_validatorAddress] = 0;
-            }
-        } else {
-            isSuccessful = false;
-        }
-
-        if (isSuccessful == true) {
-            //mark it already updated
-            currentInitializedValOppMap[auction_number][_validatorAddress][
-                _opportunityAddress
-            ] = InitializedAddress(_opportunityAddress, false);
-
-            //handle the transfers
-            //we assume validator addresses are trusted b/c if not then we're kinda fucked anyway
-            bid_token.transferFrom(
-                address(this),
-                top_user_bid.validatorAddress,
-                ((top_user_bid.bidAmount * 1000000) - fast_lane_fee) / 1000000
-            );
-
-            //update the auction results map
-            auctionResultsMap[auction_number][_validatorAddress][
-                _opportunityAddress
-            ] = top_user_bid.searcherContractAddress;
-
-            emit AuctionPartiallyProcessed(auction_number, _validatorAddress, _opportunityAddress, top_user_bid.searcherContractAddress);
-        }
-
-        return isSuccessful;
-    }
-
     // @audit What to do if a pair is locked forever
     function endAuction() external onlyOwner notLiveStage atProcessingStage returns (bool) {
 
@@ -355,21 +276,24 @@ contract FastLaneAuction is Ownable {
             bid_token.transferFrom(
                 address(this),
                 owner(),
-                bid_token.balanceOf(address(this))
+                outstandingFLBalance
             );
 
-            emit AuctionEnded(auction_number, bid_token.balanceOf(address(this)));
+           
+            emit AuctionEnded(auction_number, outstandingFLBalance);
 
+            outstandingFLBalance = 0;
             processing_ongoing = false;
-            require(bid_token.balanceOf(address(this)) == 0, "FL:E-402");
-            current_balance = 0;
-
+            
             return true;
         } else {
             return false;
         }
     }
 
+    function setProcessingBatchSize(uint256 size) external onlyOwner {
+        processing_batch_size = size;
+    }
 
     // @audit Assuming owner() is to become a multisig, maybe safer to emergency withdraw to owner, than add a receiver param
     function withdrawStuckNativeToken(uint256 amount) external onlyOwner {
@@ -457,17 +381,22 @@ contract FastLaneAuction is Ownable {
                 "FL:E-206"
             );
 
+            uint256 balanceBefore = bid_token.balanceOf(address(this));
             //transfer the bid amount (requires approval)
             bid_token.transferFrom(
                 bid.searcherPayableAddress,
                 address(this),
                 bid.bidAmount
             );
+
+            // @audit TBD if balanceBefore + after checks are actual needed with native chain tokens
             require(
                 bid_token.balanceOf(address(this)) ==
-                    current_balance + bid.bidAmount,
+                    balanceBefore + bid.bidAmount,
                 "FL:E-207"
             );
+
+            balanceBefore = bid_token.balanceOf(address(this));
 
             // @audit ERC20 transfers of wMatic are safe
             // be very careful about changing bid token to any ERC777
@@ -477,9 +406,12 @@ contract FastLaneAuction is Ownable {
                 current_top_bid.searcherPayableAddress,
                 current_top_bid.bidAmount
             );
+
+             // @audit TBD if balanceBefore + after checks are actual needed with native chain tokens
+
             require(
                 bid_token.balanceOf(address(this)) ==
-                    current_balance + bid.bidAmount - current_top_bid.bidAmount,
+                    balanceBefore + bid.bidAmount - current_top_bid.bidAmount,
                 "FL:E-207"
             );
 
@@ -487,7 +419,7 @@ contract FastLaneAuction is Ownable {
             currentAuctionMap[auction_number][bid.validatorAddress][
                 bid.opportunityAddress
             ] = bid;
-            current_balance = bid_token.balanceOf(address(this));
+
             return true;
         } else {
             //verify the bidder has the balance.
@@ -497,6 +429,8 @@ contract FastLaneAuction is Ownable {
                 "FL:E-207"
             );
 
+            uint256 balanceBefore = bid_token.balanceOf(address(this));
+
             //transfer the bid amount
             bid_token.transferFrom(
                 bid.searcherPayableAddress,
@@ -505,7 +439,7 @@ contract FastLaneAuction is Ownable {
             );
             require(
                 bid_token.balanceOf(address(this)) ==
-                    current_balance + bid.bidAmount,
+                    balanceBefore + bid.bidAmount,
                 "FL:E-207"
             );
 
@@ -539,12 +473,134 @@ contract FastLaneAuction is Ownable {
             currentAuctionMap[auction_number][bid.validatorAddress][
                 bid.opportunityAddress
             ] = bid;
-            current_balance = bid_token.balanceOf(address(this));
 
             emit BidAdded(bid.searcherContractAddress, bid.validatorAddress, bid.opportunityAddress, bid.bidAmount, auction_number);
             return true;
         }
     }
+
+    //process auction results for a specific validator/opportunity pair. Cant do loops on all pairs due to size.
+    //use view-only functions to get arrays of unprocessed pairs to submit as args for this function.
+    function processPartialAuctionResults(
+        address _validatorAddress,
+        address _opportunityAddress
+    ) external notLiveStage atProcessingStage returns (bool isSuccessful) {
+
+        //make sure the pair hasnt already been processed
+        require(
+            currentInitializedValidatorsMap[auction_number][_validatorAddress]
+                ._isInitialized == true,
+            "FL:E-304"
+        );
+        require(
+            currentInitializedValOppMap[auction_number][_validatorAddress][
+                _opportunityAddress
+            ]._isInitialized == true,
+            "FL:E-305"
+        );
+
+        //find top bid for pairing
+        Bid memory top_user_bid = currentAuctionMap[auction_number][
+            _validatorAddress
+        ][_opportunityAddress];
+
+        require(
+            top_user_bid.validatorAddress == _validatorAddress,
+            "FL:E-202"
+        );
+
+        // mark things already updated
+        if (currentPairsCountMap[auction_number][_validatorAddress] > 1) {
+            //increment it down
+            //the pairs / validator count maps are to make sure we dont miss payment on any validators before collecting the PFL fee
+            currentPairsCountMap[auction_number][_validatorAddress]--;
+        } else if (
+            currentPairsCountMap[auction_number][_validatorAddress] == 1
+        ) {
+            if (currentValidatorsCountMap[auction_number] > 1) {
+                currentValidatorsCountMap[auction_number]--;
+                isSuccessful = true;
+            } else if (currentValidatorsCountMap[auction_number] == 1) {
+                currentValidatorsCountMap[auction_number] = 0;
+                isSuccessful = true;
+            } else {
+                isSuccessful = false;
+            }
+
+            if (isSuccessful == true) {
+                //since this is the last opp for this validator, uninitialize the validator from the current round's validator map
+                currentInitializedValidatorsMap[auction_number][
+                    _validatorAddress
+                ] = InitializedAddress(_validatorAddress, false);
+                currentPairsCountMap[auction_number][_validatorAddress] = 0;
+            }
+        } else {
+            isSuccessful = false;
+        }
+
+        if (isSuccessful == true) {
+            //mark it already updated
+            currentInitializedValOppMap[auction_number][_validatorAddress][
+                _opportunityAddress
+            ] = InitializedAddress(_opportunityAddress, false);
+
+            //handle the cuts
+            uint256 cut = ((top_user_bid.bidAmount * 1000000) - fast_lane_fee) / 1000000;
+            outstandingValidatorsBalance[top_user_bid.validatorAddress] += cut;
+            emit ValidatorAddedBalance(top_user_bid.validatorAddress, cut);
+
+            //update the auction results map
+            auctionResultsMap[auction_number][_validatorAddress][
+                _opportunityAddress
+            ] = top_user_bid.searcherContractAddress;
+
+            emit AuctionPartiallyProcessed(auction_number, _validatorAddress, _opportunityAddress, top_user_bid.searcherContractAddress);
+        }
+
+        return isSuccessful;
+    }
+
+    function redeemOutstandingBalance(address outstandingValidatorWithBalance) external {
+
+        require(outstandingValidatorWithBalance != address(0), "FL-E-202");
+        require(outstandingValidatorsBalance[outstandingValidatorWithBalance] > 0, "FL:E-207");
+
+        uint256 outstandingAmount = outstandingValidatorsBalance[outstandingValidatorWithBalance];
+        outstandingValidatorsBalance[outstandingValidatorWithBalance] = 0;
+
+        bid_token.transferFrom(
+            address(this),
+            outstandingValidatorWithBalance,
+            outstandingAmount
+        );
+
+        emit ValidatorWithdrawnBalance(outstandingValidatorWithBalance, outstandingAmount, msg.sender);
+    }
+
+
+    /***********************************|
+    |             Resolvers             |
+    |__________________________________*/
+
+    /// @notice Gelato Offchain Resolver
+    /// @dev Automated function checked each block by Gelato Network if there is a processing auction to finalize
+    /// @return {bool} canExec - should the worker trigger, {bytes} execPayload - the payload if canExec is true
+    function checker() external view returns (bool canExec, bytes memory execPayload)  {
+        if (_paused || auction_live) return (false, "");
+        
+        // Go workers go
+        if (processing_ongoing) {
+            canExec = false;
+            (hasJobs, _validatorsJobsList, _opportunitiesJobsList) = getPendingProcessingJobs();
+            if (hasJobs) {
+                canExec = true;
+                execPayload = abi.encodeWithSelector(this.processPartialAuctionBatch.selector,_validatorsJobsList, _opportunitiesJobsList);
+                return (canExec, execPayload);
+            }
+        }
+        return (false, "");
+    }
+
 
     /***********************************|
     |             Views                 |

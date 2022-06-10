@@ -24,6 +24,7 @@ Codes:
     E-103 - Only send bids from the payor EOA
     E-104 - Invalid Validator address
     E-105 - Invalid opportunity address - Submit via discord
+    E-106 - Only Validator
 
   2. Find, Inequalities & Range
     E-200 - [--Unused--]
