@@ -42,7 +42,8 @@ Codes:
     E-303 - processing must be ongoing
     E-304 - validator already completely processed
     E-305 - opp already processed
-    E-306 - last auction results are unprocessed
+    E-306 - wrong stage
+    E-307 - last auction results are unprocessed
 
 
   4. Tokens, Funds & Finance
