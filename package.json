@@ -47,7 +47,7 @@
     "hardhat-preprocessor": "^0.1.4",
     "husky": "^8.0.1",
     "lodash": "^4.17.21",
-    "solc": "^0.8.14-fixed",
+    "solc": "^0.8.15",
     "solhint": "^3.3.7",
     "solhint-plugin-prettier": "^0.0.5",
     "solidity-coverage": "^0.7.21",

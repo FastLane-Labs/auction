@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.13;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -45,10 +45,22 @@ abstract contract FastLaneEvents {
     event FastLaneFeeSet(uint256 amount);
     event BidTokenSet(address indexed token);
     event PausedStateSet(bool state);
-    event OpportunityAddressAdded(address indexed router, uint256 indexed index);
-    event OpportunityAddressRemoved(address indexed router, uint256 indexed index);
-    event ValidatorAddressAdded(address indexed validator, uint256 indexed index);
-    event ValidatorAddressRemoved(address indexed validator, uint256 indexed index);
+    event OpportunityAddressAdded(
+        address indexed router,
+        uint256 indexed index
+    );
+    event OpportunityAddressRemoved(
+        address indexed router,
+        uint256 indexed index
+    );
+    event ValidatorAddressAdded(
+        address indexed validator,
+        uint256 indexed index
+    );
+    event ValidatorAddressRemoved(
+        address indexed validator,
+        uint256 indexed index
+    );
     event ValidatorWithdrawnBalance(
         address indexed validator,
         uint256 amount,
@@ -84,6 +96,7 @@ abstract contract FastLaneEvents {
     );
     event UnhandledError(bytes reason);
 }
+
 contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     using Address for address payable;
     using SafeERC20 for IERC20;
@@ -189,7 +202,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             opportunityAddress
         ];
 
-        uint index;
+        uint256 index;
         if (oldData._previouslyInitialized == true) {
             opportunityAddressList[oldData._index] = opportunityAddress;
             opportunityAddressMap[opportunityAddress] = InitializedIndexAddress(
@@ -246,7 +259,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         InitializedIndexAddress memory oldData = validatorAddressMap[
             validatorAddress
         ];
-        uint index;
+        uint256 index;
         if (oldData._previouslyInitialized == true) {
             validatorAddressList[oldData._index] = validatorAddress;
             validatorAddressMap[validatorAddress] = InitializedIndexAddress(
@@ -375,6 +388,50 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
     }
 
+    function _receiveBid(
+        Bid memory bid,
+        uint256 currentTopBidAmount,
+        address currentTopBidSearcherPayableAddress
+    ) internal {
+        //verify the bid exceeds previous bid + minimum increment
+        // @todo Discuss bid_increment() as a function to improve increment logic
+        require(
+            bid.bidAmount >= currentTopBidAmount + bid_increment,
+            "FL:E-203"
+        );
+
+        // @todo Discuss
+        //verify the new bidder isnt the previous bidder
+        require(
+            bid.searcherPayableAddress != currentTopBidSearcherPayableAddress,
+            "FL:E-204"
+        );
+
+        //verify the bidder has the balance.
+        require(
+            bid_token.balanceOf(bid.searcherPayableAddress) >= bid.bidAmount,
+            "FL:E-206"
+        );
+
+        //transfer the bid amount (requires approval)
+        bid_token.safeTransferFrom(
+            bid.searcherPayableAddress,
+            address(this),
+            bid.bidAmount
+        );
+    }
+
+    function _refundPreviousBidder(Bid memory bid) internal {
+        // @audit ERC20 transfers of wMatic are safe
+        // be very careful about changing bid token to any ERC777
+        // refund the previous top bid
+        bid_token.safeTransferFrom(
+            address(this),
+            bid.searcherPayableAddress,
+            bid.bidAmount
+        );
+    }
+
     /***********************************|
     |             Public                |
     |__________________________________*/
@@ -387,7 +444,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         atLiveStage
         whenNotPaused
         nonReentrant
-        returns (bool)
     {
         //verify that the bid is coming from the EOA that's paying
         require(msg.sender == bid.searcherPayableAddress, "FL:E-103");
@@ -414,6 +470,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 auction_number
             ][bid.validatorAddress][bid.opportunityAddress]._isInitialized;
         } else {
+            // @audit If the validator is not initialized for this round, consider the opportunity not initialized as well?
             is_opportunity_initialized = false;
         }
 
@@ -422,89 +479,21 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 bid.validatorAddress
             ][bid.opportunityAddress];
 
-            //verify the bid exceeds previous bid + minimum increment
-            // @todo Discuss bid_increment() as a function to improve increment logic
-            require(
-                bid.bidAmount >= current_top_bid.bidAmount + bid_increment,
-                "FL:E-203"
+            _receiveBid(
+                bid,
+                current_top_bid.bidAmount,
+                current_top_bid.searcherPayableAddress
             );
-
-            // @todo Discuss
-            //verify the new bidder isnt the previous bidder
-            require(
-                bid.searcherPayableAddress !=
-                    current_top_bid.searcherPayableAddress,
-                "FL:E-204"
-            );
-
-            //verify the bidder has the balance.
-            require(
-                bid_token.balanceOf(bid.searcherPayableAddress) >=
-                    bid.bidAmount,
-                "FL:E-206"
-            );
-
-            uint256 balanceBefore = bid_token.balanceOf(address(this));
-            //transfer the bid amount (requires approval)
-            bid_token.transferFrom(
-                bid.searcherPayableAddress,
-                address(this),
-                bid.bidAmount
-            );
-
-            // @audit TBD if balanceBefore + after checks are actual needed with native chain tokens
-            require(
-                bid_token.balanceOf(address(this)) ==
-                    balanceBefore + bid.bidAmount,
-                "FL:E-207"
-            );
-
-            balanceBefore = bid_token.balanceOf(address(this));
-
-            // @audit ERC20 transfers of wMatic are safe
-            // be very careful about changing bid token to any ERC777
-            // refund the previous top bid
-            bid_token.transferFrom(
-                address(this),
-                current_top_bid.searcherPayableAddress,
-                current_top_bid.bidAmount
-            );
-
-            // @audit TBD if balanceBefore + after checks are actual needed with native chain tokens
-
-            require(
-                bid_token.balanceOf(address(this)) ==
-                    balanceBefore + bid.bidAmount - current_top_bid.bidAmount,
-                "FL:E-207"
-            );
+            _refundPreviousBidder(current_top_bid);
 
             //update the existing Bid mapping
             currentAuctionMap[auction_number][bid.validatorAddress][
                 bid.opportunityAddress
             ] = bid;
 
-            return true;
         } else {
             //verify the bidder has the balance.
-            require(
-                bid_token.balanceOf(bid.searcherPayableAddress) >=
-                    bid.bidAmount,
-                "FL:E-207"
-            );
-
-            uint256 balanceBefore = bid_token.balanceOf(address(this));
-
-            //transfer the bid amount
-            bid_token.transferFrom(
-                bid.searcherPayableAddress,
-                address(this),
-                bid.bidAmount
-            );
-            require(
-                bid_token.balanceOf(address(this)) ==
-                    balanceBefore + bid.bidAmount,
-                "FL:E-207"
-            );
+            _receiveBid(bid, 0, address(0));
 
             // flag the validator / opportunity combination as initialized
             if (is_validator_initialized == false) {
@@ -536,16 +525,15 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             currentAuctionMap[auction_number][bid.validatorAddress][
                 bid.opportunityAddress
             ] = bid;
-
-            emit BidAdded(
-                bid.searcherContractAddress,
-                bid.validatorAddress,
-                bid.opportunityAddress,
-                bid.bidAmount,
-                auction_number
-            );
-            return true;
         }
+
+        emit BidAdded(
+            bid.searcherContractAddress,
+            bid.validatorAddress,
+            bid.opportunityAddress,
+            bid.bidAmount,
+            auction_number
+        );
     }
 
     //process auction results for a specific validator/opportunity pair. Cant do loops on all pairs due to size.

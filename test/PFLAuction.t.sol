@@ -32,10 +32,19 @@ abstract contract PFLHelper is Test, FastLaneEvents {
     address public OPPORTUNITY3 = 0x8fcB7fb5e84847029Ba3e055BE46b86a4693AE40;
     address public OPPORTUNITY4 = 0x29D59575e85282c05112BEEC53fFadE66d3c7CD1;
 
-    address public BROKEBIDDER = 0xD057089743dc1461b1099Dee7A8CB848E361f6d9;
+    address public BROKE_BIDDER = 0xD057089743dc1461b1099Dee7A8CB848E361f6d9;
+    address public BROKE_SEARCHER = 0xD057089743dc1461b1099Dee7A8CB848E361f6d9;
+
+    address public SEARCHER_ADDRESS1 =  0x14BA06E061ada0443dbE5c7617A529Dd791c3146;
+    address public SEARCHER_ADDRESS2 =  0x428a87F9c0ed1Bb9cdCE42f606e030ba40a525f3;
+    address public SEARCHER_ADDRESS3 =  0x791e001586B75B8880bC6D02f2Ee19D42ec23E18;
+    address public SEARCHER_ADDRESS4 =  0x4BF8fC74846da2dc54cCfd1f4fFac595939399e4;
 
 
     address[] public BIDDERS = [BIDDER1, BIDDER2, BIDDER3, BIDDER4];
+
+    address[] public SEARCHERS = [SEARCHER_ADDRESS1, SEARCHER_ADDRESS2, SEARCHER_ADDRESS3, SEARCHER_ADDRESS4];
+
     address[] public VALIDATORS = [
         VALIDATOR1,
         VALIDATOR2,
@@ -74,15 +83,29 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         for (uint256 i = 0; i < BIDDERS.length; i++) {
             address currentBidder = BIDDERS[i];
-            uint256 soonWMatic = (10 ether * (i + 1));
-            vm.deal(currentBidder, soonWMatic + 1);
+            address currentSearcher = SEARCHERS[i];
+
+            uint256 soonWMaticBidder = (10 ether * (i + 1));
+            uint256 soonWMaticSearcher = (33 ether * (i + 1));
+
+            vm.deal(currentBidder, soonWMaticBidder + 1);
+            vm.deal(currentSearcher, soonWMaticSearcher + 1);
+
             vm.prank(currentBidder);
-            wMatic.deposit{value: soonWMatic}();
+            wMatic.deposit{value: soonWMaticBidder}();
+            vm.prank(currentSearcher);
+            wMatic.deposit{value: soonWMaticSearcher}();
             console2.log(
                 "[amount Bidder] :",
                 i,
                 " -> ",
                 wMatic.balanceOf(currentBidder)
+            );
+            console2.log(
+                "[amount Searcher] :",
+                i,
+                " -> ",
+                wMatic.balanceOf(currentSearcher)
             );
         }
 
@@ -141,10 +164,15 @@ contract PFLAuctionTest is Test, PFLHelper {
         Bid memory auctionWrongValidatorBid = Bid(VALIDATOR2, OPPORTUNITY1, BIDDER1, BIDDER1, 11*10**18);
         Bid memory auctionWrongIncrementBid = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, BIDDER1, 8*10**18);
 
-        Bid memory auctionRightMinimumBid = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, BIDDER1, FLA.bid_increment());
+        Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
         
-        Bid memory auctionWrongDoubleSelfBid = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, BIDDER1, FLA.bid_increment() + 1);
-        Bid memory auctionWrongBrokeBidderBid = Bid(VALIDATOR1, OPPORTUNITY1, BROKEBIDDER, BROKEBIDDER, 8*10**18);
+        Bid memory auctionWrongDoubleSelfBidWithSearcherTooLow = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment() + 1);
+        Bid memory auctionWrongDoubleSelfBidWithSearcherEnough = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment() + FLA.bid_increment());
+
+        Bid memory auctionWrongBrokeBidderBidTooLow = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_BIDDER, 8*10**18);
+        Bid memory auctionWrongBrokeBidderBidEnough = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_BIDDER, FLA.bid_increment() + FLA.bid_increment());
+
+        Bid memory auctionWrongBrokeSearcherBid = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_SEARCHER, 8*10**18);
 
 
         vm.expectRevert(bytes("FL:E-103"));
@@ -159,32 +187,66 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.expectRevert(bytes("FL:E-203"));
         FLA.submitBid(auctionWrongIncrementBid);
 
+        vm.stopPrank(); // Not BIDDER1 anymore
         
+        vm.startPrank(auctionRightMinimumBidWithSearcher.searcherPayableAddress);
+
+        // Missing approval
+        vm.expectRevert(bytes("SafeERC20: low-level call failed"));
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+        // Approve as the Payable
+        wMatic.approve(address(FLA), 2**256 - 1);
+
         // First correct bid 
-        uint balanceBefore = wMatic.balanceOf(BIDDER1);
+        uint balanceBefore = wMatic.balanceOf(auctionRightMinimumBidWithSearcher.searcherPayableAddress);
 
         vm.expectEmit(true, true, true, true, address(FLA));
-        emit BidAdded(BIDDER1, VALIDATOR1, OPPORTUNITY1, FLA.bid_increment() + 1, 1);
-   
+        emit BidAdded(BIDDER1, VALIDATOR1, OPPORTUNITY1, FLA.bid_increment(), 1);
         // Check event
-        FLA.submitBid(auctionRightMinimumBid);
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
         // Check balances
-        assertEq(wMatic.balanceOf(BIDDER1), balanceBefore - (FLA.bid_increment() + 1));
-        assertEq(wMatic.balanceOf(address(FLA)), FLA.bid_increment() + 1);
+        assertEq(wMatic.balanceOf(auctionRightMinimumBidWithSearcher.searcherPayableAddress), balanceBefore - auctionRightMinimumBidWithSearcher.bidAmount);
+        assertEq(wMatic.balanceOf(address(FLA)), auctionRightMinimumBidWithSearcher.bidAmount);
 
         // Todo: Check mappings
 
-        FLA.submitBid(auctionRightMinimumBid);
         vm.expectRevert(bytes("FL:E-203"));
+        FLA.submitBid(auctionWrongDoubleSelfBidWithSearcherTooLow);
 
-        FLA.submitBid(auctionWrongDoubleSelfBid);
         vm.expectRevert(bytes("FL:E-204"));
-
-        FLA.submitBid(auctionWrongBrokeBidderBid);
-        vm.expectRevert(bytes("FL:E-206"));
+        FLA.submitBid(auctionWrongDoubleSelfBidWithSearcherEnough);
+  
 
         vm.stopPrank();
+
+        // There was a bid valid before of FLA.bid_increment().
+        // First we don't top it, then we do, but with an empty bank account. Both reverting.
+        vm.startPrank(auctionWrongBrokeBidderBidTooLow.searcherPayableAddress);
+        wMatic.approve(address(FLA), 2**256 - 1);
+        vm.expectRevert(bytes("FL:E-203"));
+        FLA.submitBid(auctionWrongBrokeBidderBidTooLow);
+       
+        vm.expectRevert(bytes("FL:E-206"));
+        FLA.submitBid(auctionWrongBrokeBidderBidEnough);
+
+        vm.stopPrank();
+
+        // Beat previous bid from another searcher on same pair
+
+        // Check refund
+
+        // Start another pair from another searcher
+
+        // Beat the other searcher
+
+        // Process results
+
+        // Pay validators
+
+        // Pay FLA.
+
         vm.startPrank(OWNER);
 
         FLA.stopBidding();
@@ -194,4 +256,8 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         assertTrue(FLA.auction_number() == 1);
     }
+
+    // Can't bid on removed opp after it was enabled then removed
+    // Can't bid on validator after it was enabled then removed
+    // Can't bid on validator after it was enabled then removed then enabled again
 }
