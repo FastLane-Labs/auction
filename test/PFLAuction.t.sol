@@ -108,8 +108,6 @@ contract PFLAuctionTest is Test, PFLHelper {
                 wMatic.balanceOf(currentSearcher)
             );
         }
-
-        // Fund useful accounts
     }
 
     function testStartProcessStopNoBidAuction() public {

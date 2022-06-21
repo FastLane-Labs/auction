@@ -34,6 +34,7 @@ Codes:
     E-205 - already top bidder
     E-206 - not enough funds
     E-207 - balances mismatch
+    E-208 - wrong batch size
 
   3. Availability & Time
     E-300 - [--Unused--]

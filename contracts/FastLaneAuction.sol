@@ -120,6 +120,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     bool public auction_live = false;
     bool public processing_ongoing = false;
     bool internal _paused;
+    bool internal _offchain_checker_disabled = false;
     //array and map declarations
 
     address[] internal opportunityAddressList;
@@ -338,17 +339,19 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         onlyOwner
         notLiveStage
         atProcessingStage
+        nonReentrant
         returns (bool)
     {
         // make sure all pairs have been processed first
         require(currentValidatorsCountMap[auction_number] < 1, "FL-E:306");
-        //transfer to PFL the sorely needed $ to cover our high infra costs
-        bid_token.transferFrom(address(this), owner(), outstandingFLBalance);
 
         emit AuctionEnded(auction_number);
 
         outstandingFLBalance = 0;
         processing_ongoing = false;
+
+        //transfer to PFL the sorely needed $ to cover our high infra costs
+        bid_token.safeTransferFrom(address(this), owner(), outstandingFLBalance);
 
         return true;
     }
@@ -359,6 +362,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     function setMaxGasPrice(uint128 gasPrice) external onlyOwner {
         checker_max_gas_price = gasPrice;
+    }
+
+    function setOffchainCheckerDisabledState(bool state) external onlyOwner {
+        _offchain_checker_disabled = state;
     }
 
     // @audit Assuming owner() is to become a multisig, maybe safer to emergency withdraw to owner, than add a receiver param
@@ -479,6 +486,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 bid.validatorAddress
             ][bid.opportunityAddress];
 
+            //update the existing Bid mapping
+            currentAuctionMap[auction_number][bid.validatorAddress][
+                bid.opportunityAddress
+            ] = bid;
+
             _receiveBid(
                 bid,
                 current_top_bid.bidAmount,
@@ -486,14 +498,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             );
             _refundPreviousBidder(current_top_bid);
 
-            //update the existing Bid mapping
-            currentAuctionMap[auction_number][bid.validatorAddress][
-                bid.opportunityAddress
-            ] = bid;
+
 
         } else {
-            //verify the bidder has the balance.
-            _receiveBid(bid, 0, address(0));
 
             // flag the validator / opportunity combination as initialized
             if (is_validator_initialized == false) {
@@ -525,6 +532,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             currentAuctionMap[auction_number][bid.validatorAddress][
                 bid.opportunityAddress
             ] = bid;
+
+            //verify the bidder has the balance.
+            _receiveBid(bid, 0, address(0));
+
         }
 
         emit BidAdded(
@@ -665,8 +676,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        if (_paused || auction_live) return (false, "");
-        // @todo: Prevent/delay checker if gas spike? if (checker_max_gas_price > 0 && tx.gas > checker_max_gas_price) return (false, "");
+        if (_offchain_checker_disabled || _paused || auction_live) return (false, "");
 
         // Go workers go
         if (processing_ongoing) {
@@ -687,9 +697,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return (false, "");
     }
 
-    function processPartialAuctionBatch(ProcessingJobs[] memory jobs) public {
+    function processPartialAuctionBatch(ProcessingJobs[] calldata jobs) public atProcessingStage whenNotPaused {
         uint256 errors = 0;
         uint256 processed = 0;
+        require(jobs.length <= processing_batch_size, "FL:E-208");
         for (uint256 i = 0; i < jobs.length; ++i) {
             ProcessingJobs memory currentJob = jobs[i];
             for (
@@ -833,22 +844,21 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // @audit Potentially Remove?
-    function getUnprocessedValidators() public view returns (address[] memory) {
+    function getUnprocessedValidators(uint256 start, uint256 num_items) public view returns (address[] memory) {
         //MIGHT RUN OUT OF GAS - only use if convenient, do not rely on.
 
         address[] memory _unprocessedValidatorList;
 
-        if (processing_ongoing == false) {
-            return _unprocessedValidatorList;
-        }
-
-        uint256 _listIndex = 0;
-
+        uint256 _listIndex = start;
+        uint256 max = start + num_items;
         address[] memory _initializedValidatorList = currentValidatorsArrayMap[
             auction_number
         ];
 
-        for (uint256 i = 0; i < _initializedValidatorList.length; i++) {
+        uint256 end = max > _initializedValidatorList.length ? _initializedValidatorList.length : max;
+
+
+        for (uint256 i = _listIndex; i < _initializedValidatorList.length; i++) {
             if (
                 currentInitializedValidatorsMap[auction_number][
                     _initializedValidatorList[i]
