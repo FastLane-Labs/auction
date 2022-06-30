@@ -211,13 +211,13 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         } else {
             opportunityAddressList.push(opportunityAddress);
             uint256 listLength = opportunityAddressList.length;
+            index = listLength - 1;
             opportunityAddressMap[opportunityAddress] = InitializedIndexAddress(
                 opportunityAddress,
                 true,
-                listLength,
+                index,
                 true
             );
-            index = listLength;
         }
         emit OpportunityAddressAdded(opportunityAddress, index);
     }
@@ -268,13 +268,13 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         } else {
             validatorAddressList.push(validatorAddress);
             uint256 listLength = validatorAddressList.length;
+            index = listLength - 1;
             validatorAddressMap[validatorAddress] = InitializedIndexAddress(
                 validatorAddress,
                 true,
-                listLength,
+                index,
                 true
             );
-            index = listLength;
         }
         emit ValidatorAddressAdded(validatorAddress, index);
     }
