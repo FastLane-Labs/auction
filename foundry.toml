@@ -9,6 +9,15 @@ remappings = [
     'hardhat/=node_modules/hardhat/',
 ]
 gas_reports = ["FastLaneAuction"]
+verbosity = 3
+fuzz_runs = 256
+optimizer = true
+optimizer_runs = 10000
 
+# extends default options
+[ci]
+fuzz-runs = 10_000
+cache = false
+force = true
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
