@@ -58,8 +58,8 @@ abstract contract FastLaneEvents {
     );
     event ValidatorWithdrawnBalance(
         address indexed validator,
-        uint256 amount,
-        address indexed caller
+        address indexed caller,
+        uint256 amount
     );
     event AuctionStarted(uint256 indexed auction_number);
     event AuctionProcessingBiddingStopped(uint256 indexed auction_number);
@@ -650,8 +650,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
         emit ValidatorWithdrawnBalance(
             outstandingValidatorWithBalance,
-            outstandingAmount,
-            msg.sender
+            msg.sender,
+            outstandingAmount
         );
     }
 
