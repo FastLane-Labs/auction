@@ -18,11 +18,6 @@ struct Bid {
     uint256 bidAmount;
 }
 
-struct InitializedAddress {
-    address _address;
-    bool _isInitialized;
-}
-
 struct InitializedIndexAddress {
     address _address;
     bool _previouslyInitialized;
@@ -132,10 +127,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => mapping(address => Bid)))
         internal currentAuctionMap;
 
-    mapping(uint256 => mapping(address => InitializedAddress))
+    mapping(uint256 => mapping(address => bool))
         internal currentInitializedValidatorsMap;
 
-    mapping(uint256 => mapping(address => mapping(address => InitializedAddress)))
+    mapping(uint256 => mapping(address => mapping(address => bool)))
         internal currentInitializedValOppMap;
 
     mapping(uint256 => address[]) internal currentValidatorsArrayMap;
@@ -473,13 +468,13 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         //Determine if pair is initialized
         bool is_validator_initialized = currentInitializedValidatorsMap[
             auction_number
-        ][bid.validatorAddress]._isInitialized;
+        ][bid.validatorAddress];
 
         bool is_opportunity_initialized;
         if (is_validator_initialized) {
             is_opportunity_initialized = currentInitializedValOppMap[
                 auction_number
-            ][bid.validatorAddress][bid.opportunityAddress]._isInitialized;
+            ][bid.validatorAddress][bid.opportunityAddress];
         } else {
             // @audit If the validator is not initialized for this round, consider the opportunity not initialized as well?
             is_opportunity_initialized = false;
@@ -506,7 +501,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             if (is_validator_initialized == false) {
                 currentInitializedValidatorsMap[auction_number][
                     bid.validatorAddress
-                ] = InitializedAddress(bid.validatorAddress, true);
+                ] = true;
                 currentValidatorsArrayMap[auction_number].push(
                     bid.validatorAddress
                 );
@@ -518,10 +513,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             if (is_opportunity_initialized == false) {
                 currentInitializedValOppMap[auction_number][
                     bid.validatorAddress
-                ][bid.opportunityAddress] = InitializedAddress(
-                    bid.opportunityAddress,
-                    true
-                );
+                ][bid.opportunityAddress] = true;
                 currentPairsArrayMap[auction_number][bid.validatorAddress].push(
                         bid.opportunityAddress
                     );
@@ -554,14 +546,15 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     ) external notLiveStage atProcessingStage returns (bool isSuccessful) {
         //make sure the pair hasnt already been processed
         require(
-            currentInitializedValidatorsMap[auction_number][_validatorAddress]
-                ._isInitialized == true,
+            currentInitializedValidatorsMap[auction_number][
+                _validatorAddress
+            ] == true,
             "FL:E-304"
         );
         require(
             currentInitializedValOppMap[auction_number][_validatorAddress][
                 _opportunityAddress
-            ]._isInitialized == true,
+            ] == true,
             "FL:E-305"
         );
 
@@ -594,7 +587,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 //since this is the last opp for this validator, uninitialize the validator from the current round's validator map
                 currentInitializedValidatorsMap[auction_number][
                     _validatorAddress
-                ] = InitializedAddress(_validatorAddress, false);
+                ] = false;
                 currentPairsCountMap[auction_number][_validatorAddress] = 0;
             }
         } else {
@@ -605,7 +598,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             //mark it already updated
             currentInitializedValOppMap[auction_number][_validatorAddress][
                 _opportunityAddress
-            ] = InitializedAddress(_opportunityAddress, false);
+            ] = false;
 
             //handle the cuts
             uint256 cut = ((top_user_bid.bidAmount * 1000000) - fast_lane_fee) /
@@ -756,14 +749,14 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         //Determine if pair is initialized
         bool is_validator_initialized = currentInitializedValidatorsMap[
             auction_number
-        ][validatorAddress]._isInitialized;
+        ][validatorAddress];
 
         bool is_opportunity_initialized;
 
         if (is_validator_initialized) {
             is_opportunity_initialized = currentInitializedValOppMap[
                 auction_number
-            ][validatorAddress][opportunityAddress]._isInitialized;
+            ][validatorAddress][opportunityAddress];
         } else {
             is_opportunity_initialized = false;
         }
@@ -875,7 +868,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             if (
                 currentInitializedValidatorsMap[auction_number][
                     _initializedValidatorList[i]
-                ]._isInitialized == true
+                ] == true
             ) {
                 _unprocessedValidatorList[
                     _listIndex
@@ -910,7 +903,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             if (
                 currentInitializedValOppMap[auction_number][_validatorAddress][
                     _initializedOpportunityList[i]
-                ]._isInitialized == true
+                ] == true
             ) {
                 _unprocessedOpportunityList[
                     _listIndex
@@ -928,7 +921,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     ) public view returns (bool isInitialized) {
         isInitialized = currentInitializedValOppMap[auction_number][
             _validatorAddress
-        ][_opportunityAddress]._isInitialized;
+        ][_opportunityAddress];
     }
 
     // @audit Potentially Remove?
@@ -939,7 +932,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     {
         isInitialized = currentInitializedValidatorsMap[auction_number][
             _validatorAddress
-        ]._isInitialized;
+        ];
     }
 
     /***********************************|
