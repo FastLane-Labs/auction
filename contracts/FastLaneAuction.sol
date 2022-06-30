@@ -351,7 +351,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         processing_ongoing = false;
 
         //transfer to PFL the sorely needed $ to cover our high infra costs
-        bid_token.safeTransferFrom(address(this), owner(), outstandingFLBalance);
+        bid_token.safeTransferFrom(
+            address(this),
+            owner(),
+            outstandingFLBalance
+        );
 
         return true;
     }
@@ -497,11 +501,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 current_top_bid.searcherPayableAddress
             );
             _refundPreviousBidder(current_top_bid);
-
-
-
         } else {
-
             // flag the validator / opportunity combination as initialized
             if (is_validator_initialized == false) {
                 currentInitializedValidatorsMap[auction_number][
@@ -535,7 +535,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
             //verify the bidder has the balance.
             _receiveBid(bid, 0, address(0));
-
         }
 
         emit BidAdded(
@@ -676,7 +675,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        if (_offchain_checker_disabled || _paused || auction_live) return (false, "");
+        if (_offchain_checker_disabled || _paused || auction_live)
+            return (false, "");
 
         // Go workers go
         if (processing_ongoing) {
@@ -697,7 +697,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return (false, "");
     }
 
-    function processPartialAuctionBatch(ProcessingJobs[] calldata jobs) public atProcessingStage whenNotPaused {
+    function processPartialAuctionBatch(ProcessingJobs[] calldata jobs)
+        public
+        atProcessingStage
+        whenNotPaused
+    {
         uint256 errors = 0;
         uint256 processed = 0;
         require(jobs.length <= processing_batch_size, "FL:E-208");
@@ -844,7 +848,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // @audit Potentially Remove?
-    function getUnprocessedValidators(uint256 start, uint256 num_items) public view returns (address[] memory) {
+    function getUnprocessedValidators(uint256 start, uint256 num_items)
+        public
+        view
+        returns (address[] memory)
+    {
         //MIGHT RUN OUT OF GAS - only use if convenient, do not rely on.
 
         address[] memory _unprocessedValidatorList;
@@ -855,10 +863,15 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             auction_number
         ];
 
-        uint256 end = max > _initializedValidatorList.length ? _initializedValidatorList.length : max;
+        uint256 end = max > _initializedValidatorList.length
+            ? _initializedValidatorList.length
+            : max;
 
-
-        for (uint256 i = _listIndex; i < _initializedValidatorList.length; i++) {
+        for (
+            uint256 i = _listIndex;
+            i < _initializedValidatorList.length;
+            i++
+        ) {
             if (
                 currentInitializedValidatorsMap[auction_number][
                     _initializedValidatorList[i]
