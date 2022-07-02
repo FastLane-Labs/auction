@@ -124,11 +124,13 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     uint256 public fast_lane_fee = 50000; //out of one million
 
     uint128 public auction_number = 1;
-    uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
+    uint128 public active_privileges_auction_number = 0;
+
 
     // Minimum for Validator Preferences
     uint256 public minFLShipBalance = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
 
+    uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
     uint16 public autopay_batch_size = 10;
 
     bool public auction_live = false;
@@ -227,7 +229,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         onlyOwner
     {
         Status storage existingStatus = statusMap[opportunityAddress];
-        require(existingStatus.kind == statusType.OPPORTUNITY, "");
+        require(existingStatus.kind == statusType.OPPORTUNITY, "FL:E-105");
         existingStatus.inactiveAtAuction = auction_number + 1;
         emit OpportunityAddressDisabled(opportunityAddress, auction_number + 1);
     }
@@ -252,8 +254,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         public
         onlyOwner
     {
-        //validatorAddressList.remove(validatorAddress);
         Status storage existingStatus = statusMap[validatorAddress];
+        require(existingStatus.kind == statusType.VALIDATOR, "FL:E-104");
         existingStatus.inactiveAtAuction = auction_number + 1;
         emit ValidatorAddressDisabled(validatorAddress, auction_number + 1);
     }
@@ -279,6 +281,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
         // Increment auction_number so the checkpoints are available.
         auction_number++;
+        active_privileges_auction_number++;
 
         uint256 ownerBalance = outstandingFLBalance;
         outstandingFLBalance = 0;
@@ -319,7 +322,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
         if (oopsTokenBalance > 0) {
-            bid_token.transferFrom(address(this), owner(), oopsTokenBalance);
+            bid_token.safeTransferFrom(address(this), owner(), oopsTokenBalance);
             emit WithdrawStuckERC20(address(this), owner(), oopsTokenBalance);
         }
     }
@@ -500,7 +503,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         valCheckpoint.lastWithdrawnAuction = auction_number;
 
 
-        bid_token.transferFrom(
+        bid_token.safeTransferFrom(
             address(this),
             outstandingValidatorWithBalance,
             redeemable
@@ -546,7 +549,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return (false, "");
     }
 
-    function processAutopayJobs(address[] memory autopayRecipients) external nonReentrant {
+    function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant {
         // Recheck and Disperse.
     }
 
@@ -636,7 +639,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             uint256
         )
     {
-        return findFinalizedAuctionWinnerAtAuction(auction_number-1, validatorAddress, opportunityAddress);
+        return findFinalizedAuctionWinnerAtAuction(active_privileges_auction_number, validatorAddress, opportunityAddress);
     }
 
   /***********************************|
