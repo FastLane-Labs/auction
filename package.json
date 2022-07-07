@@ -19,7 +19,7 @@
     "coverage": "yarn clean-test && hardhat --show-stack-traces coverage --temp coverage_build && yarn clean-test",
     "hardhat_gas": "REPORT_GAS=true hardhat test",
     "gas": "forge test -vv --gas-report",
-    "ftest": "yarn expenv && forge test -vv --fork-url $ALCHEMY_APIKEY_MUMBAI --fork-block-number 26702726 --gas-report --ffi",
+    "ftest": "source .env && forge test -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report --ffi",
     "ftrpc": "forge test -vv --ffi",
     "start": "hardhat node --port 8545",
     "anvil": "anvil",

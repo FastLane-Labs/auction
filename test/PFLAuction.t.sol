@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 
 import "contracts/FastLaneAuction.sol";
+
+import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
@@ -18,6 +20,7 @@ abstract contract PFLHelper is Test, FastLaneEvents {
     address public OWNER = 0xa401DCcD23DCdbc7296bDfb8A6c8d61106711CA6;
 
     address public BIDDER1 = 0xc71E2Df87C93bC3Ddba80e14406F3880E3D19D3e;
+
     address public BIDDER2 = 0x174237f20a0925d5eFEA401e5279181f0b7515EE;
     address public BIDDER3 = 0xFba52cDB2B36eCc27ac229b8feb2455B6aE3014b;
     address public BIDDER4 = 0xc4208Be0F01C8DBB57D0269887ccD5D269dEFf3B;
@@ -68,6 +71,11 @@ abstract contract PFLHelper is Test, FastLaneEvents {
             emit log_uint(uint256(reads[i]));
         }
     }
+
+    function _calculateCuts(uint256 amount,uint256 fee) internal pure returns (uint256 vCut, uint256 flCut) {
+        vCut = ((amount * 1000000) - fee) / 1000000;
+        flCut = amount - vCut;
+    }
 }
 
 contract PFLAuctionTest is Test, PFLHelper {
@@ -84,7 +92,8 @@ contract PFLAuctionTest is Test, PFLHelper {
         for (uint256 i = 0; i < BIDDERS.length; i++) {
             address currentBidder = BIDDERS[i];
             address currentSearcher = SEARCHERS[i];
-
+            vm.label(currentBidder,string.concat("BIDDER",Strings.toString(i+1)));
+            vm.label(currentSearcher,string.concat("SEARCHER",Strings.toString(i+1)));
             uint256 soonWMaticBidder = (10 ether * (i + 1));
             uint256 soonWMaticSearcher = (33 ether * (i + 1));
 
@@ -95,61 +104,94 @@ contract PFLAuctionTest is Test, PFLHelper {
             wMatic.deposit{value: soonWMaticBidder}();
             vm.prank(currentSearcher);
             wMatic.deposit{value: soonWMaticSearcher}();
-            console2.log(
-                "[amount Bidder] :",
-                i,
-                " -> ",
-                wMatic.balanceOf(currentBidder)
-            );
-            console2.log(
-                "[amount Searcher] :",
-                i,
-                " -> ",
-                wMatic.balanceOf(currentSearcher)
-            );
+            // console2.log(
+            //     "[amount Bidder] :",
+            //     i+1,
+            //     " -> ",
+            //     wMatic.balanceOf(currentBidder)
+            // );
+            // console2.log(
+            //     "[amount Searcher] :",
+            //     i+1,
+            //     " -> ",
+            //     wMatic.balanceOf(currentSearcher)
+            // );
         }
     }
 
-    function testStartProcessStopNoBidAuction() public {
+    function testStartStopNoBidAuction() public {
         console2.log("Sender", msg.sender);
         vm.startPrank(OWNER);
         // vm.record();
 
         FLA.startAuction();
-        FLA.stopBidding();
         FLA.endAuction();
 
-        assertTrue(FLA.auction_number() == 1);
+        assertTrue(FLA.auction_number() == 2);
     }
 
     function testStartProcessStopMultipleEmptyAuctions() public {
         vm.startPrank(OWNER);
         // vm.record();
 
-        vm.expectEmit(true, false, false, false);
-        emit OpportunityAddressAdded(OPPORTUNITY1,0);
-        FLA.addOpportunityAddressToList(OPPORTUNITY1);
+        vm.expectEmit(true, true, false, false);
+        emit OpportunityAddressEnabled(OPPORTUNITY1,1);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
 
-        vm.expectEmit(true, false, false, false);
-        emit ValidatorAddressAdded(VALIDATOR1, 0);
-        FLA.addValidatorAddressToList(VALIDATOR1);
+        vm.expectEmit(true, true, false, false);
+        emit ValidatorAddressEnabled(VALIDATOR1, 1);
+        FLA.enableValidatorAddress(VALIDATOR1);
 
         FLA.startAuction();
-        FLA.stopBidding();
+        // Now live, delay to next
+        vm.expectEmit(true, true, false, false);
+        emit OpportunityAddressEnabled(OPPORTUNITY2,2);
+        FLA.enableOpportunityAddress(OPPORTUNITY2);
+        
+        vm.expectEmit(true, true, false, false);
+        emit ValidatorAddressEnabled(VALIDATOR2, 2);
+        FLA.enableValidatorAddress(VALIDATOR2);
+
         FLA.endAuction();
 
         FLA.startAuction();
-        FLA.stopBidding();
         FLA.endAuction();
 
-        assertTrue(FLA.auction_number() == 2);
+        assertTrue(FLA.auction_number() == 3);
     }
-
-    function testStartProcessSingleBidAuction() public {
+    function testValidatorCheckpoint() public {
         vm.startPrank(OWNER);
 
-        FLA.addOpportunityAddressToList(OPPORTUNITY1);
-        FLA.addValidatorAddressToList(VALIDATOR1);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.enableValidatorAddress(VALIDATOR1);
+
+        ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
+
+        assertTrue(vCheck.pendingBalanceAtlastBid == 0);
+        assertTrue(vCheck.outstandingBalance == 0);
+        assertTrue(vCheck.lastWithdrawnAuction == 0);
+        assertTrue(vCheck.lastBidReceivedAuction == 0);
+
+        Status memory st = FLA.getStatus(OPPORTUNITY1);
+        assertTrue(st.activeAtAuction == 1);
+        assertTrue(st.inactiveAtAuction == FLA.MAX_AUCTION_VALUE());
+        assertTrue(st.kind == statusType.OPPORTUNITY);
+
+        FLA.startAuction();
+        FLA.enableValidatorAddress(VALIDATOR2);
+        Status memory stVal2 = FLA.getStatus(VALIDATOR2);
+        
+        assertTrue(stVal2.activeAtAuction == 2);
+        assertTrue(stVal2.inactiveAtAuction == FLA.MAX_AUCTION_VALUE());
+        assertTrue(stVal2.kind == statusType.VALIDATOR);
+
+    }
+
+    function testStartProcessSingleOutBidAuction() public {
+        vm.startPrank(OWNER);
+
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.enableValidatorAddress(VALIDATOR1);
 
         FLA.startAuction();
 
@@ -165,17 +207,20 @@ contract PFLAuctionTest is Test, PFLHelper {
         Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
         
         Bid memory auctionWrongDoubleSelfBidWithSearcherTooLow = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment() + 1);
-        Bid memory auctionWrongDoubleSelfBidWithSearcherEnough = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment() + FLA.bid_increment());
+        Bid memory auctionWrongDoubleSelfBidWithSearcherEnough = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment() * 2);
 
         Bid memory auctionWrongBrokeBidderBidTooLow = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_BIDDER, 8*10**18);
-        Bid memory auctionWrongBrokeBidderBidEnough = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_BIDDER, FLA.bid_increment() + FLA.bid_increment());
+        Bid memory auctionWrongBrokeBidderBidEnough = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_BIDDER, FLA.bid_increment() * 2);
 
-        Bid memory auctionWrongBrokeSearcherBid = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_SEARCHER, 8*10**18);
+        // Bid memory auctionWrongBrokeSearcherBid = Bid(VALIDATOR1, OPPORTUNITY1, BROKE_BIDDER, BROKE_SEARCHER, 8*10**18);
 
-
+        Bid memory auctionRightOutbidsTopBidderFirstPair = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER2, SEARCHER_ADDRESS2, FLA.bid_increment() * 2);
+       
+        // Bid should be coming from EOA that's paying aka BIDDER1 from line 186.
         vm.expectRevert(bytes("FL:E-103"));
         FLA.submitBid(auctionWrongSearchableBid);
         
+        // Attempts to bid from OPPORTUNITY2 which has not been enabled yet
         vm.expectRevert(bytes("FL:E-104"));
         FLA.submitBid(auctionWrongValidatorBid);
         
@@ -204,11 +249,20 @@ contract PFLAuctionTest is Test, PFLHelper {
         // Check event
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
+        // Check checkpoint and cuts
+        ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
+
+        (uint256 vCut,uint256 flCut) = _calculateCuts(auctionRightMinimumBidWithSearcher.bidAmount, FLA.fast_lane_fee());
+        assertTrue(vCheck.pendingBalanceAtlastBid == vCut);
+        assertTrue(vCheck.outstandingBalance == 0);
+        assertTrue(vCheck.lastWithdrawnAuction == 0);
+        assertTrue(vCheck.lastBidReceivedAuction == 1);
+
+        assertTrue(FLA.outstandingFLBalance() == flCut);
+
         // Check balances
         assertEq(wMatic.balanceOf(auctionRightMinimumBidWithSearcher.searcherPayableAddress), balanceBefore - auctionRightMinimumBidWithSearcher.bidAmount);
         assertEq(wMatic.balanceOf(address(FLA)), auctionRightMinimumBidWithSearcher.bidAmount);
-
-        // Todo: Check mappings
 
         vm.expectRevert(bytes("FL:E-203"));
         FLA.submitBid(auctionWrongDoubleSelfBidWithSearcherTooLow);
@@ -232,30 +286,266 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.stopPrank();
 
         // Beat previous bid from another searcher on same pair
+        
+        vm.startPrank(auctionRightOutbidsTopBidderFirstPair.searcherPayableAddress);
 
-        // Check refund
+        // Approve as the Payable
+        wMatic.approve(address(FLA), 2**256 - 1);
 
-        // Start another pair from another searcher
 
-        // Beat the other searcher
+        uint balanceBeforeOfFirstBidder = wMatic.balanceOf(auctionRightMinimumBidWithSearcher.searcherPayableAddress);
+        uint balanceBeforeOfUpcomingBidder = wMatic.balanceOf(auctionRightOutbidsTopBidderFirstPair.searcherPayableAddress);
+        uint outstandingFLBalanceBeforeOutbidding = FLA.outstandingFLBalance();
 
-        // Process results
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit BidAdded(BIDDER2, VALIDATOR1, OPPORTUNITY1, FLA.bid_increment() * 2, 1);
+        FLA.submitBid(auctionRightOutbidsTopBidderFirstPair);
 
-        // Pay validators
+        // Check refund since we have an existing bid
+        uint balanceAfterOfFirstBidder = wMatic.balanceOf(auctionRightMinimumBidWithSearcher.searcherPayableAddress);
+        // Bidder1 is whole again
+        assertTrue(balanceAfterOfFirstBidder == balanceBeforeOfFirstBidder + auctionRightMinimumBidWithSearcher.bidAmount);
 
-        // Pay FLA.
+        // Bidder2 balance was taken
+        uint balanceAfterOfUpcomingBidder = wMatic.balanceOf(auctionRightOutbidsTopBidderFirstPair.searcherPayableAddress);
+        assertTrue(balanceAfterOfUpcomingBidder == balanceBeforeOfUpcomingBidder - auctionRightOutbidsTopBidderFirstPair.bidAmount);
 
+        // And into the contract
+        assertEq(wMatic.balanceOf(address(FLA)), auctionRightOutbidsTopBidderFirstPair.bidAmount);
+
+        // Get updated checkpoint
+        vCheck = FLA.getCheckpoint(VALIDATOR1);
+        (uint256 vCut2,uint256 flCut2) = _calculateCuts(auctionRightOutbidsTopBidderFirstPair.bidAmount, FLA.fast_lane_fee());
+        assertTrue(vCheck.pendingBalanceAtlastBid == vCut2);
+        assertTrue(vCheck.outstandingBalance == 0);
+        assertTrue(vCheck.lastWithdrawnAuction == 0);
+        assertTrue(vCheck.lastBidReceivedAuction == 1);
+
+        assertTrue(FLA.outstandingFLBalance() == outstandingFLBalanceBeforeOutbidding - flCut + flCut2);
+
+
+        vm.stopPrank();
         vm.startPrank(OWNER);
 
-        FLA.stopBidding();
+        uint cut = FLA.outstandingFLBalance();
         FLA.endAuction();
-        // Can't end while unprocessed
-        vm.expectRevert(bytes("FL:E-306"));
-
-        assertTrue(FLA.auction_number() == 1);
+        assertTrue(wMatic.balanceOf(OWNER) == cut);
     }
 
-    // Can't bid on removed opp after it was enabled then removed
-    // Can't bid on validator after it was enabled then removed
-    // Can't bid on validator after it was enabled then removed then enabled again
+    function _approveAndSubmitBid(address who, Bid memory bid) internal {
+        vm.startPrank(who);
+        wMatic.approve(address(FLA), 2**256 - 1);
+        FLA.submitBid(bid);
+        vm.stopPrank();
+    }
+
+    function testValidatorWithdrawals() public {
+        vm.startPrank(OWNER);
+
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.enableValidatorAddress(VALIDATOR1);
+
+        FLA.startAuction();
+
+        FLA.enableOpportunityAddress(OPPORTUNITY3);
+        FLA.enableValidatorAddress(VALIDATOR3);
+
+        FLA.enableOpportunityAddress(OPPORTUNITY4);
+        FLA.enableValidatorAddress(VALIDATOR4);
+
+        FLA.endAuction();
+        FLA.startAuction();
+
+        assertTrue(FLA.auction_number() == 2);
+
+        vm.stopPrank();
+       
+        
+        Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
+        Bid memory auctionRightOutbidsTopBidderFirstPair = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER2, SEARCHER_ADDRESS2, FLA.bid_increment() * 2);
+
+        Bid memory auction2ndPairMinimumBidWithSearcher = Bid(VALIDATOR3, OPPORTUNITY3, BIDDER3, SEARCHER_ADDRESS3, FLA.bid_increment());
+        Bid memory auction2ndPairOutbidsTopBidder2ndPair = Bid(VALIDATOR3, OPPORTUNITY3, BIDDER4, SEARCHER_ADDRESS4, FLA.bid_increment() * 2);
+        
+        Bid memory auction3rdPairValidator4MinimumBidWithSearcher = Bid(VALIDATOR4, OPPORTUNITY4, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
+
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,auctionRightMinimumBidWithSearcher);
+        _approveAndSubmitBid(SEARCHER_ADDRESS2,auctionRightOutbidsTopBidderFirstPair);
+
+
+        // That outbit will be claimed later after 
+        _approveAndSubmitBid(SEARCHER_ADDRESS3,auction2ndPairMinimumBidWithSearcher);
+        _approveAndSubmitBid(SEARCHER_ADDRESS4,auction2ndPairOutbidsTopBidder2ndPair);
+
+        // That bid will be claimed partially during an ongoing auction 
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,auction3rdPairValidator4MinimumBidWithSearcher);
+
+
+        vm.prank(BIDDER3);
+        vm.expectRevert(bytes("FL:E-104"));
+        FLA.redeemOutstandingBalance(BIDDER3);
+
+        // Try to get the cash before the end
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(bytes("FL:E-207"));
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+
+        vm.prank(OWNER);
+        FLA.endAuction();
+
+        // Now we can claim
+        vm.startPrank(VALIDATOR1);
+        ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR1, 3, vCheck.pendingBalanceAtlastBid, VALIDATOR1);
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+        assertTrue(wMatic.balanceOf(VALIDATOR1) == vCheck.pendingBalanceAtlastBid);
+
+        // Only once
+        vm.expectRevert(bytes("FL:E-207"));
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+
+        vm.stopPrank();
+        vm.prank(OWNER);
+
+        // We go again and bid on a validator that didn't redeem anything the previous auction
+        FLA.startAuction();
+
+        
+        // This moves pendingBalanceAtlastBid to outstandingBalance, before setting a new pendingBalanceAtlastBid
+        _approveAndSubmitBid(SEARCHER_ADDRESS3,auction2ndPairMinimumBidWithSearcher);
+        _approveAndSubmitBid(SEARCHER_ADDRESS4,auction2ndPairOutbidsTopBidder2ndPair);
+
+        // Bidding again on an unclaimed yet pair, and trying to claim for this validator now
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,auction3rdPairValidator4MinimumBidWithSearcher);
+
+        // Claim while the auction still goes on for auction3rdPairValidator4MinimumBidWithSearcher
+        vm.startPrank(VALIDATOR4);
+        ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR4);
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR4, 3, vCheckOngoing.outstandingBalance, VALIDATOR4);
+        FLA.redeemOutstandingBalance(VALIDATOR4);
+        assertTrue(wMatic.balanceOf(VALIDATOR4) == vCheckOngoing.outstandingBalance);
+
+        vm.stopPrank();
+        vm.prank(OWNER);
+        FLA.endAuction();
+
+        // Now we can claim
+        vm.startPrank(VALIDATOR3);
+        ValidatorBalanceCheckpoint memory vCheckLate = FLA.getCheckpoint(VALIDATOR3);
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR3, 4, vCheckLate.pendingBalanceAtlastBid + vCheckLate.outstandingBalance, VALIDATOR3);
+        FLA.redeemOutstandingBalance(VALIDATOR3);
+        assertTrue(wMatic.balanceOf(VALIDATOR3) == vCheckLate.pendingBalanceAtlastBid + vCheckLate.outstandingBalance);
+
+        // Only once
+        vm.expectRevert(bytes("FL:E-207"));
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+
+        // Finish draining validator4 so everyone is paid
+        FLA.redeemOutstandingBalance(VALIDATOR4);
+        assertTrue(wMatic.balanceOf(address(FLA)) == 0); // Everyone got paid, no more wMatic hanging in the contract
+    }
+
+    function testEnabledDisabledPairs() public {
+        vm.startPrank(OWNER);
+
+        // Enabling disabling opp or validator during auction not live
+        // Should be no problem
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        vm.expectEmit(true, true, false, false, address(FLA));
+        emit OpportunityAddressDisabled(OPPORTUNITY1, 1);
+        FLA.disableOpportunityAddress(OPPORTUNITY1);
+
+
+
+        // Disabling unseen opportunity should revert
+        vm.expectRevert(bytes("FL:E-105"));
+        FLA.disableOpportunityAddress(OPPORTUNITY4);
+
+        // Re-enable 1 while not live
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+
+        FLA.enableValidatorAddress(VALIDATOR1);
+
+        vm.expectRevert(bytes("FL:E-104"));
+        FLA.disableValidatorAddress(VALIDATOR2);
+
+
+        // Auction is now live, disables should be delayed
+        FLA.startAuction();
+
+        vm.expectEmit(true, true, false, false, address(FLA));
+        emit OpportunityAddressDisabled(OPPORTUNITY1, 2);
+        FLA.disableOpportunityAddress(OPPORTUNITY1);
+
+        vm.expectEmit(true, true, false, false, address(FLA));
+        emit ValidatorAddressDisabled(VALIDATOR1, 2);
+        FLA.disableValidatorAddress(VALIDATOR1);
+
+        // Should still be able to bid and outbid
+        Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
+        Bid memory auctionRightOutbidsTopBidderFirstPair = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER2, SEARCHER_ADDRESS2, FLA.bid_increment() * 2);
+
+        vm.stopPrank();
+
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,auctionRightMinimumBidWithSearcher);
+        _approveAndSubmitBid(SEARCHER_ADDRESS2,auctionRightOutbidsTopBidderFirstPair);
+
+
+        vm.startPrank(OWNER);
+        FLA.endAuction();
+        FLA.startAuction();
+
+        // Not anymore
+        vm.stopPrank();
+        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.expectRevert(bytes("FL:E-209"));
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+
+
+        assertTrue(FLA.auction_number() == 2);
+
+        // Doesn't impact validator collecting
+        ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
+
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+        assertTrue(wMatic.balanceOf(VALIDATOR1) == vCheck.pendingBalanceAtlastBid);
+        
+
+        vm.stopPrank();
+        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.expectRevert(bytes("FL:E-209"));
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+        // Re-enable while live
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.enableValidatorAddress(VALIDATOR1);
+
+        // Should still be locked until next auction
+        vm.stopPrank();
+        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.expectRevert(bytes("FL:E-211"));
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        FLA.endAuction();
+        FLA.startAuction();
+
+        // Now we can submit again
+        vm.stopPrank();
+        vm.startPrank(SEARCHER_ADDRESS1);
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+    }
+    function testGelatoAutoship() public {
+        //@todo: Code me.
+    }
 }

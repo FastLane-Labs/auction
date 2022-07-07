@@ -1,5 +1,5 @@
-//SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.13;
+//SPDX-License-Identifier: Unlicensed
+pragma solidity ^0.8.15;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -21,12 +21,12 @@ struct Bid {
 }
 
 enum statusType {
-    VALIDATOR,
-    OPPORTUNITY
+    INVALID, // 0
+    VALIDATOR, // 1 
+    OPPORTUNITY // 2
 }
 
-// @audit Consider flags
-// @audit Consider simple mapping if no more fields
+
 struct Status {
     uint128 activeAtAuction;
     uint128 inactiveAtAuction;
@@ -123,13 +123,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     uint256 public bid_increment = 10 * (10**18); //minimum bid increment in WMATIC
     uint256 public fast_lane_fee = 50000; //out of one million
 
-    uint128 public auction_number = 1;
-    uint128 public active_privileges_auction_number = 0;
-
 
     // Minimum for Validator Preferences
     uint256 public minFLShipBalance = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
 
+    uint128 public auction_number = 1;
     uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
     uint16 public autopay_batch_size = 10;
 
@@ -218,9 +216,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         public
         onlyOwner
     {
-        // Enable for next auction
-        statusMap[opportunityAddress] = Status(auction_number + 1, MAX_AUCTION_VALUE, statusType.OPPORTUNITY);
-        emit OpportunityAddressEnabled(opportunityAddress, auction_number + 1);
+        // Enable for after auction ends if live
+        uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
+        statusMap[opportunityAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.OPPORTUNITY);
+        emit OpportunityAddressEnabled(opportunityAddress, target_auction_number);
     }
 
 
@@ -230,8 +229,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     {
         Status storage existingStatus = statusMap[opportunityAddress];
         require(existingStatus.kind == statusType.OPPORTUNITY, "FL:E-105");
-        existingStatus.inactiveAtAuction = auction_number + 1;
-        emit OpportunityAddressDisabled(opportunityAddress, auction_number + 1);
+        uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
+
+        existingStatus.inactiveAtAuction = target_auction_number;
+        emit OpportunityAddressDisabled(opportunityAddress, target_auction_number);
     }
 
     // Do not use on already enabled validator or it will be stopped for current auction round
@@ -239,14 +240,15 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         public
         onlyOwner
     {
-        statusMap[validatorAddress] = Status(auction_number + 1, MAX_AUCTION_VALUE, statusType.VALIDATOR);
+        uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
+        statusMap[validatorAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.VALIDATOR);
         
         // Create the checkpoint for the Validator
         ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[validatorAddress];
         if (valCheckpoint.lastBidReceivedAuction == 0) {
             validatorsCheckpoints[validatorAddress] = ValidatorBalanceCheckpoint(0, 0, 0, 0);
         } 
-        emit ValidatorAddressEnabled(validatorAddress, auction_number + 1);
+        emit ValidatorAddressEnabled(validatorAddress, target_auction_number);
     }
 
     //remove an address from the participating validator address array
@@ -256,8 +258,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     {
         Status storage existingStatus = statusMap[validatorAddress];
         require(existingStatus.kind == statusType.VALIDATOR, "FL:E-104");
-        existingStatus.inactiveAtAuction = auction_number + 1;
-        emit ValidatorAddressDisabled(validatorAddress, auction_number + 1);
+        uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
+
+        existingStatus.inactiveAtAuction = target_auction_number;
+        emit ValidatorAddressDisabled(validatorAddress, target_auction_number);
     }
 
     // Start auction / Enable bidding
@@ -281,7 +285,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
         // Increment auction_number so the checkpoints are available.
         auction_number++;
-        active_privileges_auction_number++;
 
         uint256 ownerBalance = outstandingFLBalance;
         outstandingFLBalance = 0;
@@ -332,27 +335,25 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         uint256 currentTopBidAmount,
         address currentTopBidSearcherPayableAddress
     ) internal {
-        //verify the bid exceeds previous bid + minimum increment
-        // @todo Discuss bid_increment() as a function to improve increment logic
+        // Verify the bid exceeds previous bid + minimum increment
         require(
             bid.bidAmount >= currentTopBidAmount + bid_increment,
             "FL:E-203"
         );
 
-        // @todo Discuss
-        //verify the new bidder isnt the previous bidder
+        // Verify the new bidder isnt the previous bidder as self-spam protection
         require(
             bid.searcherPayableAddress != currentTopBidSearcherPayableAddress,
             "FL:E-204"
         );
 
-        //verify the bidder has the balance.
+        // Verify the bidder has the balance.
         require(
             bid_token.balanceOf(bid.searcherPayableAddress) >= bid.bidAmount,
             "FL:E-206"
         );
 
-        //transfer the bid amount (requires approval)
+        // Transfer the bid amount (requires approval)
         bid_token.safeTransferFrom(
             bid.searcherPayableAddress,
             address(this),
@@ -361,9 +362,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function _refundPreviousBidder(Bid memory bid) internal {
-        // @audit ERC20 transfers of wMatic are safe
-        // be very careful about changing bid token to any ERC777
-        // refund the previous top bid
+        // Be very careful about changing bid token to any ERC777
+        // Refund the previous top bid
         bid_token.safeTransferFrom(
             address(this),
             bid.searcherPayableAddress,
@@ -381,7 +381,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     |__________________________________*/
 
     // Bidding function for searchers to submit their bids
-    // Each bid pulls funds on submission and that searchers are refunded when they are outbid
+    // Each bid pulls funds on submission and searchers are refunded when they are outbid
     function submitBid(Bid calldata bid)
         external
         atLiveStage
@@ -403,8 +403,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         require(opportunityStatus.inactiveAtAuction > auction_number, "FL:E-210");
 
         // Verify still flagged active
-        require(validatorStatus.activeAtAuction >= auction_number, "FL:E-211");
-        require(opportunityStatus.activeAtAuction >= auction_number, "FL:E-212");
+        require(validatorStatus.activeAtAuction <= auction_number, "FL:E-211");
+        require(opportunityStatus.activeAtAuction <= auction_number, "FL:E-212");
 
         // Figure out if we have an existing bid
         
@@ -427,12 +427,12 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
         if (current_top_bid.bidAmount > 0) {
             // Existing bid for this auction number && pair combo
-            // Handle cuts replacement
+            // Handle checkpoint cuts replacement
             (uint256 vCutPrevious, uint256 flCutPrevious) = _calculateCuts(current_top_bid.bidAmount);
             (uint256 vCut, uint256 flCut) = _calculateCuts(bid.bidAmount);
 
-            outstandingFLBalance = outstandingFLBalance - flCutPrevious + flCut;
-            valCheckpoint.pendingBalanceAtlastBid =  valCheckpoint.pendingBalanceAtlastBid - vCutPrevious + vCut;
+            outstandingFLBalance = outstandingFLBalance + flCut - flCutPrevious;
+            valCheckpoint.pendingBalanceAtlastBid =  valCheckpoint.pendingBalanceAtlastBid + vCut - vCutPrevious;
 
 
             // Update the existing Bid mapping
@@ -445,10 +445,13 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
            
         } else {
-            // First bid on pair
-            // Update checkpoint
+            // First bid on pair for this auction number
+            // Update checkpoint if needed as another pair could have bid already for this auction number
             
-            valCheckpoint.lastBidReceivedAuction = auction_number;
+            if (valCheckpoint.lastBidReceivedAuction != auction_number) {
+                valCheckpoint.lastBidReceivedAuction = auction_number;
+            }
+
             (uint256 vCut, uint256 flCut) = _calculateCuts(bid.bidAmount);
 
             // Handle cuts
@@ -581,6 +584,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return statusMap[who];
     }
 
+    // Gets the auction number for which the fast lane privileges are active
+    function getActivePrivilegesAuctionNumber() public view returns (uint128) {
+        return auction_number - 1;
+    }
+
     // Gets the checkpoint of an address
     function getCheckpoint(address who) public view returns (ValidatorBalanceCheckpoint memory) {
         return validatorsCheckpoints[who];
@@ -593,8 +601,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         atLiveStage
         returns (uint256, uint256)
     {
-            // As validators and opportunities can be gone from the EnumerableSet
-            // mid-auction
             Bid memory topBid = auctionsMap[auction_number][
                 validatorAddress
             ][opportunityAddress];
@@ -639,7 +645,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             uint256
         )
     {
-        return findFinalizedAuctionWinnerAtAuction(active_privileges_auction_number, validatorAddress, opportunityAddress);
+        return findFinalizedAuctionWinnerAtAuction(getActivePrivilegesAuctionNumber(), validatorAddress, opportunityAddress);
     }
 
   /***********************************|
