@@ -19,7 +19,7 @@
     "coverage": "yarn clean-test && hardhat --show-stack-traces coverage --temp coverage_build && yarn clean-test",
     "hardhat_gas": "REPORT_GAS=true hardhat test",
     "gas": "forge test -vv --gas-report",
-    "ftest": "source .env && forge test -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report --ffi",
+    "ftest": "source .env && forge test -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report",
     "ftrpc": "forge test -vv --ffi",
     "start": "hardhat node --port 8545",
     "anvil": "anvil",
@@ -27,7 +27,8 @@
     "deploy": "yarn clean-test && hardhat deploy",
     "deploy-only": "hardhat deploy --tags",
     "gen-docs": "solidity-docgen -i contracts -o docs",
-    "slither": "slither contracts/FastLaneAuction.sol",
+    "slither": "slither . --compile-force-framework foundry --filter-paths 'test|lib'",
+    "snapshot": "source .env && forge snapshot -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report --ffi",
     "sizes": "forge build --sizes"
   },
   "devDependencies": {

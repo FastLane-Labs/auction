@@ -8,7 +8,7 @@ remappings = [
     'eth-gas-reporter/=node_modules/eth-gas-reporter/',
     'hardhat/=node_modules/hardhat/',
 ]
-gas_reports = ["FastLaneAuction"]
+gas_reports = ["*"]
 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

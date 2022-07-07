@@ -545,7 +545,14 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
     }
+
+    function testValidatorPreferences() public {
+        //@todo: Code me.
+    }
     function testGelatoAutoship() public {
         //@todo: Code me.
+    }
+    function testUpgrade() public {
+        //@todo: Maybe new file?
     }
 }
