@@ -81,13 +81,27 @@ abstract contract PFLHelper is Test, FastLaneEvents {
 contract PFLAuctionTest is Test, PFLHelper {
     using Address for address payable;
     FastLaneAuction public FLA;
-    WMATIC public wMatic = WMATIC(0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889);
+    address constant MUMBAI_MATIC = 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889;
+    WMATIC public wMatic;
+
 
     function setUp() public {
+  
+
+        bytes memory bytecode = abi.encodePacked(vm.getCode("WMatic.sol"));
+        address maticAddress;
+        assembly {
+            maticAddress := create(0, add(bytecode, 0x20), mload(bytecode))
+        }
+        vm.etch(MUMBAI_MATIC, maticAddress.code);
+
         vm.prank(OWNER);
-        FLA = new FastLaneAuction(address(wMatic));
+        
+        FLA = new FastLaneAuction(MUMBAI_MATIC);
+
         console2.log("FLA deployed at:", address(FLA));
-        console2.log("WMATIC deployed at:", address(wMatic));
+        console2.log("WMATIC deployed at:", MUMBAI_MATIC);
+        wMatic = WMATIC(MUMBAI_MATIC);
 
         for (uint256 i = 0; i < BIDDERS.length; i++) {
             address currentBidder = BIDDERS[i];
@@ -546,8 +560,42 @@ contract PFLAuctionTest is Test, PFLHelper {
 
     }
 
-    function testValidatorPreferences() public {
+    function testValidatorsActive() public {
         //@todo: Code me.
+        
+    }
+
+    function testValidatorPreferences() public {
+        vm.startPrank(OWNER);
+        
+        address validatorPayable = 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf;
+        uint128 amount = 3000*10**18;
+        vm.expectEmit(true, true, false, false, address(FLA));
+        emit ValidatorAddressEnabled(VALIDATOR1, 1);
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR1, amount, validatorPayable);
+
+        vm.expectEmit(true, true, true, false, address(FLA));
+        emit ValidatorPreferencesSet(VALIDATOR1, amount, validatorPayable);
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR1, amount, validatorPayable);
+
+        vm.stopPrank();
+
+        vm.prank(BIDDER1);
+        vm.expectRevert(bytes("FL:E-104"));
+        FLA.setValidatorPreferences(0, address(0));
+
+
+        vm.startPrank(VALIDATOR1);
+        address validatorPayableUpdated = 0x8e5f4552091a69125d5DfCb7B8C2659029395Bdf;
+        uint128 updatedAmountTooLow = 4000;
+        vm.expectRevert(bytes("FL:E-203"));
+        FLA.setValidatorPreferences(updatedAmountTooLow, validatorPayableUpdated);
+
+        uint128 updatedAmount = 5000*10**18;
+        vm.expectEmit(true, true, true, false, address(FLA));
+        emit ValidatorPreferencesSet(VALIDATOR1, updatedAmount, validatorPayableUpdated);
+        FLA.setValidatorPreferences(updatedAmount, validatorPayableUpdated);
+
     }
     function testGelatoAutoship() public {
         //@todo: Code me.

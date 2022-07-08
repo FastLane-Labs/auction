@@ -125,7 +125,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
 
     // Minimum for Validator Preferences
-    uint256 public minFLShipBalance = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
+    uint128 public minFLShipBalance = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
 
     uint128 public auction_number = 1;
     uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
@@ -154,16 +154,20 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     uint256 public outstandingFLBalance = 0;
 
 
+    function _updateValidatorPreferences(address _target, uint128 _minAutoshipAmount, address _validatorPayableAddress) internal {
+        require(_minAutoshipAmount >= minFLShipBalance, "FL:E-203");
+        require((_validatorPayableAddress != address(0)) && (_validatorPayableAddress != address(this)), "FL:E-202");
+        
+        validatorsPreferences[_target] = ValidatorPreferences(_minAutoshipAmount, _validatorPayableAddress);
+        emit ValidatorPreferencesSet(_target,_minAutoshipAmount, _validatorPayableAddress);
+    }
+
     /***********************************|
     |         Validator-only            |
     |__________________________________*/
 
-    function setValidatorPreferences(uint256 _minAutoshipAmount, address _autoshipAddress) external {
-        require(_minAutoshipAmount > minFLShipBalance, "FL:E-203");
-        require(_autoshipAddress != address(0), "FL:E-202");
-        require(statusMap[msg.sender].kind == statusType.VALIDATOR, "FL:E-104");
-        validatorsPreferences[msg.sender] = ValidatorPreferences(_minAutoshipAmount, _autoshipAddress);
-        emit ValidatorPreferencesSet(msg.sender,_minAutoshipAmount, _autoshipAddress);
+    function setValidatorPreferences(uint128 _minAutoshipAmount, address _validatorPayableAddress) external onlyValidator {
+        _updateValidatorPreferences(msg.sender, _minAutoshipAmount, _validatorPayableAddress);
     }
 
     /***********************************|
@@ -182,7 +186,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // Set minimum balance
-    function setMinimumFLShipBalance(uint256 _minAmount) external onlyOwner {
+    function setMinimumFLShipBalance(uint128 _minAmount) external onlyOwner {
         minFLShipBalance = _minAmount;
     }
 
@@ -222,7 +226,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         emit OpportunityAddressEnabled(opportunityAddress, target_auction_number);
     }
 
-
     function disableOpportunityAddress(address opportunityAddress)
         external
         onlyOwner
@@ -235,33 +238,45 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         emit OpportunityAddressDisabled(opportunityAddress, target_auction_number);
     }
 
+    function _enableValidatorCheckpoint(address _validatorAddress) internal {
+         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
+        statusMap[_validatorAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.VALIDATOR);
+        
+        // Create the checkpoint for the Validator
+        ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[_validatorAddress];
+        if (valCheckpoint.lastBidReceivedAuction == 0) {
+            validatorsCheckpoints[_validatorAddress] = ValidatorBalanceCheckpoint(0, 0, 0, 0);
+        } 
+        emit ValidatorAddressEnabled(_validatorAddress, target_auction_number);
+    }
+
     // Do not use on already enabled validator or it will be stopped for current auction round
-    function enableValidatorAddress(address validatorAddress)
+    function enableValidatorAddress(address _validatorAddress)
         external
         onlyOwner
     {
-        uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
-        statusMap[validatorAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.VALIDATOR);
-        
-        // Create the checkpoint for the Validator
-        ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[validatorAddress];
-        if (valCheckpoint.lastBidReceivedAuction == 0) {
-            validatorsCheckpoints[validatorAddress] = ValidatorBalanceCheckpoint(0, 0, 0, 0);
-        } 
-        emit ValidatorAddressEnabled(validatorAddress, target_auction_number);
+       _enableValidatorCheckpoint(_validatorAddress);
+    }
+
+    function enableValidatorAddressWithPreferences(address _validatorAddress, uint128 _minAutoshipAmount, address _validatorPayableAddress) 
+        external
+        onlyOwner
+    {
+            _enableValidatorCheckpoint(_validatorAddress);
+            _updateValidatorPreferences(_validatorAddress, _minAutoshipAmount, _validatorPayableAddress);
     }
 
     //remove an address from the participating validator address array
-    function disableValidatorAddress(address validatorAddress)
+    function disableValidatorAddress(address _validatorAddress)
         external
         onlyOwner
     {
-        Status storage existingStatus = statusMap[validatorAddress];
+        Status storage existingStatus = statusMap[_validatorAddress];
         require(existingStatus.kind == statusType.VALIDATOR, "FL:E-104");
         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
 
         existingStatus.inactiveAtAuction = target_auction_number;
-        emit ValidatorAddressDisabled(validatorAddress, target_auction_number);
+        emit ValidatorAddressDisabled(_validatorAddress, target_auction_number);
     }
 
     // Start auction / Enable bidding
@@ -669,6 +684,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     modifier whenNotPaused() {
         require(!_paused, "FL:E-101");
+        _;
+    }
+
+    modifier onlyValidator() {
+        require(statusMap[msg.sender].kind == statusType.VALIDATOR, "FL:E-104");
         _;
     }
 }
