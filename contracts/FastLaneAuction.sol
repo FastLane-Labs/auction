@@ -47,7 +47,7 @@ struct ValidatorBalanceCheckpoint {
 
 struct ValidatorPreferences {
     uint256 minAutoshipAmount;
-    address autoshipAddress;
+    address validatorPayableAddress;
 }
 
 
@@ -61,6 +61,7 @@ abstract contract FastLaneEvents {
     event FastLaneFeeSet(uint256 amount);
     event BidTokenSet(address indexed token);
     event PausedStateSet(bool state);
+    event MinimumAutoshipBalanceSet(uint128 _minAmount);
     event OpportunityAddressEnabled(
         address indexed opportunity,
         uint128 indexed auction_number
@@ -81,6 +82,7 @@ abstract contract FastLaneEvents {
         address indexed validator,
         uint128 indexed auction_number,
         uint256 amount,
+        address destination,
         address indexed caller
 
     );
@@ -103,7 +105,7 @@ abstract contract FastLaneEvents {
         uint256 indexed auction_number
     );
 
-    event ValidatorPreferencesSet(address indexed validator, uint256 minAutoshipAmount, address autoshipAddress);
+    event ValidatorPreferencesSet(address indexed validator, uint256 minAutoshipAmount, address validatorPayableAddress);
 }
 
 contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
@@ -121,7 +123,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     //Variables mutable by owner via function calls
     // @audit Natspec everything
     uint256 public bid_increment = 10 * (10**18); //minimum bid increment in WMATIC
-    uint256 public fast_lane_fee = 50000; //out of one million
 
 
     // Minimum for Validator Preferences
@@ -129,6 +130,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     uint128 public auction_number = 1;
     uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
+    
+    uint24 public fast_lane_fee = 50000; //out of one million
     uint16 public autopay_batch_size = 10;
 
     bool public auction_live = false;
@@ -188,15 +191,17 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // Set minimum balance
     function setMinimumFLShipBalance(uint128 _minAmount) external onlyOwner {
         minFLShipBalance = _minAmount;
+        emit MinimumAutoshipBalanceSet(_minAmount);
     }
 
     // Set the protocol fee (out of 1000000 (ie v2 fee decimals)).
     // Initially set to 50000 (5%)
-    function setFastlaneFee(uint256 _fastLaneFee)
+    function setFastlaneFee(uint24 _fastLaneFee)
         external
         onlyOwner
         notLiveStage
     {
+        require(_fastLaneFee < 1000000,"FL:E-213");
         fast_lane_fee = _fastLaneFee;
         emit FastLaneFeeSet(_fastLaneFee);
     }
@@ -387,7 +392,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function _calculateCuts(uint256 amount) internal view returns (uint256 vCut, uint256 flCut) {
-        vCut = ((amount * 1000000) - fast_lane_fee) / 1000000;
+        vCut = (amount * (1000000 - fast_lane_fee)) / 1000000;
         flCut = amount - vCut;
     }
 
@@ -525,10 +530,15 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         valCheckpoint.outstandingBalance = 0;
         valCheckpoint.lastWithdrawnAuction = auction_number;
 
+        address dst = outstandingValidatorWithBalance;
+        ValidatorPreferences memory valPrefs = validatorsPreferences[dst];
+        if (valPrefs.validatorPayableAddress != address(0)) {
+            dst = valPrefs.validatorPayableAddress;
+        }
 
         bid_token.safeTransferFrom(
             address(this),
-            outstandingValidatorWithBalance,
+            dst,
             redeemable
         );
 
@@ -536,6 +546,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             outstandingValidatorWithBalance,
             auction_number,
             redeemable,
+            dst,
             msg.sender
         );
     }

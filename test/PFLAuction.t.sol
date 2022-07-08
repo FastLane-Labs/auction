@@ -73,7 +73,7 @@ abstract contract PFLHelper is Test, FastLaneEvents {
     }
 
     function _calculateCuts(uint256 amount,uint256 fee) internal pure returns (uint256 vCut, uint256 flCut) {
-        vCut = ((amount * 1000000) - fee) / 1000000;
+        vCut = (amount * (1000000 - fee)) / 1000000;
         flCut = amount - vCut;
     }
 }
@@ -411,7 +411,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.startPrank(VALIDATOR1);
         ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
         vm.expectEmit(true, true, true, true, address(FLA));
-        emit ValidatorWithdrawnBalance(VALIDATOR1, 3, vCheck.pendingBalanceAtlastBid, VALIDATOR1);
+        emit ValidatorWithdrawnBalance(VALIDATOR1, 3, vCheck.pendingBalanceAtlastBid, VALIDATOR1, VALIDATOR1);
         FLA.redeemOutstandingBalance(VALIDATOR1);
         assertTrue(wMatic.balanceOf(VALIDATOR1) == vCheck.pendingBalanceAtlastBid);
 
@@ -437,7 +437,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.startPrank(VALIDATOR4);
         ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR4);
         vm.expectEmit(true, true, true, true, address(FLA));
-        emit ValidatorWithdrawnBalance(VALIDATOR4, 3, vCheckOngoing.outstandingBalance, VALIDATOR4);
+        emit ValidatorWithdrawnBalance(VALIDATOR4, 3, vCheckOngoing.outstandingBalance, VALIDATOR4, VALIDATOR4);
         FLA.redeemOutstandingBalance(VALIDATOR4);
         assertTrue(wMatic.balanceOf(VALIDATOR4) == vCheckOngoing.outstandingBalance);
 
@@ -449,7 +449,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.startPrank(VALIDATOR3);
         ValidatorBalanceCheckpoint memory vCheckLate = FLA.getCheckpoint(VALIDATOR3);
         vm.expectEmit(true, true, true, true, address(FLA));
-        emit ValidatorWithdrawnBalance(VALIDATOR3, 4, vCheckLate.pendingBalanceAtlastBid + vCheckLate.outstandingBalance, VALIDATOR3);
+        emit ValidatorWithdrawnBalance(VALIDATOR3, 4, vCheckLate.pendingBalanceAtlastBid + vCheckLate.outstandingBalance, VALIDATOR3, VALIDATOR3);
         FLA.redeemOutstandingBalance(VALIDATOR3);
         assertTrue(wMatic.balanceOf(VALIDATOR3) == vCheckLate.pendingBalanceAtlastBid + vCheckLate.outstandingBalance);
 
@@ -596,11 +596,65 @@ contract PFLAuctionTest is Test, PFLHelper {
         emit ValidatorPreferencesSet(VALIDATOR1, updatedAmount, validatorPayableUpdated);
         FLA.setValidatorPreferences(updatedAmount, validatorPayableUpdated);
 
+        // Now make a bid
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.startAuction();
+        vm.stopPrank();
+        Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,auctionRightMinimumBidWithSearcher);
+
+
     }
     function testGelatoAutoship() public {
         //@todo: Code me.
     }
     function testUpgrade() public {
         //@todo: Maybe new file?
+    }
+
+    function testFeeUpdate() public {
+        vm.startPrank(OWNER);
+        uint24 abusiveFee = 1300000;
+        vm.expectRevert(bytes("FL:E-213"));
+        FLA.setFastlaneFee(abusiveFee);
+        uint24 fee = 50000*2; // 10%
+        FLA.setFastlaneFee(fee);
+
+        FLA.enableValidatorAddress(VALIDATOR1);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.startAuction();
+        vm.stopPrank();
+        Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,auctionRightMinimumBidWithSearcher);
+
+        vm.startPrank(OWNER);
+        FLA.endAuction();
+
+        // Check checkpoint and cuts
+        ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
+
+
+        (uint256 vCut, uint256 pflCut) = _calculateCuts(auctionRightMinimumBidWithSearcher.bidAmount,FLA.fast_lane_fee());
+
+        assertTrue(vCheck.pendingBalanceAtlastBid == vCut);
+        assertTrue(vCheck.outstandingBalance == 0);
+        assertTrue(vCheck.lastWithdrawnAuction == 0);
+        assertTrue(vCheck.lastBidReceivedAuction == 1);
+
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+
+        vCheck = FLA.getCheckpoint(VALIDATOR1);
+        assertTrue(vCheck.pendingBalanceAtlastBid == 0);
+        assertTrue(vCheck.outstandingBalance == 0);
+        assertTrue(vCheck.lastWithdrawnAuction == 2);
+        assertTrue(vCheck.lastBidReceivedAuction == 1);
+
+        assertTrue(wMatic.balanceOf(VALIDATOR1) == vCut);
+        assertTrue(wMatic.balanceOf(VALIDATOR1) == 9000000000000000000);
+        assertTrue(wMatic.balanceOf(OWNER) == 1000000000000000000);
+        assertTrue(wMatic.balanceOf(OWNER) == pflCut);
+
     }
 }

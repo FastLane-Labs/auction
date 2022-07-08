@@ -39,6 +39,7 @@ Codes:
     E-210 - Opportunity disabled at this time
     E-211 - Validator not yet enabled
     E-212 - Opportunity not yet enabled
+    E-213 - Too high
 
   3. Availability & Time
     E-300 - [--Unused--]
