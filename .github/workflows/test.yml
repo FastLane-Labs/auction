@@ -1,4 +1,5 @@
-name: tests
+name: Tests
+
 on:
   pull_request:
     branches:
@@ -6,18 +7,23 @@ on:
   push:
     branches:
       - main
+
 jobs:
-  forge-test:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: recursive
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
-      - name: install libraries
-        run: git submodule update --init
+
+      - name: Install dependencies
+        run: forge install
+
       - name: Run tests
-        run: yarn ftest-ci
+        run: forge test
+        env:
+          # Only fuzz intensely if we're running this action on a push to main or for a PR going into main:
+          FOUNDRY_PROFILE: ${{ (github.ref == 'refs/heads/main' || github.base_ref == 'main') && 'intense' }}
