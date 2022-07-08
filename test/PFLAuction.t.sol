@@ -93,7 +93,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         assembly {
             maticAddress := create(0, add(bytecode, 0x20), mload(bytecode))
         }
-        vm.etch(MUMBAI_MATIC, maticAddress.code);
+        vm.etch(MUMBAI_MATIC, bytecode);
 
         vm.prank(OWNER);
         
@@ -697,7 +697,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         // Turn it back on and witness payments of 2
 
         // Call it again and witness payment of 1
-        
+
         // Top the minimum to 10k
         vm.startPrank(OWNER);
         minAutoship = 10000*10**18;

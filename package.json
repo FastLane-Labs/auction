@@ -20,7 +20,7 @@
     "hardhat_gas": "REPORT_GAS=true hardhat test",
     "gas": "forge test -vv --gas-report",
     "ftest": "source .env && forge test -vvv --gas-report",
-    "ftest-ci": "forge test -vvv",
+    "ftest-ci": "forge test -vvvv",
     "ftest-fork": "source .env && forge test -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report",
     "ftrpc": "forge test -vv --ffi",
     "start": "hardhat node --port 8545",
