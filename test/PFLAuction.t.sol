@@ -568,6 +568,9 @@ contract PFLAuctionTest is Test, PFLHelper {
     function testValidatorPreferences() public {
         vm.startPrank(OWNER);
         
+        uint24 fee = 50000*2; // 10%
+        FLA.setFastlaneFee(fee);
+
         address validatorPayable = 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf;
         uint128 amount = 3000*10**18;
         vm.expectEmit(true, true, false, false, address(FLA));
@@ -605,10 +608,103 @@ contract PFLAuctionTest is Test, PFLHelper {
         Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, FLA.bid_increment());
         _approveAndSubmitBid(SEARCHER_ADDRESS1,auctionRightMinimumBidWithSearcher);
 
-
+        vm.startPrank(OWNER);
+        FLA.endAuction();
+        FLA.redeemOutstandingBalance(VALIDATOR1);
+        assertTrue(wMatic.balanceOf(validatorPayableUpdated) == 9000000000000000000);
     }
     function testGelatoAutoship() public {
-        //@todo: Code me.
+
+        // Pump SEARCHER_ADDRESS1 balances since he'll be bidding on all validators
+        vm.deal(SEARCHER_ADDRESS1,1000000*10**18);
+        vm.prank(SEARCHER_ADDRESS1);
+        wMatic.deposit{value: 1000000*10**18}();
+
+        vm.startPrank(OWNER);
+        uint24 fee = 0; // 0% so calculations are easier
+        FLA.setFastlaneFee(fee);
+
+        uint128 minAutoship = 2000 * (10**18);
+        FLA.setMinimumAutoShipThreshold(minAutoship);
+
+        // Force 2 payments per checker() call max
+        FLA.setAutopayBatchSize(2);
+
+        // First validator setup with enableValidatorAddressWithPreferences
+        address validatorPayable1 = vm.addr(1);
+        uint128 amount1 = minAutoship;
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR1, amount1, validatorPayable1);
+
+        // 2nd validator setup with enableValidatorAddressWithPreferences as himself
+        uint128 amount2 = minAutoship*2;
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR2, amount2, VALIDATOR2);
+
+        // 3rd set up without autoship originally then adds it himself
+        FLA.enableValidatorAddress(VALIDATOR3);
+         uint128 amount3 = minAutoship*3;
+         address validatorPayable3 = vm.addr(3);
+         vm.stopPrank();
+         vm.prank(VALIDATOR3);
+         FLA.setValidatorPreferences(amount3, validatorPayable3);
+
+         // 4th didn't ask for anything, he'll get default autoship
+         vm.startPrank(OWNER);
+         FLA.enableValidatorAddress(VALIDATOR4);
+         
+         // Now the opp
+         FLA.enableOpportunityAddress(OPPORTUNITY1);
+
+         (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
+
+         FLA.startAuction();
+         FLA.endAuction();
+
+        (canExec, execPayload) = FLA.checker();
+
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
+
+         FLA.startAuction();
+
+         vm.stopPrank();
+         // Validator 1 will get his threshold met directly
+         Bid memory bid1 = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount1);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid1);
+
+         // Validator 2 will get his threshold met in 2 steps
+         Bid memory bid2 = Bid(VALIDATOR2, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount2/2);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid2);
+
+         // Validator 3 will get his threshold met directly
+         Bid memory bid3 = Bid(VALIDATOR3, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount3);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid3);
+
+         // Validator 2=4 will get his threshold met directly
+         Bid memory bid4 = Bid(VALIDATOR4, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, minAutoship);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid4);
+
+        // Check validatorsActiveAtAuction
+        address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+        assertEq(prevRoundAddrs.length,4);
+
+        // Verify checker still doesn't run
+
+        // Turn off checker
+
+        // Turn it back on and witness payments of 2
+
+        // Call it again and witness payment of 1
+        
+        // Top the minimum to 10k
+        vm.startPrank(OWNER);
+        minAutoship = 10000*10**18;
+        vm.expectEmit(true, false, false, false, address(FLA));
+        emit MinimumAutoshipThresholdSet(minAutoship);
+        FLA.setMinimumAutoShipThreshold(minAutoship);
+
     }
     function testUpgrade() public {
         //@todo: Maybe new file?
@@ -619,6 +715,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         uint24 abusiveFee = 1300000;
         vm.expectRevert(bytes("FL:E-213"));
         FLA.setFastlaneFee(abusiveFee);
+
         uint24 fee = 50000*2; // 10%
         FLA.setFastlaneFee(fee);
 
@@ -634,8 +731,6 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         // Check checkpoint and cuts
         ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
-
-
         (uint256 vCut, uint256 pflCut) = _calculateCuts(auctionRightMinimumBidWithSearcher.bidAmount,FLA.fast_lane_fee());
 
         assertTrue(vCheck.pendingBalanceAtlastBid == vCut);

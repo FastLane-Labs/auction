@@ -61,7 +61,8 @@ abstract contract FastLaneEvents {
     event FastLaneFeeSet(uint256 amount);
     event BidTokenSet(address indexed token);
     event PausedStateSet(bool state);
-    event MinimumAutoshipBalanceSet(uint128 _minAmount);
+    event MinimumAutoshipThresholdSet(uint128 amount);
+    event AutopayBatchSizeSet(uint16 batch_size);
     event OpportunityAddressEnabled(
         address indexed opportunity,
         uint128 indexed auction_number
@@ -126,7 +127,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
 
     // Minimum for Validator Preferences
-    uint128 public minFLShipBalance = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
+    uint128 public minAutoShipThreshold = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
 
     uint128 public auction_number = 1;
     uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
@@ -158,7 +159,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
 
     function _updateValidatorPreferences(address _target, uint128 _minAutoshipAmount, address _validatorPayableAddress) internal {
-        require(_minAutoshipAmount >= minFLShipBalance, "FL:E-203");
+        require(_minAutoshipAmount >= minAutoShipThreshold, "FL:E-203");
         require((_validatorPayableAddress != address(0)) && (_validatorPayableAddress != address(this)), "FL:E-202");
         
         validatorsPreferences[_target] = ValidatorPreferences(_minAutoshipAmount, _validatorPayableAddress);
@@ -189,9 +190,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // Set minimum balance
-    function setMinimumFLShipBalance(uint128 _minAmount) external onlyOwner {
-        minFLShipBalance = _minAmount;
-        emit MinimumAutoshipBalanceSet(_minAmount);
+    function setMinimumAutoShipThreshold(uint128 _minAmount) external onlyOwner {
+        minAutoShipThreshold = _minAmount;
+        emit MinimumAutoshipThresholdSet(_minAmount);
     }
 
     // Set the protocol fee (out of 1000000 (ie v2 fee decimals)).
@@ -317,6 +318,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     function setAutopayBatchSize(uint16 size) external onlyOwner {
         autopay_batch_size = size;
+        emit AutopayBatchSizeSet(autopay_batch_size);
     }
 
     function setOffchainCheckerDisabledState(bool state) external onlyOwner {
@@ -594,7 +596,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < len; i++) {
             address current_validator = prevRoundAddrSet.at(i);
             ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[current_validator];
-            if ((valCheckpoint.outstandingBalance >= validatorsPreferences[current_validator].minAutoshipAmount) && (valCheckpoint.outstandingBalance > minFLShipBalance)) {
+            if ((valCheckpoint.outstandingBalance >= validatorsPreferences[current_validator].minAutoshipAmount) && (valCheckpoint.outstandingBalance > minAutoShipThreshold)) {
                 autopayRecipients[assigned++] = current_validator;
             }
             if (assigned >= batch_size) {
@@ -613,6 +615,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // Gets the status of an address
     function getStatus(address who) external view returns (Status memory) {
         return statusMap[who];
+    }
+
+    // Gets the validators involved with a given auction
+    function getValidatorsActiveAtAuction(uint128 auction_index) external view returns (address[] memory) {
+        return validatorsActiveAtAuction[auction_index].values();
     }
 
     // Gets the auction number for which the fast lane privileges are active
