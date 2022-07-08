@@ -20,4 +20,4 @@ jobs:
       - name: install libraries
         run: git submodule update --init
       - name: Run tests
-        run: yarn ftest
+        run: yarn ftest-ci
