@@ -3,11 +3,7 @@ pragma solidity ^0.8.15;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-
-// Until https://github.com/crytic/slither/issues/1226#issuecomment-1149340581 resolves
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-
+import { SafeERC20, IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 
 import "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
@@ -62,6 +58,7 @@ abstract contract FastLaneEvents {
     event BidTokenSet(address indexed token);
     event PausedStateSet(bool state);
     event MinimumAutoshipThresholdSet(uint128 amount);
+    event ResolverMaxGasPriceSet(uint128 amount);
     event AutopayBatchSizeSet(uint16 batch_size);
     event OpportunityAddressEnabled(
         address indexed opportunity,
@@ -121,6 +118,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         setBidToken(initial_bid_token);
     }
 
+    // Gelato Ops Address
+    address public ops;
+
     //Variables mutable by owner via function calls
     // @audit Natspec everything
     uint256 public bid_increment = 10 * (10**18); //minimum bid increment in WMATIC
@@ -129,10 +129,17 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // Minimum for Validator Preferences
     uint128 public minAutoShipThreshold = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
 
+    // Offset by 1 so payouts are at 0
     uint128 public auction_number = 1;
+
     uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
-    
-    uint24 public fast_lane_fee = 50000; //out of one million
+
+    uint128 public max_gas_price = 200 gwei;
+
+    // Out of one million
+    uint24 public fast_lane_fee = 50000; 
+
+    // Number of validators to pay per gelato action
     uint16 public autopay_batch_size = 10;
 
     bool public auction_live = false;
@@ -142,6 +149,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // Tracks status of seen addresses and when they become eligible for bidding
     mapping(address => Status) internal statusMap;
 
+    // Tracks bids per auction_number per pair
     mapping(uint256 => mapping(address => mapping(address => Bid)))
         internal auctionsMap;
 
@@ -193,6 +201,12 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     function setMinimumAutoShipThreshold(uint128 _minAmount) external onlyOwner {
         minAutoShipThreshold = _minAmount;
         emit MinimumAutoshipThresholdSet(_minAmount);
+    }
+
+    // Set max gwei for resolver
+    function setResolverMaxGasPrice(uint128 _maxgas) external onlyOwner {
+        max_gas_price = _maxgas;
+        emit ResolverMaxGasPriceSet(_maxgas);
     }
 
     // Set the protocol fee (out of 1000000 (ie v2 fee decimals)).
@@ -333,7 +347,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     {
         if (address(this).balance >= amount) {
             payable(owner()).sendValue(amount);
-            emit WithdrawStuckNativeToken(address(this), amount);
+            emit WithdrawStuckNativeToken(owner(), amount);
         }
     }
 
@@ -566,9 +580,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        if (_offchain_checker_disabled || _paused  /*|| auction_live */) return (false, "");
-
-        // Go workers go
+        if (_offchain_checker_disabled || _paused  || tx.gasprice >= max_gas_price) return (false, "");
+            // Go workers go
             canExec = false;
             (
                 bool hasJobs,
@@ -585,8 +598,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return (false, "");
     }
 
-    function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant {
+    function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant onlyGelato {
         // Recheck and Disperse.
+        // Clear outstanding
     }
 
     function getAutopayJobs(uint256 batch_size, uint128 auction_index) public view returns (bool hasJobs, address[] memory autopayRecipients) {
@@ -707,6 +721,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     modifier onlyValidator() {
         require(statusMap[msg.sender].kind == statusType.VALIDATOR, "FL:E-104");
+        _;
+    }
+
+    modifier onlyGelato() {
+        require(msg.sender == ops, "FL:E-106");
         _;
     }
 }

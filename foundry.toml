@@ -9,6 +9,7 @@ remappings = [
     'hardhat/=node_modules/hardhat/',
 ]
 gas_reports = ["*"]
+optimizer = true
 optimizer_runs = 200
 bytecode_hash = "none"
 names = true

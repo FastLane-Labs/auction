@@ -25,6 +25,8 @@
     "ftrpc": "forge test -vv --ffi",
     "start": "hardhat node --port 8545",
     "anvil": "anvil",
+    "mythril-local": "myth analyze contracts/FastLaneAuction.sol",
+    "mythril-docker": "docker run -it --rm -v$(pwd):/home/mythril mythril/myth -v4 analyze contracts/FastLaneAuction.sol --solc-json mythril.config.json --solv 0.8.15",
     "mappings": "forge remappings > remappings.txt",
     "deploy": "yarn clean-test && hardhat deploy",
     "deploy-only": "hardhat deploy --tags",

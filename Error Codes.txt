@@ -25,6 +25,7 @@ Codes:
     E-104 - Invalid Validator address
     E-105 - Invalid opportunity address - Submit via discord
     E-106 - Only Validator
+    E-106 - Only Gelato
 
   2. Find, Inequalities & Range
     E-200 - [--Unused--]
