@@ -114,7 +114,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     IERC20 public bid_token;
 
-    constructor(address initial_bid_token) {
+    constructor (address initial_bid_token) {
         setBidToken(initial_bid_token);
     }
 
@@ -228,6 +228,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         onlyOwner
         notLiveStage
     {
+        // Prevent QBridge Finance issues
+        require(_bid_token_address != address(0),"FL:E-000");
         bid_token = IERC20(_bid_token_address);
         emit BidTokenSet(_bid_token_address);
     }
@@ -259,7 +261,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function _enableValidatorCheckpoint(address _validatorAddress) internal {
-         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
+        uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
         statusMap[_validatorAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.VALIDATOR);
         
         // Create the checkpoint for the Validator
@@ -339,7 +341,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         _offchain_checker_disabled = state;
     }
 
-    // @audit Assuming owner() is to become a multisig, maybe safer to emergency withdraw to owner, than add a receiver param
     function withdrawStuckNativeToken(uint256 amount)
         external
         onlyOwner
@@ -351,7 +352,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
     }
 
-    // @audit Deny bid token? If somehow the processing stage is stuck/unfinalized by owner the bids are lost
     function withdrawStuckERC20(address _tokenAddress)
         external
         onlyOwner
@@ -519,7 +519,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // It can be during an ongoing auction with pendingBalanceAtlastBid being the current auction
     // Or lastBidReceivedAuction being a previous auction, in which case outstanding+pending can be withdrawn
     function redeemOutstandingBalance(address outstandingValidatorWithBalance)
-        external
+        public
         nonReentrant
     {
         require(statusMap[outstandingValidatorWithBalance].kind == statusType.VALIDATOR, "FL:E-104");
@@ -599,8 +599,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant onlyGelato {
-        // Recheck and Disperse.
-        // Clear outstanding
+        uint length = autopayRecipients.length;
+        for (uint i = 0;i<length;) {
+            redeemOutstandingBalance(autopayRecipients[i]);
+            unchecked { ++i; }
+        }
     }
 
     function getAutopayJobs(uint256 batch_size, uint128 auction_index) public view returns (bool hasJobs, address[] memory autopayRecipients) {

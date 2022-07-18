@@ -694,7 +694,10 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertEq(prevRoundAddrs.length,4);
 
         // Verify checker still doesn't run
+        (canExec, execPayload) = FLA.checker();
 
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
         // Turn off checker
 
         // Turn it back on and witness payments of 2
