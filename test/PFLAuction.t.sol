@@ -63,14 +63,14 @@ abstract contract PFLHelper is Test, FastLaneEvents {
 
     constructor() {}
 
-    function logReads(address addr) public {
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(
-            address(addr)
-        );
-        for (uint256 i; i < reads.length; i++) {
-            emit log_uint(uint256(reads[i]));
-        }
-    }
+    // function logReads(address addr) public {
+    //     (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(
+    //         address(addr)
+    //     );
+    //     for (uint256 i; i < reads.length; i++) {
+    //         emit log_uint(uint256(reads[i]));
+    //     }
+    // }
 
     function _calculateCuts(uint256 amount,uint256 fee) internal pure returns (uint256 vCut, uint256 flCut) {
         vCut = (amount * (1000000 - fee)) / 1000000;
@@ -252,7 +252,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.startPrank(auctionRightMinimumBidWithSearcher.searcherPayableAddress);
 
         // Missing approval
-        vm.expectRevert(bytes("SafeERC20: low-level call failed"));
+        vm.expectRevert(bytes("TRANSFER_FROM_FAILED"));
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
         // Approve as the Payable
@@ -685,7 +685,7 @@ contract PFLAuctionTest is Test, PFLHelper {
          Bid memory bid3 = Bid(VALIDATOR3, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount3);
         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid3);
 
-         // Validator 2=4 will get his threshold met directly
+         // Validator 4 will get his threshold met directly
          Bid memory bid4 = Bid(VALIDATOR4, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, minAutoship);
         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid4);
 

@@ -3,3 +3,4 @@ eth-gas-reporter/=node_modules/eth-gas-reporter/
 forge-std/=lib/forge-std/src/
 hardhat/=node_modules/hardhat/
 openzeppelin-contracts/=lib/openzeppelin-contracts/
+solmate/=lib/solmate/src/

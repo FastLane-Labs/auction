@@ -3,7 +3,7 @@ pragma solidity ^0.8.15;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import { SafeERC20, IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 
 import "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
@@ -108,11 +108,10 @@ abstract contract FastLaneEvents {
 
 contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     using Address for address payable;
-    using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
+    using SafeTransferLib for ERC20;
 
-
-    IERC20 public bid_token;
+    ERC20 public bid_token;
 
     constructor (address initial_bid_token) {
         setBidToken(initial_bid_token);
@@ -230,7 +229,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     {
         // Prevent QBridge Finance issues
         require(_bid_token_address != address(0),"FL:E-000");
-        bid_token = IERC20(_bid_token_address);
+        bid_token = ERC20(_bid_token_address);
         emit BidTokenSet(_bid_token_address);
     }
 
@@ -357,7 +356,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         onlyOwner
         nonReentrant
     {
-        IERC20 oopsToken = IERC20(_tokenAddress);
+        ERC20 oopsToken = ERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
         if (oopsTokenBalance > 0) {
@@ -400,8 +399,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     function _refundPreviousBidder(Bid memory bid) internal {
         // Be very careful about changing bid token to any ERC777
         // Refund the previous top bid
-        bid_token.safeTransferFrom(
-            address(this),
+        bid_token.safeTransfer(
             bid.searcherPayableAddress,
             bid.bidAmount
         );
@@ -552,8 +550,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             dst = valPrefs.validatorPayableAddress;
         }
 
-        bid_token.safeTransferFrom(
-            address(this),
+        bid_token.safeTransfer(
             dst,
             redeemable
         );
