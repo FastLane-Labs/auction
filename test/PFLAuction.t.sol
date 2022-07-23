@@ -82,6 +82,7 @@ contract PFLAuctionTest is Test, PFLHelper {
     using Address for address payable;
     FastLaneAuction public FLA;
     address constant MUMBAI_MATIC = 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889;
+    address constant OPS_ADDRESS = address(0xBEEF);
     WMATIC public wMatic;
 
 
@@ -100,7 +101,7 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         vm.prank(OWNER);
         
-        FLA = new FastLaneAuction(MUMBAI_MATIC);
+        FLA = new FastLaneAuction(MUMBAI_MATIC, OPS_ADDRESS);
 
         console2.log("FLA deployed at:", address(FLA));
         console2.log("WMATIC deployed at:", MUMBAI_MATIC);
@@ -656,19 +657,24 @@ contract PFLAuctionTest is Test, PFLHelper {
          
          // Now the opp
          FLA.enableOpportunityAddress(OPPORTUNITY1);
-
+        
+        {
          (bool canExec, bytes memory execPayload) = FLA.checker();
 
          assertTrue(canExec == false);
          assertTrue(execPayload.length == 0); 
+        }
+
 
          FLA.startAuction();
-         FLA.endAuction();
+         FLA.endAuction(); // auction_index == 2
 
-        (canExec, execPayload) = FLA.checker();
+        {
+         (bool canExec, bytes memory execPayload) = FLA.checker();
 
          assertTrue(canExec == false);
          assertTrue(execPayload.length == 0); 
+        }
 
          FLA.startAuction();
 
@@ -691,16 +697,62 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         // Check validatorsActiveAtAuction
         address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+
+        // Should have 4 validators active
         assertEq(prevRoundAddrs.length,4);
 
         // Verify checker still doesn't run
-        (canExec, execPayload) = FLA.checker();
+        {
+         (bool canExec, bytes memory execPayload) = FLA.checker();
 
          assertTrue(canExec == false);
          assertTrue(execPayload.length == 0); 
+        }
         // Turn off checker
 
+        vm.startPrank(OWNER);
+        FLA.setOffchainCheckerDisabledState(true);
+        FLA.endAuction(); // auction_index == 3
+        FLA.startAuction();
+
+        // Verify checker still doesn't run
+        {
+         (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
+        }
+
+        // Needs new bid on new auction_number so balances are moved to outstanding.
+        vm.stopPrank();
+         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid1);
+        vm.startPrank(OWNER);
         // Turn it back on and witness payments of 2
+        FLA.setOffchainCheckerDisabledState(false);
+
+        ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR1);
+        assertTrue(vCheckOngoing.outstandingBalance >= amount1);
+
+        {
+        (bool hasJobs, address[] memory autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        assertEq(hasJobs, true);
+        }
+
+
+   
+
+        (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == true);
+         assertTrue(execPayload.length > 0);
+        
+        vm.stopPrank();
+        vm.prank(OPS_ADDRESS);
+        {
+        (bool success, bytes memory returnData) = address(FLA).call(execPayload);
+         assertTrue(success);
+        }
+
 
         // Call it again and witness payment of 1
         

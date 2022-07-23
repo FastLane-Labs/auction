@@ -9,6 +9,7 @@
     "reinstall": "rm -rf node_modules && rm -f yarn.lock && yarn clean && yarn",
     "clean": "rm -rf build cache coverage coverage.json test-results.xml",
     "clean-deployed": "rm -rf abis && rm -f .openzeppelin/unknown-31337.json && rm -f .openzeppelin/mumbai.json",
+    "coverage": "forge coverage --report lcov && genhtml lcov.info -o report --branch-coverage && open report/index.html",
     "clean-test": "rm -rf abis .openzeppelin/${npm_config_network:-'unknown-31337'}.json deployments/${npm_config_network:-hardhat}/*.json test-results.xml",
     "verify": "yarn hint && yarn test",
     "compile": "hardhat --show-stack-traces --max-memory 8192 compile",

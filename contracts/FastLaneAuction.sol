@@ -113,15 +113,15 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     ERC20 public bid_token;
 
-    constructor (address initial_bid_token) {
-        setBidToken(initial_bid_token);
+    constructor (address _initial_bid_token,address _ops) {
+        setBidToken(_initial_bid_token);
+        ops = _ops;
     }
 
     // Gelato Ops Address
     address public ops;
 
     //Variables mutable by owner via function calls
-    // @audit Natspec everything
     uint256 public bid_increment = 10 * (10**18); //minimum bid increment in WMATIC
 
 
@@ -142,7 +142,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     uint16 public autopay_batch_size = 10;
 
     bool public auction_live = false;
-    bool internal _paused;
+    bool internal _paused = false;
     bool internal _offchain_checker_disabled = false;
 
     // Tracks status of seen addresses and when they become eligible for bidding
@@ -499,9 +499,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
 
         // Try adding to the validatorsActiveAtAuction so the keeper can loop on it
-        if (!validatorsActiveAtAuction[auction_number].contains(bid.validatorAddress)) {
-            validatorsActiveAtAuction[auction_number].add(bid.validatorAddress);
-        }
+        // EnumerableSet already checks key pre-existence
+        validatorsActiveAtAuction[auction_number].add(bid.validatorAddress);
 
         emit BidAdded(
             bid.searcherContractAddress,
@@ -577,7 +576,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        if (_offchain_checker_disabled || _paused  || tx.gasprice >= max_gas_price) return (false, "");
+        if (_offchain_checker_disabled || _paused == true  || tx.gasprice >= max_gas_price) return (false, "");
             // Go workers go
             canExec = false;
             (
@@ -603,15 +602,24 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
     }
 
-    function getAutopayJobs(uint256 batch_size, uint128 auction_index) public view returns (bool hasJobs, address[] memory autopayRecipients) {
+    /***********************************|
+    |             Views                 |
+    |__________________________________*/
+
+    // Most likely called off chain by Gelato
+    function getAutopayJobs(uint16 batch_size, uint128 auction_index) public view returns (bool hasJobs, address[] memory autopayRecipients) {
+        autopayRecipients = new address[](batch_size); // Filled with 0x0
+        // An active validator means a bid happened so potentially balances were moved to outstanding while the bid happened
         EnumerableSet.AddressSet storage prevRoundAddrSet = validatorsActiveAtAuction[auction_index];
         uint16 assigned = 0;
         uint256 len = prevRoundAddrSet.length();
         for (uint256 i = 0; i < len; i++) {
             address current_validator = prevRoundAddrSet.at(i);
+            if (current_validator == address(0)) continue;
             ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[current_validator];
-            if ((valCheckpoint.outstandingBalance >= validatorsPreferences[current_validator].minAutoshipAmount) && (valCheckpoint.outstandingBalance > minAutoShipThreshold)) {
-                autopayRecipients[assigned++] = current_validator;
+            if ((valCheckpoint.outstandingBalance >= validatorsPreferences[current_validator].minAutoshipAmount) && (valCheckpoint.outstandingBalance >= minAutoShipThreshold)) {
+                autopayRecipients[assigned] = current_validator;
+                assigned++;
             }
             if (assigned >= batch_size) {
                 break;
@@ -619,12 +627,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
         hasJobs = autopayRecipients.length > 0;
     }
-
-
-
-    /***********************************|
-    |             Views                 |
-    |__________________________________*/
 
     // Gets the status of an address
     function getStatus(address who) external view returns (Status memory) {
@@ -715,7 +717,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     modifier whenNotPaused() {
-        require(!_paused, "FL:E-101");
+        require(_paused == false, "FL:E-101");
         _;
     }
 
