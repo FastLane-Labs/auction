@@ -10,3 +10,4 @@ out
 artifacts
 typechain-types/
 soljson-*
+.DS_Store
