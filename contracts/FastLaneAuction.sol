@@ -418,9 +418,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         flCut = amount - vCut;
     }
 
-    function _checkRedeemableOutstanding(ValidatorBalanceCheckpoint memory valCheckpoint,uint256 minAmount) internal view returns (bool isRedeemable) {
+    function _checkRedeemableOutstanding(ValidatorBalanceCheckpoint memory valCheckpoint,uint256 minAmount) internal view returns (bool) {
         return valCheckpoint.outstandingBalance >= minAmount || (((valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance) >= minAmount) && (valCheckpoint.lastBidReceivedAuction < auction_number));
     }
+
     function _redeemOutstanding(address outstandingValidatorWithBalance) internal {
         require(statusMap[outstandingValidatorWithBalance].kind == statusType.VALIDATOR, "FL:E-104");
         ValidatorBalanceCheckpoint storage valCheckpoint = validatorsCheckpoints[outstandingValidatorWithBalance];
@@ -635,7 +636,6 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         uint256 len = prevRoundAddrSet.length();
         for (uint256 i = 0; i < len; i++) {
             address current_validator = prevRoundAddrSet.at(i);
-            if (current_validator == address(0)) continue;
             ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[current_validator];
             uint256 minAmountForValidator = minAutoShipThreshold >= validatorsPreferences[current_validator].minAutoshipAmount ? minAutoShipThreshold : validatorsPreferences[current_validator].minAutoshipAmount;
             if (_checkRedeemableOutstanding(valCheckpoint, minAmountForValidator)) {
@@ -667,6 +667,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // Gets the checkpoint of an address
     function getCheckpoint(address who) external view returns (ValidatorBalanceCheckpoint memory) {
         return validatorsCheckpoints[who];
+    }
+
+    // Gets the preferences of an address
+    function getPreferences(address who) external view returns (ValidatorPreferences memory) {
+        return validatorsPreferences[who];
     }
 
     //function for determining the current top bid for an ongoing (live) auction

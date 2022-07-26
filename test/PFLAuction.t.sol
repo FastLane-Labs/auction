@@ -581,7 +581,23 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         // Now we can submit again
         vm.stopPrank();
-        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.prank(SEARCHER_ADDRESS1);
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+        vm.startPrank(OWNER);
+        FLA.disableOpportunityAddress(OPPORTUNITY1);
+        FLA.endAuction();
+        FLA.startAuction();
+        
+        vm.stopPrank();
+        vm.prank(SEARCHER_ADDRESS1);
+        vm.expectRevert(bytes("FL:E-210"));
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
+
+        vm.prank(OWNER);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        vm.prank(SEARCHER_ADDRESS1);
+        vm.expectRevert(bytes("FL:E-212"));
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
     }
@@ -789,7 +805,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.stopPrank();
         vm.startPrank(OPS_ADDRESS);
         {
-        // Validator 1 and 4 should have been autoshipped
+        // Validator 1 and 3 should have been autoshipped
         vm.expectEmit(true, true, true, true, address(FLA));
         emit ValidatorWithdrawnBalance(VALIDATOR1, 3, 2000 * (10**18), vm.addr(1), OPS_ADDRESS);
         
@@ -822,6 +838,168 @@ contract PFLAuctionTest is Test, PFLHelper {
             assertTrue(canExec5 == false);
         }
 
+
+    }
+
+    function testRedeemableOutstanding() public {
+
+        // Pump SEARCHER_ADDRESS1 balances since he'll be bidding on all validators
+        vm.deal(SEARCHER_ADDRESS1,1000000*10**18);
+        vm.prank(SEARCHER_ADDRESS1);
+        wMatic.deposit{value: 1000000*10**18}();
+
+        vm.startPrank(OWNER);
+        uint24 fee = 0; // 0% so calculations are easier
+        FLA.setFastlaneFee(fee);
+        uint128 minAutoship = 2000 * (10**18);
+        FLA.setMinimumAutoShipThreshold(minAutoship);
+        // Force 2 payments per checker() call max
+        FLA.setAutopayBatchSize(2);
+        // First validator setup with enableValidatorAddressWithPreferences
+        address validatorPayable1 = vm.addr(1);
+        uint128 amount1 = minAutoship;
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR1, amount1, validatorPayable1);
+
+        // 2nd validator setup with enableValidatorAddressWithPreferences as himself
+        uint128 amount2 = minAutoship*2; // Autoship at 4k
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR2, amount2, VALIDATOR2);
+
+         // Now the opp
+         FLA.enableOpportunityAddress(OPPORTUNITY1);
+        
+        _splitTestGelatoPreStartChecker(); // auction_index == 2
+
+         vm.stopPrank();
+         // Validator 1 will get his threshold met directly
+         Bid memory bid1 = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount1);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid1);
+
+         // Validator 2 will get his threshold met in 2 steps
+         Bid memory bid2 = Bid(VALIDATOR2, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount2/2);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid2);
+
+        // Check validatorsActiveAtAuction
+        {
+        address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+
+        // Should have 2 validators active
+        assertEq(prevRoundAddrs.length,2);
+        }
+
+
+        // Verify checker still doesn't run
+        {
+         (bool canExec1, bytes memory execPayload1) = FLA.checker();
+
+         assertTrue(canExec1 == false);
+         assertTrue(execPayload1.length == 0); 
+        }
+
+        (bool hasJobs, address[] memory autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        assertEq(hasJobs, false);
+        assertEq(autopayRecipients[0],address(0));
+        assertEq(autopayRecipients[1],address(0));
+
+        vm.startPrank(OWNER);
+        FLA.endAuction(); // auction_index == 3
+        FLA.startAuction();
+
+        {
+            ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR1);
+            assertEq(vCheckOngoing.pendingBalanceAtlastBid, amount1);
+        }
+
+        {
+            ValidatorPreferences memory valPrefs = FLA.getPreferences(VALIDATOR2);
+            assertEq(valPrefs.minAutoshipAmount, 4000 * (10**18));
+
+            ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR2);
+            assertEq(vCheckOngoing.pendingBalanceAtlastBid, amount2/2);
+            assertEq(vCheckOngoing.outstandingBalance, 0);
+            // Forge coverage being drunk ? Says checkRedeemableOutstanding never branches out
+            // Making _checkRedeemableOutstanding -> checkRedeemableOutstanding (public) and testing
+            // both variations still trips out coverage
+            // bool isRedeemable = FLA.checkRedeemableOutstanding(vCheckOngoing, valPrefs.minAutoshipAmount);
+            // assertEq(isRedeemable, false);
+        }
+
+
+
+        
+        (hasJobs, autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        assertEq(hasJobs, true);
+        assertEq(autopayRecipients[0],VALIDATOR1);
+        assertEq(autopayRecipients[1],address(0));
+        
+
+        (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == true);
+         assertTrue(execPayload.length > 0);
+        
+
+        vm.stopPrank();
+        vm.startPrank(OPS_ADDRESS);
+        {
+        // Validator 1 should have been autoshipped
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR1, 3, 2000 * (10**18), vm.addr(1), OPS_ADDRESS);
+        
+        (bool success, bytes memory returnData) = address(FLA).call(execPayload);
+         assertTrue(success);
+        }
+
+        (hasJobs,autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        assertEq(hasJobs, false);
+        assertEq(autopayRecipients[0],address(0));
+        assertEq(autopayRecipients[1],address(0));
+
+        vm.stopPrank();
+        vm.startPrank(OWNER);
+        FLA.endAuction();
+        FLA.startAuction();
+        vm.stopPrank();
+
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid2);
+
+        (hasJobs,autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        assertEq(hasJobs, false);
+        assertEq(autopayRecipients[0],address(0));
+        assertEq(autopayRecipients[1],address(0));
+
+        vm.startPrank(OWNER);
+        FLA.endAuction();
+        FLA.startAuction();
+
+        (hasJobs,autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        assertEq(hasJobs, true);
+        assertEq(autopayRecipients[0],VALIDATOR2);
+        assertEq(autopayRecipients[1],address(0));
+
+        {
+            ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR2);
+            assertEq(vCheckOngoing.pendingBalanceAtlastBid, amount2/2);
+            assertEq(vCheckOngoing.outstandingBalance, amount2/2);
+            // bool isRedeemable = FLA.checkRedeemableOutstanding(vCheckOngoing, 4000*10**18);
+            // assertEq(isRedeemable, true);
+        }
+
+        (canExec, execPayload) = FLA.checker();
+
+         assertTrue(canExec == true);
+         assertTrue(execPayload.length > 0);
+        
+
+        vm.stopPrank();
+        vm.startPrank(OPS_ADDRESS);
+        {
+        // Validator 2 should have been autoshipped
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR2, 5, 4000 * (10**18), VALIDATOR2, OPS_ADDRESS);
+        
+        (bool success, bytes memory returnData) = address(FLA).call(execPayload);
+         assertTrue(success);
+        }
 
     }
 
@@ -870,7 +1048,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         {
         address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
 
-        // Should have 4 validators active
+        // Should have 1 validator active
         assertEq(prevRoundAddrs.length,1);
         }
 
