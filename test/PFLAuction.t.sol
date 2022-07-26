@@ -13,6 +13,9 @@ import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import "contracts/interfaces/IWMatic.sol";
 
+import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
+
+
 // 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889 - Mumbai WMATIC
 // 0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270 - Polygon Mainnet WMATIC
 
@@ -466,6 +469,25 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertTrue(wMatic.balanceOf(address(FLA)) == 0); // Everyone got paid, no more wMatic hanging in the contract
     }
 
+    function testBidIncrement() public {
+        vm.startPrank(OWNER);
+        FLA.enableOpportunityAddress(OPPORTUNITY1);
+        FLA.enableValidatorAddress(VALIDATOR1);
+        FLA.setMinimumBidIncrement(1000*10**18);
+        FLA.startAuction();
+        Bid memory bidTooLow = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, 100);
+        vm.stopPrank();
+        vm.startPrank(bidTooLow.searcherPayableAddress);
+        wMatic.approve(address(FLA), 2**256 - 1);
+        vm.expectRevert(bytes("FL:E-203"));
+        FLA.submitBid(bidTooLow);
+        vm.stopPrank();
+        vm.prank(OWNER);
+        FLA.setMinimumBidIncrement(99);
+        vm.startPrank(bidTooLow.searcherPayableAddress);
+        FLA.submitBid(bidTooLow);
+    }
+
     function testEnabledDisabledPairs() public {
         vm.startPrank(OWNER);
 
@@ -564,9 +586,15 @@ contract PFLAuctionTest is Test, PFLHelper {
 
     }
 
-    function testValidatorsActive() public {
-        //@todo: Code me.
-        
+    function testPausedState() public {
+        vm.startPrank(OWNER);
+        vm.expectEmit(true, true, false, false, address(FLA));
+        emit PausedStateSet(true);
+        FLA.setPausedState(true);
+        FLA.startAuction();
+        vm.expectRevert(bytes("FL:E-101"));
+        Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, 2000*10**18);
+        FLA.submitBid(auctionRightMinimumBidWithSearcher);
     }
 
     function testValidatorPreferences() public {
@@ -599,6 +627,11 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA.setValidatorPreferences(updatedAmountTooLow, validatorPayableUpdated);
 
         uint128 updatedAmount = 5000*10**18;
+
+        vm.expectRevert(bytes("FL:E-202"));
+        FLA.setValidatorPreferences(updatedAmount, address(FLA));
+
+
         vm.expectEmit(true, true, true, false, address(FLA));
         emit ValidatorPreferencesSet(VALIDATOR1, updatedAmount, validatorPayableUpdated);
         FLA.setValidatorPreferences(updatedAmount, validatorPayableUpdated);
@@ -617,6 +650,30 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA.redeemOutstandingBalance(VALIDATOR1);
         assertTrue(wMatic.balanceOf(validatorPayableUpdated) == 9000000000000000000);
     }
+
+    // Avoid foundry stack too deep
+    function _splitTestGelatoPreStartChecker() internal {
+                {
+         (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
+        }
+
+
+         FLA.startAuction();
+         FLA.endAuction(); // auction_index == 2
+
+        {
+         (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
+        }
+
+         FLA.startAuction();
+
+    }
     function testGelatoAutoship() public {
 
         // Pump SEARCHER_ADDRESS1 balances since he'll be bidding on all validators
@@ -627,13 +684,10 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.startPrank(OWNER);
         uint24 fee = 0; // 0% so calculations are easier
         FLA.setFastlaneFee(fee);
-
         uint128 minAutoship = 2000 * (10**18);
         FLA.setMinimumAutoShipThreshold(minAutoship);
-
         // Force 2 payments per checker() call max
         FLA.setAutopayBatchSize(2);
-
         // First validator setup with enableValidatorAddressWithPreferences
         address validatorPayable1 = vm.addr(1);
         uint128 amount1 = minAutoship;
@@ -658,25 +712,7 @@ contract PFLAuctionTest is Test, PFLHelper {
          // Now the opp
          FLA.enableOpportunityAddress(OPPORTUNITY1);
         
-        {
-         (bool canExec, bytes memory execPayload) = FLA.checker();
-
-         assertTrue(canExec == false);
-         assertTrue(execPayload.length == 0); 
-        }
-
-
-         FLA.startAuction();
-         FLA.endAuction(); // auction_index == 2
-
-        {
-         (bool canExec, bytes memory execPayload) = FLA.checker();
-
-         assertTrue(canExec == false);
-         assertTrue(execPayload.length == 0); 
-        }
-
-         FLA.startAuction();
+        _splitTestGelatoPreStartChecker(); // auction_index == 2
 
          vm.stopPrank();
          // Validator 1 will get his threshold met directly
@@ -696,10 +732,13 @@ contract PFLAuctionTest is Test, PFLHelper {
         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid4);
 
         // Check validatorsActiveAtAuction
+        {
         address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
 
         // Should have 4 validators active
         assertEq(prevRoundAddrs.length,4);
+        }
+
 
         // Verify checker still doesn't run
         {
@@ -715,7 +754,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA.endAuction(); // auction_index == 3
         FLA.startAuction();
 
-        // Verify checker still doesn't run
+        // Verify checker still doesn't run even if it could from balances
         {
          (bool canExec, bytes memory execPayload) = FLA.checker();
 
@@ -723,49 +762,182 @@ contract PFLAuctionTest is Test, PFLHelper {
          assertTrue(execPayload.length == 0); 
         }
 
-        // Needs new bid on new auction_number so balances are moved to outstanding.
+        // New bid on new auction_number so balances of VALIDATOR1 are moved to outstanding.
+        // Should not impact anything
         vm.stopPrank();
          _approveAndSubmitBid(SEARCHER_ADDRESS1,bid1);
         vm.startPrank(OWNER);
         // Turn it back on and witness payments of 2
         FLA.setOffchainCheckerDisabledState(false);
 
-        ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR1);
-        assertTrue(vCheckOngoing.outstandingBalance >= amount1);
+        {
+            ValidatorBalanceCheckpoint memory vCheckOngoing = FLA.getCheckpoint(VALIDATOR1);
+            assertTrue(vCheckOngoing.outstandingBalance >= amount1);
+        }
 
         {
         (bool hasJobs, address[] memory autopayRecipients) = FLA.getAutopayJobs(2, 2);
         assertEq(hasJobs, true);
         }
 
-
-   
-
         (bool canExec, bytes memory execPayload) = FLA.checker();
 
          assertTrue(canExec == true);
          assertTrue(execPayload.length > 0);
         
+
         vm.stopPrank();
-        vm.prank(OPS_ADDRESS);
+        vm.startPrank(OPS_ADDRESS);
         {
+        // Validator 1 and 4 should have been autoshipped
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR1, 3, 2000 * (10**18), vm.addr(1), OPS_ADDRESS);
+        
+        vm.expectEmit(true, true, true, true, address(FLA));
+        emit ValidatorWithdrawnBalance(VALIDATOR3, 3, 6000 * (10**18), vm.addr(3), OPS_ADDRESS);
+
+
         (bool success, bytes memory returnData) = address(FLA).call(execPayload);
          assertTrue(success);
         }
-
-
+    
         // Call it again and witness payment of 1
-        
-        // Top the minimum to 10k
+        {
+            (bool hasJobs4, address[] memory autopayRecipients4) = FLA.getAutopayJobs(2, 2);
+            assertEq(hasJobs4, true);
+
+            (bool canExec4, bytes memory execPayload4) = FLA.checker();
+
+             assertTrue(canExec4 == true);
+             assertTrue(execPayload4.length > 0);
+            // Validator 4 will get autoship
+            vm.expectEmit(true, true, true, true, address(FLA));
+            emit ValidatorWithdrawnBalance(VALIDATOR4, 3, 2000 * (10**18), VALIDATOR4, OPS_ADDRESS);
+
+            (bool success, bytes memory returnData) = address(FLA).call(execPayload4);
+            assertTrue(success);
+
+            // No more folks to handle
+            (bool canExec5, bytes memory execPayload5) = FLA.checker();
+            assertTrue(canExec5 == false);
+        }
+
+
+    }
+
+    function testAutoshipThreshold() public {
         vm.startPrank(OWNER);
-        minAutoship = 10000*10**18;
+        uint128 minAutoship = 10000*10**18;
         vm.expectEmit(true, false, false, false, address(FLA));
         emit MinimumAutoshipThresholdSet(minAutoship);
         FLA.setMinimumAutoShipThreshold(minAutoship);
-
     }
+
     function testUpgrade() public {
         //@todo: Maybe new file?
+    }
+
+    function testGasChecker() public {
+
+        // Pump SEARCHER_ADDRESS1 balances since he'll be bidding on all validators
+        vm.deal(SEARCHER_ADDRESS1,1000000*10**18);
+        vm.prank(SEARCHER_ADDRESS1);
+        wMatic.deposit{value: 1000000*10**18}();
+
+        vm.startPrank(OWNER);
+        uint24 fee = 0; // 0% so calculations are easier
+        FLA.setFastlaneFee(fee);
+        uint128 minAutoship = 2000 * (10**18);
+        FLA.setMinimumAutoShipThreshold(minAutoship);
+        // Force 2 payments per checker() call max
+        FLA.setAutopayBatchSize(2);
+        // First validator setup with enableValidatorAddressWithPreferences
+        address validatorPayable1 = vm.addr(1);
+        uint128 amount1 = minAutoship;
+        FLA.enableValidatorAddressWithPreferences(VALIDATOR1, amount1, validatorPayable1);
+
+        // Now the opp
+         FLA.enableOpportunityAddress(OPPORTUNITY1);
+        
+        _splitTestGelatoPreStartChecker(); // auction_index == 2
+
+         vm.stopPrank();
+         // Validator 1 will get his threshold met directly
+         Bid memory bid1 = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount1);
+        _approveAndSubmitBid(SEARCHER_ADDRESS1,bid1);
+
+        // Check validatorsActiveAtAuction
+        {
+        address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+
+        // Should have 4 validators active
+        assertEq(prevRoundAddrs.length,1);
+        }
+
+
+        // Verify checker still doesn't run
+        {
+         (bool canExec, bytes memory execPayload) = FLA.checker();
+
+         assertTrue(canExec == false);
+         assertTrue(execPayload.length == 0); 
+        }
+        // Turn off checker with gas
+
+        vm.startPrank(OWNER);
+        vm.expectEmit(true, false, false, false, address(FLA));
+        emit ResolverMaxGasPriceSet(0);
+        FLA.setResolverMaxGasPrice(0);
+        
+        FLA.endAuction(); // auction_index == 3
+        FLA.startAuction();
+
+        vm.expectEmit(true, false, false, false, address(FLA));
+        emit OpsSet(vm.addr(1337));
+        FLA.setOps(vm.addr(1337));
+        vm.stopPrank();
+
+        vm.startPrank(vm.addr(1337));
+        // Verify checker still doesn't run even if it could from balances
+        (bool canExec, bytes memory execPayload) = FLA.checker();
+
+        assertTrue(canExec == false);
+        assertTrue(execPayload.length == 0);
+
+        address[] memory recipients = new address[](2);
+        recipients[1] = vm.addr(1);
+        vm.expectRevert(bytes("FL:E-307"));
+        FLA.processAutopayJobs(recipients);
+        
+        vm.stopPrank();
+        vm.prank(OWNER);
+        FLA.setResolverMaxGasPrice(10*10**18);
+
+        vm.startPrank(vm.addr(1337));
+        (canExec, execPayload) = FLA.checker();
+        assertTrue(canExec == true);
+    }
+
+    function testEmergencyWithdraw() public {
+        vm.deal(address(FLA),10*10**18);
+        
+        vm.startPrank(OWNER);
+        vm.expectEmit(true, true, false, false, address(FLA));
+        emit WithdrawStuckNativeToken(OWNER, 10*10**18);
+        FLA.withdrawStuckNativeToken(10*10**18);
+        assertEq(OWNER.balance, 10*10**18);
+
+        MockERC20 token = new MockERC20("Token", "TKN", 18);
+        token.mint(address(FLA), 1e18);
+
+        vm.expectEmit(true, true, true, false, address(FLA));
+        emit WithdrawStuckERC20(address(FLA), OWNER, 1e18);
+        FLA.withdrawStuckERC20(address(token));
+        assertEq(token.balanceOf(OWNER), 1e18);
+        assertEq(token.balanceOf(address(FLA)), 0);
+
+        vm.expectRevert(bytes("FL:E-102"));
+        FLA.withdrawStuckERC20(address(wMatic));
     }
 
     function testFeeUpdate() public {

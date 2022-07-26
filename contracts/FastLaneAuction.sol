@@ -57,6 +57,7 @@ abstract contract FastLaneEvents {
     event FastLaneFeeSet(uint256 amount);
     event BidTokenSet(address indexed token);
     event PausedStateSet(bool state);
+    event OpsSet(address ops);
     event MinimumAutoshipThresholdSet(uint128 amount);
     event ResolverMaxGasPriceSet(uint128 amount);
     event AutopayBatchSizeSet(uint16 batch_size);
@@ -196,6 +197,12 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         emit MinimumBidIncrementSet(_bid_increment);
     }
 
+    // Set Gelato Ops in case it ever changes
+    function setOps(address _ops) external onlyOwner {
+        ops = _ops;
+        emit OpsSet(_ops);
+    }
+
     // Set minimum balance
     function setMinimumAutoShipThreshold(uint128 _minAmount) external onlyOwner {
         minAutoShipThreshold = _minAmount;
@@ -326,7 +333,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         outstandingFLBalance = 0;
 
         //transfer to PFL the sorely needed $ to cover our high infra costs
-        bid_token.safeTransferFrom(address(this), owner(), ownerBalance);
+        bid_token.safeTransfer(owner(), ownerBalance);
 
         return true;
     }
@@ -356,11 +363,12 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         onlyOwner
         nonReentrant
     {
+        require(_tokenAddress != address(bid_token), "FL:E-102");
         ERC20 oopsToken = ERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
         if (oopsTokenBalance > 0) {
-            bid_token.safeTransferFrom(address(this), owner(), oopsTokenBalance);
+            oopsToken.safeTransfer(owner(), oopsTokenBalance);
             emit WithdrawStuckERC20(address(this), owner(), oopsTokenBalance);
         }
     }
@@ -408,6 +416,54 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     function _calculateCuts(uint256 amount) internal view returns (uint256 vCut, uint256 flCut) {
         vCut = (amount * (1000000 - fast_lane_fee)) / 1000000;
         flCut = amount - vCut;
+    }
+
+    function _checkRedeemableOutstanding(ValidatorBalanceCheckpoint memory valCheckpoint,uint256 minAmount) internal view returns (bool isRedeemable) {
+        return valCheckpoint.outstandingBalance >= minAmount || (((valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance) >= minAmount) && (valCheckpoint.lastBidReceivedAuction < auction_number));
+    }
+    function _redeemOutstanding(address outstandingValidatorWithBalance) internal {
+        require(statusMap[outstandingValidatorWithBalance].kind == statusType.VALIDATOR, "FL:E-104");
+        ValidatorBalanceCheckpoint storage valCheckpoint = validatorsCheckpoints[outstandingValidatorWithBalance];
+       
+        // Either we have outstandingBalance or we have pendingBalanceAtlastBid from previous auctions.
+        require(
+               _checkRedeemableOutstanding(valCheckpoint, 1),
+            "FL:E-207"
+        );
+
+        uint256 redeemable = 0;
+        if (valCheckpoint.lastBidReceivedAuction < auction_number) {
+            // We can redeem both
+            redeemable = valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance;
+            valCheckpoint.pendingBalanceAtlastBid = 0;
+        } else {
+            // Another bid was received in the current auction, profits were already moved
+            // to outstandingBalance by the bidder
+            redeemable = valCheckpoint.outstandingBalance;
+        }
+
+        // Clear outstanding in any case.
+        valCheckpoint.outstandingBalance = 0;
+        valCheckpoint.lastWithdrawnAuction = auction_number;
+
+        address dst = outstandingValidatorWithBalance;
+        ValidatorPreferences memory valPrefs = validatorsPreferences[dst];
+        if (valPrefs.validatorPayableAddress != address(0)) {
+            dst = valPrefs.validatorPayableAddress;
+        }
+
+        bid_token.safeTransfer(
+            dst,
+            redeemable
+        );
+
+        emit ValidatorWithdrawnBalance(
+            outstandingValidatorWithBalance,
+            auction_number,
+            redeemable,
+            dst,
+            msg.sender
+        );
     }
 
     /***********************************|
@@ -516,51 +572,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // It can be during an ongoing auction with pendingBalanceAtlastBid being the current auction
     // Or lastBidReceivedAuction being a previous auction, in which case outstanding+pending can be withdrawn
     function redeemOutstandingBalance(address outstandingValidatorWithBalance)
-        public
+        external
         nonReentrant
     {
-        require(statusMap[outstandingValidatorWithBalance].kind == statusType.VALIDATOR, "FL:E-104");
-        ValidatorBalanceCheckpoint storage valCheckpoint = validatorsCheckpoints[outstandingValidatorWithBalance];
-       
-        // Either we have outstandingBalance or we have pendingBalanceAtlastBid from previous auctions.
-        require(
-               valCheckpoint.outstandingBalance > 0 || ((valCheckpoint.pendingBalanceAtlastBid > 0) && (valCheckpoint.lastBidReceivedAuction < auction_number)),
-            "FL:E-207"
-        );
-
-        uint256 redeemable = 0;
-        if (valCheckpoint.lastBidReceivedAuction < auction_number) {
-            // We can redeem both
-            redeemable = valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance;
-            valCheckpoint.pendingBalanceAtlastBid = 0;
-        } else {
-            // Another bid was received in the current auction, profits were already moved
-            // to outstandingBalance by the bidder
-            redeemable = valCheckpoint.outstandingBalance;
-        }
-
-        // Clear outstanding in any case.
-        valCheckpoint.outstandingBalance = 0;
-        valCheckpoint.lastWithdrawnAuction = auction_number;
-
-        address dst = outstandingValidatorWithBalance;
-        ValidatorPreferences memory valPrefs = validatorsPreferences[dst];
-        if (valPrefs.validatorPayableAddress != address(0)) {
-            dst = valPrefs.validatorPayableAddress;
-        }
-
-        bid_token.safeTransfer(
-            dst,
-            redeemable
-        );
-
-        emit ValidatorWithdrawnBalance(
-            outstandingValidatorWithBalance,
-            auction_number,
-            redeemable,
-            dst,
-            msg.sender
-        );
+        _redeemOutstanding(outstandingValidatorWithBalance);
     }
 
     /***********************************|
@@ -576,7 +591,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        if (_offchain_checker_disabled || _paused == true  || tx.gasprice >= max_gas_price) return (false, "");
+        if (_offchain_checker_disabled || _paused  || tx.gasprice > max_gas_price) return (false, "");
             // Go workers go
             canExec = false;
             (
@@ -595,9 +610,14 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant onlyGelato {
+        // Reassert checks if insane spike between gelato trigger and tx picked up
+        require(!_offchain_checker_disabled && !_paused, "FL:E-101");
+        require(tx.gasprice <= max_gas_price, "FL:E-307");
         uint length = autopayRecipients.length;
         for (uint i = 0;i<length;) {
-            redeemOutstandingBalance(autopayRecipients[i]);
+            if (autopayRecipients[i] != address(0)) {
+                _redeemOutstanding(autopayRecipients[i]);
+            }
             unchecked { ++i; }
         }
     }
@@ -617,7 +637,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             address current_validator = prevRoundAddrSet.at(i);
             if (current_validator == address(0)) continue;
             ValidatorBalanceCheckpoint memory valCheckpoint = validatorsCheckpoints[current_validator];
-            if ((valCheckpoint.outstandingBalance >= validatorsPreferences[current_validator].minAutoshipAmount) && (valCheckpoint.outstandingBalance >= minAutoShipThreshold)) {
+            uint256 minAmountForValidator = minAutoShipThreshold >= validatorsPreferences[current_validator].minAutoshipAmount ? minAutoShipThreshold : validatorsPreferences[current_validator].minAutoshipAmount;
+            if (_checkRedeemableOutstanding(valCheckpoint, minAmountForValidator)) {
                 autopayRecipients[assigned] = current_validator;
                 assigned++;
             }
@@ -625,7 +646,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 break;
             }
         }
-        hasJobs = autopayRecipients.length > 0;
+        hasJobs = assigned > 0;
     }
 
     // Gets the status of an address

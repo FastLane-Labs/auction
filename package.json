@@ -17,7 +17,7 @@
     "test-only": "yarn clean-test && hardhat test --show-stack-traces",
     "watch-test": "hardhat watch test",
     "hint": "solhint \"contracts/**/*.sol\"",
-    "coverage": "yarn clean-test && hardhat --show-stack-traces coverage --temp coverage_build && yarn clean-test",
+    "hh-coverage": "yarn clean-test && hardhat --show-stack-traces coverage --temp coverage_build && yarn clean-test",
     "hardhat_gas": "REPORT_GAS=true hardhat test",
     "gas": "forge test -vv --gas-report",
     "ftest": "source .env && forge test -vvv --gas-report",

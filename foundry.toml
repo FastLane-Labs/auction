@@ -14,6 +14,7 @@ optimizer_runs = 200
 bytecode_hash = "none"
 names = true
 sizes = true
+gas_price = 60000000000
 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

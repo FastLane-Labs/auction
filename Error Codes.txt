@@ -22,9 +22,8 @@ Codes:
     E-101 - PAUSED
     E-102 - NOT_OWNER, transfer of token that is not own
     E-103 - Only send bids from the payor EOA
-    E-104 - Invalid Validator address
+    E-104 - Must be validator
     E-105 - Invalid opportunity address - Submit via discord
-    E-106 - Only Validator
     E-106 - Only Gelato
 
   2. Find, Inequalities & Range
@@ -50,6 +49,7 @@ Codes:
     E-304 - validator already completely processed
     E-305 - opp already processed
     E-306 - wrong stage
+    E-307 - gas not suitable
 
 
   4. Tokens, Funds & Finance
