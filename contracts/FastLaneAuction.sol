@@ -52,7 +52,6 @@ abstract contract FastLaneEvents {
     |             Events                |
     |__________________________________*/
 
-    event MaxLaneFeeSet(uint256 amount);
     event MinimumBidIncrementSet(uint256 amount);
     event FastLaneFeeSet(uint256 amount);
     event BidTokenSet(address indexed token);
@@ -157,10 +156,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     mapping(uint128 => EnumerableSet.AddressSet) internal validatorsActiveAtAuction;
 
     // Validators cuts to be withdraw or dispatched regularly
-    mapping(address => ValidatorBalanceCheckpoint) public validatorsCheckpoints;
+    mapping(address => ValidatorBalanceCheckpoint) internal validatorsCheckpoints;
 
     // Validator preferences for payment and min autoship amount
-    mapping(address => ValidatorPreferences) public validatorsPreferences;
+    mapping(address => ValidatorPreferences) internal validatorsPreferences;
 
     // Auto cleared by EndAuction every round
     uint256 public outstandingFLBalance = 0;
@@ -217,6 +216,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     // Set the protocol fee (out of 1000000 (ie v2 fee decimals)).
     // Initially set to 50000 (5%)
+    // For now we can't change the fee during an ongoing auction since the bids
+    // do not store the fee value at bidding time
     function setFastlaneFee(uint24 _fastLaneFee)
         external
         onlyOwner
@@ -327,7 +328,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         emit AuctionEnded(auction_number);
 
         // Increment auction_number so the checkpoints are available.
-        auction_number++;
+        ++auction_number;
 
         uint256 ownerBalance = outstandingFLBalance;
         outstandingFLBalance = 0;
@@ -640,7 +641,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             uint256 minAmountForValidator = minAutoShipThreshold >= validatorsPreferences[current_validator].minAutoshipAmount ? minAutoShipThreshold : validatorsPreferences[current_validator].minAutoshipAmount;
             if (_checkRedeemableOutstanding(valCheckpoint, minAmountForValidator)) {
                 autopayRecipients[assigned] = current_validator;
-                assigned++;
+                ++assigned;
             }
             if (assigned >= batch_size) {
                 break;
@@ -679,7 +680,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         external
         view
         atLiveStage
-        returns (uint256, uint256)
+        returns (uint256, uint128)
     {
             Bid memory topBid = auctionsMap[auction_number][
                 validatorAddress
@@ -688,14 +689,14 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function findFinalizedAuctionWinnerAtAuction(
-        uint256 auction_index,
+        uint128 auction_index,
         address validatorAddress,
         address opportunityAddress
     ) public view
                 returns (
             bool,
             address,
-            uint256
+            uint128
         )
     {
         require(auction_index < auction_number,"FL-E:201");
@@ -712,7 +713,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
     }
 
-    // Function for determining the winner of a completed auction
+    // Function for determining the winner of the last completed auction
     function findLastFinalizedAuctionWinner(
         address validatorAddress,
         address opportunityAddress
@@ -722,7 +723,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         returns (
             bool,
             address,
-            uint256
+            uint128
         )
     {
         return findFinalizedAuctionWinnerAtAuction(getActivePrivilegesAuctionNumber(), validatorAddress, opportunityAddress);

@@ -149,6 +149,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA.endAuction();
 
         assertTrue(FLA.auction_number() == 2);
+        assertEq(FLA.getActivePrivilegesAuctionNumber(), 1);
     }
 
     function testStartProcessStopMultipleEmptyAuctions() public {
@@ -270,6 +271,13 @@ contract PFLAuctionTest is Test, PFLHelper {
         // Check event
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
+        // Check Top Bid
+        {
+            (uint256 topBidAmount, uint128 currentAuctionNumber) = FLA.findLiveAuctionTopBid(VALIDATOR1, OPPORTUNITY1);
+            assertEq(topBidAmount, FLA.bid_increment());
+            assertEq(currentAuctionNumber, 1);
+        }
+
         // Check checkpoint and cuts
         ValidatorBalanceCheckpoint memory vCheck = FLA.getCheckpoint(VALIDATOR1);
 
@@ -349,8 +357,37 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.startPrank(OWNER);
 
         uint cut = FLA.outstandingFLBalance();
+
+        // Check Top Bid
+        {
+            (uint256 topBidAmount, uint128 currentAuctionNumber) = FLA.findLiveAuctionTopBid(VALIDATOR1, OPPORTUNITY1);
+            assertEq(topBidAmount, FLA.bid_increment()*2);
+            assertEq(currentAuctionNumber, 1);
+        }
         FLA.endAuction();
         assertTrue(wMatic.balanceOf(OWNER) == cut);
+
+        // Check Winner
+        {
+            (bool hasWinner, address winner, uint128 winningAuctionNumber) = FLA.findFinalizedAuctionWinnerAtAuction(1,VALIDATOR1, OPPORTUNITY1);
+            assertEq(hasWinner, true);
+            assertEq(winner, BIDDER2);
+            assertEq(winningAuctionNumber, 1);
+        }
+        {
+            (bool hasWinner, address winner, uint128 winningAuctionNumber) = FLA.findLastFinalizedAuctionWinner(VALIDATOR1, OPPORTUNITY1);
+            assertEq(hasWinner, true);
+            assertEq(winner, BIDDER2);
+            assertEq(winningAuctionNumber, 1);
+        }
+        // Check inexistant winner
+        {
+            (bool hasWinner, address winner, uint128 winningAuctionNumber) = FLA.findFinalizedAuctionWinnerAtAuction(1,VALIDATOR1, OPPORTUNITY3);
+            assertEq(hasWinner, false);
+            assertEq(winner, address(0));
+            assertEq(winningAuctionNumber, 1);
+        }
+
     }
 
     function _approveAndSubmitBid(address who, Bid memory bid) internal {
