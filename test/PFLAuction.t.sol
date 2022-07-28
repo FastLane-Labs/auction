@@ -104,10 +104,17 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         vm.prank(OWNER);
         
-        FLA = new FastLaneAuction(MUMBAI_MATIC, OPS_ADDRESS);
+        FLA = new FastLaneAuction();
 
-        console2.log("FLA deployed at:", address(FLA));
-        console2.log("WMATIC deployed at:", MUMBAI_MATIC);
+        vm.prank(OWNER);
+        FLA.init(MUMBAI_MATIC, OPS_ADDRESS);
+
+        // address owner = FLA.owner();
+        // console2.log("FLA OWNER:", owner);
+
+
+        // console2.log("FLA deployed at:", address(FLA));
+        // console2.log("WMATIC deployed at:", MUMBAI_MATIC);
         wMatic = WMATIC(MUMBAI_MATIC);
 
         for (uint256 i = 0; i < BIDDERS.length; i++) {
@@ -829,7 +836,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         }
 
         {
-        (bool hasJobs, address[] memory autopayRecipients) = FLA.getAutopayJobs(2, 2);
+        (bool hasJobs,) = FLA.getAutopayJobs(2, 2);
         assertEq(hasJobs, true);
         }
 
@@ -850,13 +857,13 @@ contract PFLAuctionTest is Test, PFLHelper {
         emit ValidatorWithdrawnBalance(VALIDATOR3, 3, 6000 * (10**18), vm.addr(3), OPS_ADDRESS);
 
 
-        (bool success, bytes memory returnData) = address(FLA).call(execPayload);
+        (bool success, = address(FLA).call(execPayload);
          assertTrue(success);
         }
     
         // Call it again and witness payment of 1
         {
-            (bool hasJobs4, address[] memory autopayRecipients4) = FLA.getAutopayJobs(2, 2);
+            (bool hasJobs4,) = FLA.getAutopayJobs(2, 2);
             assertEq(hasJobs4, true);
 
             (bool canExec4, bytes memory execPayload4) = FLA.checker();
@@ -867,11 +874,11 @@ contract PFLAuctionTest is Test, PFLHelper {
             vm.expectEmit(true, true, true, true, address(FLA));
             emit ValidatorWithdrawnBalance(VALIDATOR4, 3, 2000 * (10**18), VALIDATOR4, OPS_ADDRESS);
 
-            (bool success, bytes memory returnData) = address(FLA).call(execPayload4);
+            (bool success,) = address(FLA).call(execPayload4);
             assertTrue(success);
 
             // No more folks to handle
-            (bool canExec5, bytes memory execPayload5) = FLA.checker();
+            (bool canExec5,) = FLA.checker();
             assertTrue(canExec5 == false);
         }
 
@@ -982,7 +989,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.expectEmit(true, true, true, true, address(FLA));
         emit ValidatorWithdrawnBalance(VALIDATOR1, 3, 2000 * (10**18), vm.addr(1), OPS_ADDRESS);
         
-        (bool success, bytes memory returnData) = address(FLA).call(execPayload);
+        (bool success,) = address(FLA).call(execPayload);
          assertTrue(success);
         }
 
@@ -1034,7 +1041,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.expectEmit(true, true, true, true, address(FLA));
         emit ValidatorWithdrawnBalance(VALIDATOR2, 5, 4000 * (10**18), VALIDATOR2, OPS_ADDRESS);
         
-        (bool success, bytes memory returnData) = address(FLA).call(execPayload);
+        (bool success,) = address(FLA).call(execPayload);
          assertTrue(success);
         }
 

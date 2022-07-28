@@ -142,9 +142,18 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     ERC20 public bid_token;
 
-    constructor (address _initial_bid_token,address _ops) {
+    constructor() {
+    }
+
+    function init(address _initial_bid_token, address _ops) external onlyOwner {
         setBidToken(_initial_bid_token);
         setOps(_ops);
+        auction_number = 1;
+        setMinimumBidIncrement(10* (10**18)); // external onlyOwner {
+        setMinimumAutoShipThreshold(2000* (10**18));
+        setResolverMaxGasPrice(200 gwei);
+        setFastlaneFee(50000);
+        setAutopayBatchSize(10); 
     }
 
     // Gelato Ops Address
@@ -194,6 +203,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     uint256 public outstandingFLBalance = 0;
 
 
+
     function _updateValidatorPreferences(address _target, uint128 _minAutoshipAmount, address _validatorPayableAddress) internal {
         require(_minAutoshipAmount >= minAutoShipThreshold, "FL:E-203");
         require((_validatorPayableAddress != address(0)) && (_validatorPayableAddress != address(this)), "FL:E-202");
@@ -220,7 +230,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // Set minimum bid increment to avoid people bidding up by .000000001
-    function setMinimumBidIncrement(uint256 _bid_increment) external onlyOwner {
+    function setMinimumBidIncrement(uint256 _bid_increment) public onlyOwner {
         bid_increment = _bid_increment;
         emit MinimumBidIncrementSet(_bid_increment);
     }
@@ -232,13 +242,13 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // Set minimum balance
-    function setMinimumAutoShipThreshold(uint128 _minAmount) external onlyOwner {
+    function setMinimumAutoShipThreshold(uint128 _minAmount) public onlyOwner {
         minAutoShipThreshold = _minAmount;
         emit MinimumAutoshipThresholdSet(_minAmount);
     }
 
     // Set max gwei for resolver
-    function setResolverMaxGasPrice(uint128 _maxgas) external onlyOwner {
+    function setResolverMaxGasPrice(uint128 _maxgas) public onlyOwner {
         max_gas_price = _maxgas;
         emit ResolverMaxGasPriceSet(_maxgas);
     }
@@ -248,7 +258,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // For now we can't change the fee during an ongoing auction since the bids
     // do not store the fee value at bidding time
     function setFastlaneFee(uint24 _fastLaneFee)
-        external
+        public
         onlyOwner
         notLiveStage
     {
@@ -269,6 +279,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         bid_token = ERC20(_bid_token_address);
         emit BidTokenSet(_bid_token_address);
     }
+
+
+
 
     // Add an address to the opportunity address array.
     // Should be a router/aggregator etc.
@@ -368,7 +381,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return true;
     }
 
-    function setAutopayBatchSize(uint16 size) external onlyOwner {
+    function setAutopayBatchSize(uint16 size) public onlyOwner {
         autopay_batch_size = size;
         emit AutopayBatchSizeSet(autopay_batch_size);
     }

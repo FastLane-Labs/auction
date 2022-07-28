@@ -17,13 +17,14 @@ contract FastLaneFactory {
     function _createFastLane(bytes32 _salt, address _initial_bid_token, address _ops) internal {
         
         // use CREATE2 so we can get a deterministic address based on the salt
-        fastlane = address(new FastLaneAuction{salt: _salt}(_initial_bid_token, _ops));
+        fastlane = address(new FastLaneAuction{salt: _salt}());
 
         // CREATE2 can return address(0), add a check to verify this isn't the case
         // See: https://eips.ethereum.org/EIPS/eip-1014
         require(fastlane != address(0), "Wrong init");
         emit FastLaneCreated(fastlane);
 
+        FastLaneAuction(fastlane).init(_initial_bid_token, _ops);
         // Give back to deployer
         FastLaneAuction(fastlane).transferOwnership(msg.sender);
     }
@@ -54,16 +55,17 @@ contract FastLaneFactory {
 
     function getFastLaneContractBySalt(bytes32 _salt) external view returns(address predictedAddress, bool isDeployed){
         
-        (address ops, address initial_bid_token) = getArgs();
+        (address initial_bid_token, address ops) = getArgs();
+
+        require(ops != address(0), "O(o)ps");
+        require(initial_bid_token != address(0), "Wrapped");
 
         predictedAddress = address(uint160(uint256(keccak256(abi.encodePacked(
             bytes1(0xff),
             address(this),
             _salt,
             keccak256(abi.encodePacked(
-                type(FastLaneAuction).creationCode,
-                abi.encode(initial_bid_token),
-                abi.encode(ops)
+                type(FastLaneAuction).creationCode
             )
         ))))));
         isDeployed = predictedAddress.code.length != 0;

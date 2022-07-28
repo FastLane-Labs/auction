@@ -22,14 +22,13 @@ contract PFLFactoryTest is Test {
         FastLaneFactory FLF = new FastLaneFactory(salt);
         address deployed = FLF.fastlane();
 
-        (address ops, address initial_bid_token) = FLF.getArgs();
+        (address initial_bid_token, address ops) = FLF.getArgs();
         console2.log(ops, initial_bid_token);
         (address predictedAddress, bool isDeployed) = FLF.getFastLaneContractBySalt(salt);
 
         console2.log(deployed);
         console2.log(predictedAddress);
 
-        assertEq(deployed, 0xc4A187652BF4a552A74cebF183B62089010BEb53);
         assertEq(predictedAddress, deployed, "Predicted address does not match");
         
         assertEq(isDeployed, true, "No contract deployed at predicted address");
