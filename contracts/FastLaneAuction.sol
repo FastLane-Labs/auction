@@ -104,7 +104,36 @@ abstract contract FastLaneEvents {
     );
 
     event ValidatorPreferencesSet(address indexed validator, uint256 minAutoshipAmount, address validatorPayableAddress);
-}
+
+    // error GeneralFailure();                         // E-000
+
+    // error PermissionPaused();                       // E-101
+    // error PermissionNotOwner();                     // E-102
+    // error PermissionOnlyFromPayorEoa();             // E-103
+    // error PermissionMustBeValidator();              // E-104
+    // error PermissionInvalidOpportunityAddress();    // E-105
+    // error PermissionOnlyGelato();                   // E-106
+
+    // error InequalityInvalidIndex();                 // E-201
+    // error InequalityAddressMismatch();              // E-202
+    // error InequalityBidTooLow();                    // E-203
+    // error InequalityAlreadyTopBidder();             // E-205
+    // error InequalityNotEnoughFunds();               // E-206
+    // error InequalityNothingToRedeem();              // E-207
+    // error InequalityWrongBatchSize();               // E-208
+    // error InequalityValidatorDisabledAtTime();      // E-209
+    // error InequalityOpportunityDisabledAtTime();    // E-210
+    // error InequalityValidatorNotEnabledYet();       // E-211
+    // error InequalityOpportunityNotEnabledYet();     // E-212
+    // error InequalityTooHigh();                      // E-213
+
+    // error TimeNotWhenAuctionIsLive();               // E-301
+    // error TimeNotWhenAuctionIsStopped();            // E-302
+    // error TimeGasNotSuitable();                     // E-307
+
+    // error FundsTransferFailed();                    // E-401
+    // error FundsRemain();                            // E-402
+}   
 
 contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     using Address for address payable;

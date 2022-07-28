@@ -45,10 +45,10 @@ Codes:
     E-300 - [--Unused--]
     E-301 - not when auction is live
     E-302 - not when auction is stopped
-    E-303 - processing must be ongoing
-    E-304 - validator already completely processed
-    E-305 - opp already processed
-    E-306 - wrong stage
+    E-303 - [--Unused--]
+    E-304 - [--Unused--]
+    E-305 - [--Unused--]
+    E-306 - [--Unused--]
     E-307 - gas not suitable
 
 
