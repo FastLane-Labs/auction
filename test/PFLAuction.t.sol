@@ -857,7 +857,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         emit ValidatorWithdrawnBalance(VALIDATOR3, 3, 6000 * (10**18), vm.addr(3), OPS_ADDRESS);
 
 
-        (bool success, = address(FLA).call(execPayload);
+        (bool success,) = address(FLA).call(execPayload);
          assertTrue(success);
         }
     
