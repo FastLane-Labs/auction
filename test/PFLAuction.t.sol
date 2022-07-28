@@ -795,10 +795,10 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         // Verify checker still doesn't run
         {
-         (bool canExec, bytes memory execPayload) = FLA.checker();
+         (bool canExecR1, bytes memory execPayloadR1) = FLA.checker();
 
-         assertTrue(canExec == false);
-         assertTrue(execPayload.length == 0); 
+         assertTrue(canExecR1 == false);
+         assertTrue(execPayloadR1.length == 0); 
         }
         // Turn off checker
 
@@ -809,10 +809,10 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         // Verify checker still doesn't run even if it could from balances
         {
-         (bool canExec, bytes memory execPayload) = FLA.checker();
+         (bool canExecR2, bytes memory execPayloadR2) = FLA.checker();
 
-         assertTrue(canExec == false);
-         assertTrue(execPayload.length == 0); 
+         assertTrue(canExecR2 == false);
+         assertTrue(execPayloadR2.length == 0); 
         }
 
         // New bid on new auction_number so balances of VALIDATOR1 are moved to outstanding.
@@ -1092,10 +1092,10 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         // Verify checker still doesn't run
         {
-         (bool canExec, bytes memory execPayload) = FLA.checker();
+         (bool canExecR1, bytes memory execPayloadR1) = FLA.checker();
 
-         assertTrue(canExec == false);
-         assertTrue(execPayload.length == 0); 
+         assertTrue(canExecR1 == false);
+         assertTrue(execPayloadR1.length == 0); 
         }
         // Turn off checker with gas
 

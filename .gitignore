@@ -11,3 +11,5 @@ artifacts
 typechain-types/
 soljson-*
 .DS_Store
+mnemonic*
+.mnemonic*

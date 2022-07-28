@@ -144,7 +144,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     constructor (address _initial_bid_token,address _ops) {
         setBidToken(_initial_bid_token);
-        ops = _ops;
+        setOps(_ops);
     }
 
     // Gelato Ops Address
@@ -226,7 +226,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // Set Gelato Ops in case it ever changes
-    function setOps(address _ops) external onlyOwner {
+    function setOps(address _ops) public onlyOwner {
         ops = _ops;
         emit OpsSet(_ops);
     }
