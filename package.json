@@ -26,6 +26,8 @@
     "ftrpc": "forge test -vv --ffi",
     "start": "hardhat node --port 8545",
     "anvil": "anvil",
+    "anvil-mumbai": "anvil -f $ALCHEMY_APIKEY_MUMBAI",
+    "anvil-polygon": "anvil -f $ALCHEMY_APIKEY_POLYGON",
     "mythril-local": "myth analyze contracts/FastLaneAuction.sol",
     "mythril-docker": "docker run -it --rm -v$(pwd):/home/mythril mythril/myth -v4 analyze contracts/FastLaneAuction.sol --solc-json mythril.config.json --solv 0.8.15",
     "mappings": "forge remappings > remappings.txt",
@@ -34,7 +36,9 @@
     "gen-docs": "solidity-docgen -i contracts -o docs",
     "slither": "slither . --compile-force-framework foundry --filter-paths 'test|lib'",
     "snapshot": "source .env && forge snapshot -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report --ffi",
-    "sizes": "forge build --sizes"
+    "sizes": "forge build --sizes",
+    "layout": "slither-read-storage contracts/FastLaneAuction.sol 0xbed690780a7d5fd13fe29d3fdcb800733fd62245 --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/ solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 > .storage-layout",
+    "deploy-anvil": "forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",
