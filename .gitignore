@@ -1,0 +1,16 @@
+node_modules
+.env
+coverage
+coverage.json
+typechain
+TODO
+#Hardhat files
+cache
+out
+artifacts
+typechain-types/
+soljson-*
+.DS_Store
+mnemonic*
+.mnemonic*
+report/

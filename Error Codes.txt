@@ -1,0 +1,59 @@
+
+Categories:
+  0. General
+  1. Permission & Control
+  2. Find, Inequalities & Range
+  3. Availability & Time
+  4. Tokens, Funds & Finance
+
+
+
+Codes:
+
+  0. General
+    E-000 - Failure
+    E-001 - Success
+    E-002 - ALREADY_INIT
+    E-003 - Requires Migration
+    E-004 - Already Migrated
+
+  1. Permission & Control
+    E-100 - [--Unused--]
+    E-101 - PAUSED
+    E-102 - NOT_OWNER, transfer of token that is not own
+    E-103 - Only send bids from the payor EOA
+    E-104 - Must be validator
+    E-105 - Invalid opportunity address - Submit via discord
+    E-106 - Only Gelato
+
+  2. Find, Inequalities & Range
+    E-200 - [--Unused--]
+    E-201 - INVALID_INDEX,
+    E-202 - address mismatch
+    E-203 - bid too low
+    E-205 - already top bidder
+    E-206 - not enough funds
+    E-207 - nothing to redeem
+    E-208 - wrong batch size
+    E-209 - Validator disabled at this time
+    E-210 - Opportunity disabled at this time
+    E-211 - Validator not yet enabled
+    E-212 - Opportunity not yet enabled
+    E-213 - Too high
+
+  3. Availability & Time
+    E-300 - [--Unused--]
+    E-301 - not when auction is live
+    E-302 - not when auction is stopped
+    E-303 - [--Unused--]
+    E-304 - [--Unused--]
+    E-305 - [--Unused--]
+    E-306 - [--Unused--]
+    E-307 - gas not suitable
+
+
+  4. Tokens, Funds & Finance
+    E-400 - [--Unused--]
+    E-401 - TRANSFER_FAILED, SEND_FAILED
+    E-402 - funds remain
+

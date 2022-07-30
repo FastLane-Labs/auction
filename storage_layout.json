@@ -1,0 +1,152 @@
+{
+    "_owner": {
+        "type_string": "address",
+        "slot": 0,
+        "size": 160,
+        "offset": 0
+    },
+    "_status": {
+        "type_string": "uint256",
+        "slot": 1,
+        "size": 256,
+        "offset": 0
+    },
+    "name": {
+        "type_string": "string",
+        "slot": 0,
+        "size": 256,
+        "offset": 0
+    },
+    "symbol": {
+        "type_string": "string",
+        "slot": 1,
+        "size": 256,
+        "offset": 0
+    },
+    "totalSupply": {
+        "type_string": "uint256",
+        "slot": 2,
+        "size": 256,
+        "offset": 0
+    },
+    "balanceOf": {
+        "type_string": "mapping(address => uint256)",
+        "slot": 3,
+        "size": 256,
+        "offset": 0
+    },
+    "allowance": {
+        "type_string": "mapping(address => mapping(address => uint256))",
+        "slot": 4,
+        "size": 256,
+        "offset": 0
+    },
+    "nonces": {
+        "type_string": "mapping(address => uint256)",
+        "slot": 5,
+        "size": 256,
+        "offset": 0
+    },
+    "bid_token": {
+        "type_string": "ERC20",
+        "slot": 2,
+        "size": 160,
+        "offset": 0
+    },
+    "ops": {
+        "type_string": "address",
+        "slot": 3,
+        "size": 160,
+        "offset": 0
+    },
+    "bid_increment": {
+        "type_string": "uint256",
+        "slot": 4,
+        "size": 256,
+        "offset": 0
+    },
+    "minAutoShipThreshold": {
+        "type_string": "uint128",
+        "slot": 5,
+        "size": 128,
+        "offset": 0
+    },
+    "auction_number": {
+        "type_string": "uint128",
+        "slot": 5,
+        "size": 128,
+        "offset": 128
+    },
+    "max_gas_price": {
+        "type_string": "uint128",
+        "slot": 6,
+        "size": 128,
+        "offset": 0
+    },
+    "fast_lane_fee": {
+        "type_string": "uint24",
+        "slot": 6,
+        "size": 24,
+        "offset": 128
+    },
+    "autopay_batch_size": {
+        "type_string": "uint16",
+        "slot": 6,
+        "size": 16,
+        "offset": 152
+    },
+    "auction_live": {
+        "type_string": "bool",
+        "slot": 6,
+        "size": 8,
+        "offset": 168
+    },
+    "_paused": {
+        "type_string": "bool",
+        "slot": 6,
+        "size": 8,
+        "offset": 176
+    },
+    "_offchain_checker_disabled": {
+        "type_string": "bool",
+        "slot": 6,
+        "size": 8,
+        "offset": 184
+    },
+    "statusMap": {
+        "type_string": "mapping(address => Status)",
+        "slot": 7,
+        "size": 256,
+        "offset": 0
+    },
+    "auctionsMap": {
+        "type_string": "mapping(uint256 => mapping(address => mapping(address => Bid)))",
+        "slot": 8,
+        "size": 256,
+        "offset": 0
+    },
+    "validatorsActiveAtAuction": {
+        "type_string": "mapping(uint128 => EnumerableSet.AddressSet)",
+        "slot": 9,
+        "size": 256,
+        "offset": 0
+    },
+    "validatorsCheckpoints": {
+        "type_string": "mapping(address => ValidatorBalanceCheckpoint)",
+        "slot": 10,
+        "size": 256,
+        "offset": 0
+    },
+    "validatorsPreferences": {
+        "type_string": "mapping(address => ValidatorPreferences)",
+        "slot": 11,
+        "size": 256,
+        "offset": 0
+    },
+    "outstandingFLBalance": {
+        "type_string": "uint256",
+        "slot": 12,
+        "size": 256,
+        "offset": 0
+    }
+}
