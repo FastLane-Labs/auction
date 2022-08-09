@@ -13,3 +13,4 @@ soljson-*
 .DS_Store
 mnemonic*
 .mnemonic*
+tmp/

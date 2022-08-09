@@ -462,9 +462,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     function _checkRedeemableOutstanding(ValidatorBalanceCheckpoint memory valCheckpoint,uint256 minAmount) internal view returns (bool) {
-        return valCheckpoint.outstandingBalance >= minAmount || (((valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance) >= minAmount) && (valCheckpoint.lastBidReceivedAuction < auction_number));
+        return valCheckpoint.outstandingBalance >= minAmount || ((valCheckpoint.lastBidReceivedAuction < auction_number) && ((valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance) >= minAmount));    
     }
-
     function _redeemOutstanding(address outstandingValidatorWithBalance) internal {
         require(statusMap[outstandingValidatorWithBalance].kind == statusType.VALIDATOR, "FL:E-104");
         ValidatorBalanceCheckpoint storage valCheckpoint = validatorsCheckpoints[outstandingValidatorWithBalance];
