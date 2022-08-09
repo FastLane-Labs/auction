@@ -88,6 +88,8 @@ abstract contract FastLaneEvents {
 
     event AuctionEnded(uint128 indexed auction_number);
 
+    event AuctionStarterSet(address indexed starter);
+
     event WithdrawStuckERC20(
         address indexed receiver,
         address indexed token,
@@ -145,7 +147,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     constructor() {
     }
 
-    function init(address _initial_bid_token, address _ops) external onlyOwner {
+    function init(address _initial_bid_token, address _ops, address _starter) external onlyOwner {
         setBidToken(_initial_bid_token);
         setOps(_ops);
         auction_number = 1;
@@ -154,6 +156,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         setResolverMaxGasPrice(200 gwei);
         setFastlaneFee(50000);
         setAutopayBatchSize(10); 
+        setStarter(_starter);
     }
 
     // Gelato Ops Address
@@ -202,7 +205,8 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     // Auto cleared by EndAuction every round
     uint256 public outstandingFLBalance = 0;
 
-
+    // Start & Stop auction role
+    address public auctionStarter;
 
     function _updateValidatorPreferences(address _target, uint128 _minAutoshipAmount, address _validatorPayableAddress) internal {
         require(_minAutoshipAmount >= minAutoShipThreshold, "FL:E-203");
@@ -281,6 +285,12 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
 
+    // Set auction starter role
+    function setStarter(address _starter) public onlyOwner {
+        auctionStarter = _starter;
+        emit AuctionStarterSet(auctionStarter);
+    }
+
 
 
     // Add an address to the opportunity address array.
@@ -351,7 +361,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     }
 
     // Start auction / Enable bidding
-    function startAuction() external onlyOwner notLiveStage {
+    function startAuction() external onlyStarterOrOwner notLiveStage {
         //enable bidding
         auction_live = true;
         emit AuctionStarted(auction_number);
@@ -359,7 +369,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     function endAuction()
         external
-        onlyOwner
+        onlyStarterOrOwner
         atLiveStage
         nonReentrant
         returns (bool)
@@ -796,6 +806,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     modifier onlyGelato() {
         require(msg.sender == ops, "FL:E-106");
+        _;
+    }
+
+    modifier onlyStarterOrOwner() {
+        require(msg.sender == auctionStarter || msg.sender == owner(), "FL:E-107");
         _;
     }
 }

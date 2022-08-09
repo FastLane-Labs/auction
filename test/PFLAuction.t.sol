@@ -107,7 +107,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA = new FastLaneAuction();
 
         vm.prank(OWNER);
-        FLA.init(MUMBAI_MATIC, OPS_ADDRESS);
+        FLA.init(MUMBAI_MATIC, OPS_ADDRESS, OWNER);
 
         // address owner = FLA.owner();
         // console2.log("FLA OWNER:", owner);
@@ -157,6 +157,23 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         assertTrue(FLA.auction_number() == 2);
         assertEq(FLA.getActivePrivilegesAuctionNumber(), 1);
+
+        address starter = vm.addr(420);
+        vm.expectEmit(true, false, false, false);
+        emit AuctionStarterSet(starter);
+        FLA.setStarter(starter);
+
+        vm.stopPrank();
+        vm.expectRevert(bytes("FL:E-107"));
+        FLA.startAuction();
+
+        vm.startPrank(starter);
+
+        FLA.startAuction();
+        FLA.endAuction();
+
+        assertTrue(FLA.auction_number() == 3);
+        assertEq(FLA.getActivePrivilegesAuctionNumber(), 2);
     }
 
     function testStartProcessStopMultipleEmptyAuctions() public {

@@ -25,6 +25,7 @@ Codes:
     E-104 - Must be validator
     E-105 - Invalid opportunity address - Submit via discord
     E-106 - Only Gelato
+    E-107 - Only owner or starter role
 
   2. Find, Inequalities & Range
     E-200 - [--Unused--]
