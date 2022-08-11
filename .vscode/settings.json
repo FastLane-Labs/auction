@@ -1,4 +1,4 @@
 {
     "solidity.packageDefaultDependenciesContractsDirectory": "contracts",
-    "solidity.defaultCompiler": "embedded",
+    "solidity.defaultCompiler": "remote",
 }

@@ -23,10 +23,10 @@ interface IFastLaneAuction {
     event WithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
     event WithdrawStuckNativeToken(address indexed receiver, uint256 amount);
 
-    struct struct Bid { address a; address b; address c; address d; uint256 e; }
-    struct struct Status { uint128 a; uint128 b; uint8 c; }
-    struct struct ValidatorBalanceCheckpoint { uint256 a; uint256 b; uint128 c; uint128 d; }
-    struct struct ValidatorPreferences { uint256 a; address b; }
+    struct Bid { address a; address b; address c; address d; uint256 e; }
+    struct Status { uint128 a; uint128 b; uint8 c; }
+    struct ValidatorBalanceCheckpoint { uint256 a; uint256 b; uint128 c; uint128 d; }
+    struct ValidatorPreferences { uint256 a; address b; }
 
     function MAX_AUCTION_VALUE() view external returns (uint128);
     function auctionStarter() view external returns (address);
@@ -48,9 +48,9 @@ interface IFastLaneAuction {
     function findLiveAuctionTopBid(address validatorAddress, address opportunityAddress) view external returns (uint256, uint128);
     function getActivePrivilegesAuctionNumber() view external returns (uint128);
     function getAutopayJobs(uint16 batch_size, uint128 auction_index) view external returns (bool hasJobs, address[] memory autopayRecipients);
-    function getCheckpoint(address who) view external returns (struct ValidatorBalanceCheckpoint memory);
-    function getPreferences(address who) view external returns (struct ValidatorPreferences memory);
-    function getStatus(address who) view external returns (struct Status memory);
+    function getCheckpoint(address who) view external returns (ValidatorBalanceCheckpoint memory);
+    function getPreferences(address who) view external returns (ValidatorPreferences memory);
+    function getStatus(address who) view external returns (Status memory);
     function getValidatorsActiveAtAuction(uint128 auction_index) view external returns (address[] memory);
     function init(address _initial_bid_token, address _ops, address _starter) external;
     function max_gas_price() view external returns (uint128);
@@ -73,7 +73,7 @@ interface IFastLaneAuction {
     function setStarter(address _starter) external;
     function setValidatorPreferences(uint128 _minAutoshipAmount, address _validatorPayableAddress) external;
     function startAuction() external;
-    function submitBid(struct Bid memory bid) external;
+    function submitBid(Bid memory bid) external;
     function transferOwnership(address newOwner) external;
     function withdrawStuckERC20(address _tokenAddress) external;
     function withdrawStuckNativeToken(uint256 amount) external;
