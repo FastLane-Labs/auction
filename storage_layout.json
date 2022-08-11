@@ -148,5 +148,11 @@
         "slot": 12,
         "size": 256,
         "offset": 0
+    },
+    "auctionStarter": {
+        "type_string": "address",
+        "slot": 13,
+        "size": 160,
+        "offset": 0
     }
 }

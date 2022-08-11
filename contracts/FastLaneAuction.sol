@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicensed
-pragma solidity ^0.8.15;
+pragma solidity 0.8.15;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -144,14 +144,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     ERC20 public bid_token;
 
-    constructor() {
-    }
-
     function init(address _initial_bid_token, address _ops, address _starter) external onlyOwner {
         setBidToken(_initial_bid_token);
         setOps(_ops);
         auction_number = 1;
-        setMinimumBidIncrement(10* (10**18)); // external onlyOwner {
+        setMinimumBidIncrement(10* (10**18));
         setMinimumAutoShipThreshold(2000* (10**18));
         setResolverMaxGasPrice(200 gwei);
         setFastlaneFee(50000);

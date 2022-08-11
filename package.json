@@ -35,11 +35,15 @@
     "deploy-only": "hardhat deploy --tags",
     "gen-docs": "solidity-docgen -i contracts -o docs",
     "gen-inheritance": "slither contracts/FastLaneAuction.sol --print inheritance-graph",
+    "gen-interface": "cast interface -n IFastLaneAuction -o contracts/interfaces/IFastLaneAuction.sol ./out/FastLaneAuction.sol/FastLaneAuction.json",
+    "gen-abi": "jq '.abi' out/FastLaneAuction.sol/FastLaneAuction.json > contracts/abis/FastLaneAuctionAbi.json",
     "slither": "slither . --compile-force-framework foundry --filter-paths 'test|lib'",
     "snapshot": "source .env && forge snapshot -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report --ffi",
     "sizes": "forge build --sizes",
-    "layout": "slither-read-storage contracts/FastLaneAuction.sol 0xbed690780a7d5fd13fe29d3fdcb800733fd62245 --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/ solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 > .storage-layout",
-    "deploy-anvil": "forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast"
+    "layout": "slither-read-storage contracts/FastLaneAuction.sol 0xc71cf7eb2839d864f356da13ebe22883fcbc9b0f --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/ solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-layout",
+    "deploy-anvil-factory": "source .env && forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast",
+    "deploy-anvil-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --fork-url http://localhost:8545  --private-key $TESTNET_KEY --broadcast",
+    "deploy-live-trial-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --fork-url $ALCHEMY_APIKEY_POLYGON --private-key $TESTNET_KEY --broadcast --etherscan-api-key $POLYGONSCAN_APIKEY --verify --gas-price 50000000000 --with-gas-price 50000000000"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",

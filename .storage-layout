@@ -1,0 +1,240 @@
+INFO:Slither-read-storage:
+Contract Ownable not found in storage layout. It is possibly a parent contract
+
+INFO:Slither-read-storage:
+Contract ReentrancyGuard not found in storage layout. It is possibly a parent contract
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.name with type string is located at slot: 0
+
+INFO:Slither-read-storage:
+Name: name
+Type: string
+Slot: 0
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.symbol with type string is located at slot: 1
+
+INFO:Slither-read-storage:
+Name: symbol
+Type: string
+Slot: 1
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.totalSupply with type uint256 is located at slot: 2
+
+INFO:Slither-read-storage:
+Name: totalSupply
+Type: uint256
+Slot: 2
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.balanceOf with type mapping(address => uint256) is located at slot: 3
+
+INFO:Slither-read-storage:
+Name: balanceOf
+Type: mapping(address => uint256)
+Slot: 3
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.allowance with type mapping(address => mapping(address => uint256)) is located at slot: 4
+
+INFO:Slither-read-storage:
+Name: allowance
+Type: mapping(address => mapping(address => uint256))
+Slot: 4
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.nonces with type mapping(address => uint256) is located at slot: 5
+
+INFO:Slither-read-storage:
+Name: nonces
+Type: mapping(address => uint256)
+Slot: 5
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+Ownable._owner with type address is located at slot: 0
+
+INFO:Slither-read-storage:
+Name: _owner
+Type: address
+Slot: 0
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+ReentrancyGuard._status with type uint256 is located at slot: 1
+
+INFO:Slither-read-storage:
+Name: _status
+Type: uint256
+Slot: 1
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.bid_token with type ERC20 is located at slot: 2
+
+INFO:Slither-read-storage:
+Name: bid_token
+Type: ERC20
+Slot: 2
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.ops with type address is located at slot: 3
+
+INFO:Slither-read-storage:
+Name: ops
+Type: address
+Slot: 3
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.bid_increment with type uint256 is located at slot: 4
+
+INFO:Slither-read-storage:
+Name: bid_increment
+Type: uint256
+Slot: 4
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.minAutoShipThreshold with type uint128 is located at slot: 5
+
+INFO:Slither-read-storage:
+Name: minAutoShipThreshold
+Type: uint128
+Slot: 5
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.auction_number with type uint128 is located at slot: 5
+
+INFO:Slither-read-storage:
+Name: auction_number
+Type: uint128
+Slot: 5
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.max_gas_price with type uint128 is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: max_gas_price
+Type: uint128
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.fast_lane_fee with type uint24 is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: fast_lane_fee
+Type: uint24
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.autopay_batch_size with type uint16 is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: autopay_batch_size
+Type: uint16
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.auction_live with type bool is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: auction_live
+Type: bool
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction._paused with type bool is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: _paused
+Type: bool
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction._offchain_checker_disabled with type bool is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: _offchain_checker_disabled
+Type: bool
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.statusMap with type mapping(address => Status) is located at slot: 7
+
+INFO:Slither-read-storage:
+Name: statusMap
+Type: mapping(address => Status)
+Slot: 7
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.auctionsMap with type mapping(uint256 => mapping(address => mapping(address => Bid))) is located at slot: 8
+
+INFO:Slither-read-storage:
+Name: auctionsMap
+Type: mapping(uint256 => mapping(address => mapping(address => Bid)))
+Slot: 8
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.validatorsActiveAtAuction with type mapping(uint128 => EnumerableSet.AddressSet) is located at slot: 9
+
+INFO:Slither-read-storage:
+Name: validatorsActiveAtAuction
+Type: mapping(uint128 => EnumerableSet.AddressSet)
+Slot: 9
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.validatorsCheckpoints with type mapping(address => ValidatorBalanceCheckpoint) is located at slot: 10
+
+INFO:Slither-read-storage:
+Name: validatorsCheckpoints
+Type: mapping(address => ValidatorBalanceCheckpoint)
+Slot: 10
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.validatorsPreferences with type mapping(address => ValidatorPreferences) is located at slot: 11
+
+INFO:Slither-read-storage:
+Name: validatorsPreferences
+Type: mapping(address => ValidatorPreferences)
+Slot: 11
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.outstandingFLBalance with type uint256 is located at slot: 12
+
+INFO:Slither-read-storage:
+Name: outstandingFLBalance
+Type: uint256
+Slot: 12
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuction'
+FastLaneAuction.auctionStarter with type address is located at slot: 13
+
+INFO:Slither-read-storage:
+Name: auctionStarter
+Type: address
+Slot: 13
+

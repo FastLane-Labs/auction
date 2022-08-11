@@ -1,4 +1,5 @@
-pragma solidity ^0.8.15;
+//SPDX-License-Identifier: Unlicensed
+pragma solidity 0.8.15;
 
 import {FastLaneAuction} from "./FastLaneAuction.sol";
 

@@ -1,4 +1,4 @@
 {
-    "solidity.defaultCompiler": "localNodeModule",
     "solidity.packageDefaultDependenciesContractsDirectory": "contracts",
+    "solidity.defaultCompiler": "embedded",
 }
