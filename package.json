@@ -38,7 +38,8 @@
     "gen-interface": "cast interface -n IFastLaneAuction -o contracts/interfaces/IFastLaneAuction.sol ./out/FastLaneAuction.sol/FastLaneAuction.json",
     "gen-abi": "jq '.abi' out/FastLaneAuction.sol/FastLaneAuction.json > contracts/abis/FastLaneAuctionAbi.json",
     "slither": "slither . --compile-force-framework foundry --filter-paths 'test|lib'",
-    "snapshot": "source .env && forge snapshot -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report --ffi",
+    "snapshot": "source .env && forge snapshot -vvv --gas-report",
+    "gen-prepush": "yarn gen-inheritance && yarn gen-interface && yarn gen-abi",
     "sizes": "forge build --sizes",
     "layout": "slither-read-storage contracts/FastLaneAuction.sol 0xc71cf7eb2839d864f356da13ebe22883fcbc9b0f --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/ solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-layout",
     "deploy-anvil-factory": "source .env && forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast",
@@ -66,7 +67,8 @@
     "solhint": "^3.3.7",
     "solhint-plugin-prettier": "^0.0.5",
     "solidity-coverage": "^0.7.21",
-    "solidity-docgen": "^0.6.0-beta.16",
+    "solidity-docgen": "^0.6.0-beta.25",
+    "typechain": "^8.1.0",
     "typescript": "^4.7.3"
   },
   "dependencies": {

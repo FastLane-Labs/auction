@@ -26,7 +26,7 @@ contract FastLaneFactory {
         require(fastlane != address(0), "Wrong init");
         emit FastLaneCreated(fastlane);
 
-        FastLaneAuction(fastlane).init(_initial_bid_token, _ops, msg.sender);
+        FastLaneAuction(fastlane).initialSetupAuction(_initial_bid_token, _ops, msg.sender);
         // Give back to deployer
         FastLaneAuction(fastlane).transferOwnership(msg.sender);
     }

@@ -107,7 +107,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA = new FastLaneAuction();
 
         vm.prank(OWNER);
-        FLA.init(MUMBAI_MATIC, OPS_ADDRESS, OWNER);
+        FLA.initialSetupAuction(MUMBAI_MATIC, OPS_ADDRESS, OWNER);
 
         // address owner = FLA.owner();
         // console2.log("FLA OWNER:", owner);
@@ -164,7 +164,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         FLA.setStarter(starter);
 
         vm.stopPrank();
-        vm.expectRevert(bytes("FL:E-107"));
+        vm.expectRevert(FastLaneEvents.PermissionNotOwnerNorStarter.selector);
         FLA.startAuction();
 
         vm.startPrank(starter);
@@ -219,16 +219,16 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertTrue(vCheck.lastBidReceivedAuction == 0);
 
         Status memory st = FLA.getStatus(OPPORTUNITY1);
-        assertTrue(st.activeAtAuction == 1);
-        assertTrue(st.inactiveAtAuction == FLA.MAX_AUCTION_VALUE());
+        assertTrue(st.activeAtAuctionRound == 1);
+        assertTrue(st.inactiveAtAuctionRound == FLA.MAX_AUCTION_VALUE());
         assertTrue(st.kind == statusType.OPPORTUNITY);
 
         FLA.startAuction();
         FLA.enableValidatorAddress(VALIDATOR2);
         Status memory stVal2 = FLA.getStatus(VALIDATOR2);
         
-        assertTrue(stVal2.activeAtAuction == 2);
-        assertTrue(stVal2.inactiveAtAuction == FLA.MAX_AUCTION_VALUE());
+        assertTrue(stVal2.activeAtAuctionRound == 2);
+        assertTrue(stVal2.inactiveAtAuctionRound == FLA.MAX_AUCTION_VALUE());
         assertTrue(stVal2.kind == statusType.VALIDATOR);
 
     }
@@ -263,17 +263,17 @@ contract PFLAuctionTest is Test, PFLHelper {
         Bid memory auctionRightOutbidsTopBidderFirstPair = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER2, SEARCHER_ADDRESS2, FLA.bid_increment() * 2);
        
         // Bid should be coming from EOA that's paying aka BIDDER1 from line 186.
-        vm.expectRevert(bytes("FL:E-103"));
+        vm.expectRevert(FastLaneEvents.PermissionOnlyFromPayorEoa.selector);
         FLA.submitBid(auctionWrongSearchableBid);
         
         // Attempts to bid from OPPORTUNITY2 which has not been enabled yet
-        vm.expectRevert(bytes("FL:E-104"));
+        vm.expectRevert(FastLaneEvents.PermissionMustBeValidator.selector);
         FLA.submitBid(auctionWrongValidatorBid);
         
-        vm.expectRevert(bytes("FL:E-105"));
+        vm.expectRevert(FastLaneEvents.PermissionInvalidOpportunityAddress.selector);
         FLA.submitBid(auctionWrongOpportunityBid);
 
-        vm.expectRevert(bytes("FL:E-203"));
+        vm.expectRevert(FastLaneEvents.InequalityTooLow.selector);
         FLA.submitBid(auctionWrongIncrementBid);
 
         vm.stopPrank(); // Not BIDDER1 anymore
@@ -317,10 +317,10 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertEq(wMatic.balanceOf(auctionRightMinimumBidWithSearcher.searcherPayableAddress), balanceBefore - auctionRightMinimumBidWithSearcher.bidAmount);
         assertEq(wMatic.balanceOf(address(FLA)), auctionRightMinimumBidWithSearcher.bidAmount);
 
-        vm.expectRevert(bytes("FL:E-203"));
+        vm.expectRevert(FastLaneEvents.InequalityTooLow.selector);
         FLA.submitBid(auctionWrongDoubleSelfBidWithSearcherTooLow);
 
-        vm.expectRevert(bytes("FL:E-204"));
+        vm.expectRevert(FastLaneEvents.InequalityAlreadyTopBidder.selector);
         FLA.submitBid(auctionWrongDoubleSelfBidWithSearcherEnough);
   
 
@@ -330,10 +330,10 @@ contract PFLAuctionTest is Test, PFLHelper {
         // First we don't top it, then we do, but with an empty bank account. Both reverting.
         vm.startPrank(auctionWrongBrokeBidderBidTooLow.searcherPayableAddress);
         wMatic.approve(address(FLA), 2**256 - 1);
-        vm.expectRevert(bytes("FL:E-203"));
+        vm.expectRevert(FastLaneEvents.InequalityTooLow.selector);
         FLA.submitBid(auctionWrongBrokeBidderBidTooLow);
        
-        vm.expectRevert(bytes("FL:E-206"));
+        vm.expectRevert(FastLaneEvents.InequalityNotEnoughFunds.selector);
         FLA.submitBid(auctionWrongBrokeBidderBidEnough);
 
         vm.stopPrank();
@@ -464,12 +464,13 @@ contract PFLAuctionTest is Test, PFLHelper {
 
 
         vm.prank(BIDDER3);
-        vm.expectRevert(bytes("FL:E-104"));
+        vm.expectRevert(FastLaneEvents.PermissionMustBeValidator.selector);
         FLA.redeemOutstandingBalance(BIDDER3);
 
         // Try to get the cash before the end
         vm.prank(VALIDATOR1);
-        vm.expectRevert(bytes("FL:E-207"));
+        vm.expectRevert(FastLaneEvents.InequalityNothingToRedeem.selector);
+
         FLA.redeemOutstandingBalance(VALIDATOR1);
 
         vm.prank(OWNER);
@@ -484,7 +485,8 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertTrue(wMatic.balanceOf(VALIDATOR1) == vCheck.pendingBalanceAtlastBid);
 
         // Only once
-        vm.expectRevert(bytes("FL:E-207"));
+        vm.expectRevert(FastLaneEvents.InequalityNothingToRedeem.selector);
+
         FLA.redeemOutstandingBalance(VALIDATOR1);
 
         vm.stopPrank();
@@ -522,7 +524,8 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertTrue(wMatic.balanceOf(VALIDATOR3) == vCheckLate.pendingBalanceAtlastBid + vCheckLate.outstandingBalance);
 
         // Only once
-        vm.expectRevert(bytes("FL:E-207"));
+        vm.expectRevert(FastLaneEvents.InequalityNothingToRedeem.selector);
+
         FLA.redeemOutstandingBalance(VALIDATOR1);
 
         // Finish draining validator4 so everyone is paid
@@ -540,7 +543,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.stopPrank();
         vm.startPrank(bidTooLow.searcherPayableAddress);
         wMatic.approve(address(FLA), 2**256 - 1);
-        vm.expectRevert(bytes("FL:E-203"));
+        vm.expectRevert(FastLaneEvents.InequalityTooLow.selector);
         FLA.submitBid(bidTooLow);
         vm.stopPrank();
         vm.prank(OWNER);
@@ -562,7 +565,7 @@ contract PFLAuctionTest is Test, PFLHelper {
 
 
         // Disabling unseen opportunity should revert
-        vm.expectRevert(bytes("FL:E-105"));
+        vm.expectRevert(FastLaneEvents.PermissionInvalidOpportunityAddress.selector);
         FLA.disableOpportunityAddress(OPPORTUNITY4);
 
         // Re-enable 1 while not live
@@ -570,7 +573,7 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         FLA.enableValidatorAddress(VALIDATOR1);
 
-        vm.expectRevert(bytes("FL:E-104"));
+        vm.expectRevert(FastLaneEvents.PermissionMustBeValidator.selector);
         FLA.disableValidatorAddress(VALIDATOR2);
 
 
@@ -602,7 +605,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         // Not anymore
         vm.stopPrank();
         vm.startPrank(SEARCHER_ADDRESS1);
-        vm.expectRevert(bytes("FL:E-209"));
+        vm.expectRevert(FastLaneEvents.InequalityValidatorDisabledAtTime.selector);
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
         vm.stopPrank();
@@ -620,7 +623,7 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         vm.stopPrank();
         vm.startPrank(SEARCHER_ADDRESS1);
-        vm.expectRevert(bytes("FL:E-209"));
+        vm.expectRevert(FastLaneEvents.InequalityValidatorDisabledAtTime.selector);
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
         // Re-enable while live
@@ -632,7 +635,8 @@ contract PFLAuctionTest is Test, PFLHelper {
         // Should still be locked until next auction
         vm.stopPrank();
         vm.startPrank(SEARCHER_ADDRESS1);
-        vm.expectRevert(bytes("FL:E-211"));
+        vm.expectRevert(FastLaneEvents.InequalityValidatorNotEnabledYet.selector);
+
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
         vm.stopPrank();
@@ -652,13 +656,15 @@ contract PFLAuctionTest is Test, PFLHelper {
         
         vm.stopPrank();
         vm.prank(SEARCHER_ADDRESS1);
-        vm.expectRevert(bytes("FL:E-210"));
+        vm.expectRevert(FastLaneEvents.InequalityOpportunityDisabledAtTime.selector);
+
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
         vm.prank(OWNER);
         FLA.enableOpportunityAddress(OPPORTUNITY1);
         vm.prank(SEARCHER_ADDRESS1);
-        vm.expectRevert(bytes("FL:E-212"));
+        vm.expectRevert(FastLaneEvents.InequalityOpportunityNotEnabledYet.selector);
+
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
 
     }
@@ -669,7 +675,7 @@ contract PFLAuctionTest is Test, PFLHelper {
         emit PausedStateSet(true);
         FLA.setPausedState(true);
         FLA.startAuction();
-        vm.expectRevert(bytes("FL:E-101"));
+        vm.expectRevert(FastLaneEvents.PermissionPaused.selector);
         Bid memory auctionRightMinimumBidWithSearcher = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, 2000*10**18);
         FLA.submitBid(auctionRightMinimumBidWithSearcher);
     }
@@ -693,19 +699,19 @@ contract PFLAuctionTest is Test, PFLHelper {
         vm.stopPrank();
 
         vm.prank(BIDDER1);
-        vm.expectRevert(bytes("FL:E-104"));
+        vm.expectRevert(FastLaneEvents.PermissionMustBeValidator.selector);
         FLA.setValidatorPreferences(0, address(0));
 
 
         vm.startPrank(VALIDATOR1);
         address validatorPayableUpdated = 0x8e5f4552091a69125d5DfCb7B8C2659029395Bdf;
         uint128 updatedAmountTooLow = 4000;
-        vm.expectRevert(bytes("FL:E-203"));
+        vm.expectRevert(FastLaneEvents.InequalityTooLow.selector);
         FLA.setValidatorPreferences(updatedAmountTooLow, validatorPayableUpdated);
 
         uint128 updatedAmount = 5000*10**18;
 
-        vm.expectRevert(bytes("FL:E-202"));
+        vm.expectRevert(FastLaneEvents.InequalityAddressMismatch.selector);
         FLA.setValidatorPreferences(updatedAmount, address(FLA));
 
 
@@ -808,9 +814,9 @@ contract PFLAuctionTest is Test, PFLHelper {
          Bid memory bid4 = Bid(VALIDATOR4, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, minAutoship);
         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid4);
 
-        // Check validatorsActiveAtAuction
+        // Check validatorsactiveAtAuctionRound
         {
-        address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+        address[] memory prevRoundAddrs = FLA.getValidatorsactiveAtAuctionRound(2);
 
         // Should have 4 validators active
         assertEq(prevRoundAddrs.length,4);
@@ -939,9 +945,9 @@ contract PFLAuctionTest is Test, PFLHelper {
          Bid memory bid2 = Bid(VALIDATOR2, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount2/2);
         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid2);
 
-        // Check validatorsActiveAtAuction
+        // Check validatorsactiveAtAuctionRound
         {
-        address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+        address[] memory prevRoundAddrs = FLA.getValidatorsactiveAtAuctionRound(2);
 
         // Should have 2 validators active
         assertEq(prevRoundAddrs.length,2);
@@ -1064,6 +1070,12 @@ contract PFLAuctionTest is Test, PFLHelper {
 
     }
 
+    function testReinitSetup() public {
+        vm.expectRevert(FastLaneEvents.TimeAlreadyInit.selector);
+        vm.prank(OWNER);
+        FLA.initialSetupAuction(vm.addr(1),OPS_ADDRESS, VALIDATOR2);
+    }
+
     function testAutoshipThreshold() public {
         vm.startPrank(OWNER);
         uint128 minAutoship = 10000*10**18;
@@ -1105,9 +1117,9 @@ contract PFLAuctionTest is Test, PFLHelper {
          Bid memory bid1 = Bid(VALIDATOR1, OPPORTUNITY1, BIDDER1, SEARCHER_ADDRESS1, amount1);
         _approveAndSubmitBid(SEARCHER_ADDRESS1,bid1);
 
-        // Check validatorsActiveAtAuction
+        // Check validatorsactiveAtAuctionRound
         {
-        address[] memory prevRoundAddrs = FLA.getValidatorsActiveAtAuction(2);
+        address[] memory prevRoundAddrs = FLA.getValidatorsactiveAtAuctionRound(2);
 
         // Should have 1 validator active
         assertEq(prevRoundAddrs.length,1);
@@ -1145,7 +1157,8 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         address[] memory recipients = new address[](2);
         recipients[1] = vm.addr(1);
-        vm.expectRevert(bytes("FL:E-307"));
+        vm.expectRevert(FastLaneEvents.TimeGasNotSuitable.selector);
+
         FLA.processAutopayJobs(recipients);
         
         vm.stopPrank();
@@ -1175,14 +1188,21 @@ contract PFLAuctionTest is Test, PFLHelper {
         assertEq(token.balanceOf(OWNER), 1e18);
         assertEq(token.balanceOf(address(FLA)), 0);
 
-        vm.expectRevert(bytes("FL:E-102"));
+        vm.expectRevert(FastLaneEvents.InequalityWrongToken.selector);
         FLA.withdrawStuckERC20(address(wMatic));
+    }
+
+    function testBidToken() public {
+        vm.startPrank(OWNER);
+        address badToken = address(0);
+        vm.expectRevert(FastLaneEvents.GeneralFailure.selector);
+        FLA.setBidToken(badToken);
     }
 
     function testFeeUpdate() public {
         vm.startPrank(OWNER);
         uint24 abusiveFee = 1300000;
-        vm.expectRevert(bytes("FL:E-213"));
+        vm.expectRevert(FastLaneEvents.InequalityTooHigh.selector);
         FLA.setFastlaneFee(abusiveFee);
 
         uint24 fee = 50000*2; // 10%

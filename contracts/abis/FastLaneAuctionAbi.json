@@ -1,5 +1,130 @@
 [
   {
+    "inputs": [],
+    "name": "GeneralFailure",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityAddressMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityAlreadyTopBidder",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityInvalidIndex",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityNotEnoughFunds",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityNothingToRedeem",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityOpportunityDisabledAtTime",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityOpportunityNotEnabledYet",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityTooHigh",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityTooLow",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityValidatorDisabledAtTime",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityValidatorNotEnabledYet",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityWrongBatchSize",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InequalityWrongToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionInvalidOpportunityAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionMustBeValidator",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionNotOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionNotOwnerNorStarter",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionOnlyFromPayorEoa",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionOnlyOps",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PermissionPaused",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeAlreadyInit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeGasNotSuitable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeNotWhenAuctionIsLive",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeNotWhenAuctionIsStopped",
+    "type": "error"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -395,6 +520,19 @@
   },
   {
     "inputs": [],
+    "name": "auctionInitialized",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "auctionStarter",
     "outputs": [
       {
@@ -493,7 +631,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "opportunityAddress",
+        "name": "_opportunityAddress",
         "type": "address"
       }
     ],
@@ -519,7 +657,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "opportunityAddress",
+        "name": "_opportunityAddress",
         "type": "address"
       }
     ],
@@ -820,12 +958,12 @@
         "components": [
           {
             "internalType": "uint128",
-            "name": "activeAtAuction",
+            "name": "activeAtAuctionRound",
             "type": "uint128"
           },
           {
             "internalType": "uint128",
-            "name": "inactiveAtAuction",
+            "name": "inactiveAtAuctionRound",
             "type": "uint128"
           },
           {
@@ -850,7 +988,7 @@
         "type": "uint128"
       }
     ],
-    "name": "getValidatorsActiveAtAuction",
+    "name": "getValidatorsactiveAtAuctionRound",
     "outputs": [
       {
         "internalType": "address[]",
@@ -879,7 +1017,7 @@
         "type": "address"
       }
     ],
-    "name": "init",
+    "name": "initialSetupAuction",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -966,7 +1104,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "outstandingValidatorWithBalance",
+        "name": "_outstandingValidatorWithBalance",
         "type": "address"
       }
     ],
@@ -986,7 +1124,7 @@
     "inputs": [
       {
         "internalType": "uint16",
-        "name": "size",
+        "name": "_size",
         "type": "uint16"
       }
     ],
@@ -1051,7 +1189,7 @@
     "inputs": [
       {
         "internalType": "bool",
-        "name": "state",
+        "name": "_state",
         "type": "bool"
       }
     ],
@@ -1077,7 +1215,7 @@
     "inputs": [
       {
         "internalType": "bool",
-        "name": "state",
+        "name": "_state",
         "type": "bool"
       }
     ],
@@ -1207,7 +1345,7 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "amount",
+        "name": "_amount",
         "type": "uint256"
       }
     ],

@@ -125,7 +125,7 @@
         "size": 256,
         "offset": 0
     },
-    "validatorsActiveAtAuction": {
+    "validatorsactiveAtAuctionRound": {
         "type_string": "mapping(uint128 => EnumerableSet.AddressSet)",
         "slot": 9,
         "size": 256,

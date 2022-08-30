@@ -195,10 +195,10 @@ Slot: 8
 
 INFO:Slither-read-storage:
 Contract 'FastLaneAuction'
-FastLaneAuction.validatorsActiveAtAuction with type mapping(uint128 => EnumerableSet.AddressSet) is located at slot: 9
+FastLaneAuction.validatorsactiveAtAuctionRound with type mapping(uint128 => EnumerableSet.AddressSet) is located at slot: 9
 
 INFO:Slither-read-storage:
-Name: validatorsActiveAtAuction
+Name: validatorsactiveAtAuctionRound
 Type: mapping(uint128 => EnumerableSet.AddressSet)
 Slot: 9
 

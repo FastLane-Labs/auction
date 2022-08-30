@@ -8,6 +8,13 @@ import "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 
 import "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
 
+/// @notice Auction bid struct
+/// @dev Current owners need to allow opportunity and validator addresses to participate beforehands
+/// @param validatorAddress Validator selected for the bid
+/// @param opportunityAddress Opportunity selected for the bid
+/// @param searcherContractAddress Contract that will be submitting transactions to `opportunityAddress`
+/// @param searcherPayableAddress Searcher submitting the bid (currently restricted to msg.sender)
+/// @param bidAmount Value of the bid
 struct Bid {
     address validatorAddress;
     address opportunityAddress;
@@ -16,31 +23,42 @@ struct Bid {
     uint256 bidAmount;
 }
 
+/// @notice The type of a Status struct validator or opportunity
 enum statusType {
     INVALID, // 0
     VALIDATOR, // 1 
     OPPORTUNITY // 2
 }
 
-
+/// @notice Status of validator or opportunity
+/// @dev Status cannot be flipped for the current round, an opportunity or validator set up as inactive will always be able to receive bids until the end of the round it was triggered.
+/// @param activeAtAuctionRound Auction round where entity will be enabled
+/// @param inactiveAtAuctionRound Auction round at which entity will be disabled
+/// @param kind From {statusType} 
 struct Status {
-    uint128 activeAtAuction;
-    uint128 inactiveAtAuction;
+    uint128 activeAtAuctionRound;
+    uint128 inactiveAtAuctionRound;
     statusType kind;  
 }
 
-struct ValidatorBalanceCheckpoint {
-    // Deposits at {lastBidReceivedAuction}
-    uint256 pendingBalanceAtlastBid;
 
-    // Balance accumulated between {lastWithdrawnAuction} and {lastBidReceivedAuction}
+/// @notice Validator Balance Checkpoint
+/// @dev By default checkpoints are checked every block by ops to see if there is amount to be paid ( > minAmount or > minAmoutForValidator)
+/// @param pendingBalanceAtlastBid Deposits at `lastBidReceivedAuction`
+/// @param outstandingBalance Balance accumulated between `lastWithdrawnAuction` and `lastBidReceivedAuction`
+/// @param lastWithdrawnAuction Round when the validator withdrew
+/// @param lastBidReceivedAuction Last auction around a bid was received for this validator
+struct ValidatorBalanceCheckpoint {
+    uint256 pendingBalanceAtlastBid;
     uint256 outstandingBalance;
     uint128 lastWithdrawnAuction;
-
-    // Last auction a bid was received for this validator
     uint128 lastBidReceivedAuction;
 }
 
+/// @notice Validator Balances Shipping Preferences
+/// @dev minAutoshipAmount will always be superseeded by contract level minAutoShipThreshold if lower
+/// @param minAutoshipAmount Validator desired autoship threshold 
+/// @param validatorPayableAddress Validator desired payable address
 struct ValidatorPreferences {
     uint256 minAutoshipAmount;
     address validatorPayableAddress;
@@ -107,36 +125,39 @@ abstract contract FastLaneEvents {
 
     event ValidatorPreferencesSet(address indexed validator, uint256 minAutoshipAmount, address validatorPayableAddress);
 
-    // error GeneralFailure();                         // E-000
+    error GeneralFailure();                            // E-000 // 0x2192efec
 
-    // error PermissionPaused();                       // E-101
-    // error PermissionNotOwner();                     // E-102
-    // error PermissionOnlyFromPayorEoa();             // E-103
-    // error PermissionMustBeValidator();              // E-104
-    // error PermissionInvalidOpportunityAddress();    // E-105
-    // error PermissionOnlyGelato();                   // E-106
+    error PermissionPaused();                          // E-101 // 0xeaa8b1af
+    error PermissionNotOwner();                        // E-102 // 0xf599ea9e
+    error PermissionOnlyFromPayorEoa();                // E-103 // 0x13272381
+    error PermissionMustBeValidator();                 // E-104 // 0x4f4e9f3f
+    error PermissionInvalidOpportunityAddress();       // E-105 // 0xcf440a8e
+    error PermissionOnlyOps();                         // E-106 // 0x68da148f
+    error PermissionNotOwnerNorStarter();              // E-107 // 0x8b4fb0bf
 
-    // error InequalityInvalidIndex();                 // E-201
-    // error InequalityAddressMismatch();              // E-202
-    // error InequalityBidTooLow();                    // E-203
-    // error InequalityAlreadyTopBidder();             // E-205
-    // error InequalityNotEnoughFunds();               // E-206
-    // error InequalityNothingToRedeem();              // E-207
-    // error InequalityWrongBatchSize();               // E-208
-    // error InequalityValidatorDisabledAtTime();      // E-209
-    // error InequalityOpportunityDisabledAtTime();    // E-210
-    // error InequalityValidatorNotEnabledYet();       // E-211
-    // error InequalityOpportunityNotEnabledYet();     // E-212
-    // error InequalityTooHigh();                      // E-213
+    error InequalityInvalidIndex();                    // E-201 // 0x102bd785
+    error InequalityAddressMismatch();                 // E-202 // 0x17de231a
+    error InequalityTooLow();                          // E-203 // 0x470b0adc
+    error InequalityAlreadyTopBidder();                // E-204 // 0xeb14a775
+    error InequalityNotEnoughFunds();                  // E-206 // 0x4587f24a
+    error InequalityNothingToRedeem();                 // E-207 // 0x77a3b272
+    error InequalityValidatorDisabledAtTime();         // E-209 // 0xa1ec46e6
+    error InequalityOpportunityDisabledAtTime();       // E-210 // 0x8c81d8e9
+    error InequalityValidatorNotEnabledYet();          // E-211 // 0x7a956c2e
+    error InequalityOpportunityNotEnabledYet();        // E-212 // 0x333108d7
+    error InequalityTooHigh();                         // E-213 // 0xfd11d092
+    error InequalityWrongToken();                      // E-214 // 0xc9db890c
 
-    // error TimeNotWhenAuctionIsLive();               // E-301
-    // error TimeNotWhenAuctionIsStopped();            // E-302
-    // error TimeGasNotSuitable();                     // E-307
+    error TimeNotWhenAuctionIsLive();                  // E-301 // 0x76a79c50
+    error TimeNotWhenAuctionIsStopped();               // E-302 // 0x4eaf4896
+    error TimeGasNotSuitable();                        // E-307 // 0xdd980aae
+    error TimeAlreadyInit();                           // E-308 // 0xef34ca5c
 
-    // error FundsTransferFailed();                    // E-401
-    // error FundsRemain();                            // E-402
 }   
 
+/// @title FastLaneAuction
+/// @author Elyx0
+/// @notice Fastlane.finance auction contract
 contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     using Address for address payable;
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -144,7 +165,14 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     ERC20 public bid_token;
 
-    function init(address _initial_bid_token, address _ops, address _starter) external onlyOwner {
+
+    /// @notice Initializes the auction
+    /// @dev Also sets bid increment, resolver max gas, fee, autoship and batch size.
+    /// @param _initial_bid_token ERC20 address to use for the auction
+    /// @param _ops Operators address for crontabs
+    /// @param _starter Address allowed to start/stop rounds
+    function initialSetupAuction(address _initial_bid_token, address _ops, address _starter) external onlyOwner {
+        if (auctionInitialized) revert TimeAlreadyInit();
         setBidToken(_initial_bid_token);
         setOps(_ops);
         auction_number = 1;
@@ -154,60 +182,77 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         setFastlaneFee(50000);
         setAutopayBatchSize(10); 
         setStarter(_starter);
+        auctionInitialized = true;
     }
 
-    // Gelato Ops Address
+    /// @notice Gelato Ops Address
     address public ops;
 
-    //Variables mutable by owner via function calls
-    uint256 public bid_increment = 10 * (10**18); //minimum bid increment in WMATIC
+    // Variables mutable by owner via function calls
+
+    /// @notice Minimum bid increment required on top of from the current top bid for a pair
+    uint256 public bid_increment = 10 * (10**18);
 
 
-    // Minimum for Validator Preferences
+    /// @notice Minimum amount for Validator Preferences to get the profits airdropped
     uint128 public minAutoShipThreshold = 2000 * (10**18); // Validators balances > 2k should get auto-transfered
 
-    // Offset by 1 so payouts are at 0
+    /// @notice Current auction round, 
+    /// @dev Offset by 1 so payouts are at 0. In general payouts are for round n-1.
     uint128 public auction_number = 1;
 
     uint128 public constant MAX_AUCTION_VALUE = type(uint128).max; // 2**128 - 1
 
+    /// @notice Max gas price for ops to attempt autopaying pending balances over threshold
     uint128 public max_gas_price = 200 gwei;
 
-    // Out of one million
+    /// @notice Fee (out of one million)
     uint24 public fast_lane_fee = 50000; 
 
-    // Number of validators to pay per gelato action
+    /// @notice Number of validators to pay per gelato action
     uint16 public autopay_batch_size = 10;
 
+    /// @notice Auction live status
     bool public auction_live = false;
-    bool internal _paused = false;
+
+    bool internal paused = false;
+
+    /// @notice Ops crontab disabled
     bool internal _offchain_checker_disabled = false;
 
-    // Tracks status of seen addresses and when they become eligible for bidding
+    /// @notice Tracks status of seen addresses and when they become eligible for bidding
     mapping(address => Status) internal statusMap;
 
-    // Tracks bids per auction_number per pair
+    /// @notice Tracks bids per auction_number per pair
     mapping(uint256 => mapping(address => mapping(address => Bid)))
         internal auctionsMap;
 
-    // Validators participating in the auction for a round
-    mapping(uint128 => EnumerableSet.AddressSet) internal validatorsActiveAtAuction;
+    /// @notice Validators participating in the auction for a round
+    mapping(uint128 => EnumerableSet.AddressSet) internal validatorsactiveAtAuctionRound;
 
-    // Validators cuts to be withdraw or dispatched regularly
+    /// @notice Validators cuts to be withdraw or dispatched regularly
     mapping(address => ValidatorBalanceCheckpoint) internal validatorsCheckpoints;
 
-    // Validator preferences for payment and min autoship amount
+    /// @notice Validator preferences for payment and min autoship amount
     mapping(address => ValidatorPreferences) internal validatorsPreferences;
 
-    // Auto cleared by EndAuction every round
+    /// @notice Auto cleared by EndAuction every round
     uint256 public outstandingFLBalance = 0;
 
-    // Start & Stop auction role
+    /// @notice Start & Stop auction role
     address public auctionStarter;
 
+    /// @notice Auction was initialized
+    bool public auctionInitialized = false;
+
+    /// @notice Internally updates a validator preference
+    /// @dev Only callable by an already setup validator, and only for themselves via {setValidatorPreferences}
+    /// @param _target Validator to update
+    /// @param _minAutoshipAmount Amount desired before autoship kicks in
+    /// @param _validatorPayableAddress Address the auction proceeds will go to for this validator
     function _updateValidatorPreferences(address _target, uint128 _minAutoshipAmount, address _validatorPayableAddress) internal {
-        require(_minAutoshipAmount >= minAutoShipThreshold, "FL:E-203");
-        require((_validatorPayableAddress != address(0)) && (_validatorPayableAddress != address(this)), "FL:E-202");
+        if(_minAutoshipAmount < minAutoShipThreshold) revert InequalityTooLow();
+        if((_validatorPayableAddress == address(0)) || (_validatorPayableAddress == address(this))) revert InequalityAddressMismatch();
         
         validatorsPreferences[_target] = ValidatorPreferences(_minAutoshipAmount, _validatorPayableAddress);
         emit ValidatorPreferencesSet(_target,_minAutoshipAmount, _validatorPayableAddress);
@@ -217,6 +262,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     |         Validator-only            |
     |__________________________________*/
 
+    /// @notice Internally updates a validator preference
+    /// @dev Only callable by an already setup validator via {onlyValidator}
+    /// @param _minAutoshipAmount Amount desired before autoship kicks in
+    /// @param _validatorPayableAddress Address the auction proceeds will go to for this validator
     function setValidatorPreferences(uint128 _minAutoshipAmount, address _validatorPayableAddress) external onlyValidator {
         _updateValidatorPreferences(msg.sender, _minAutoshipAmount, _validatorPayableAddress);
     }
@@ -225,97 +274,115 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     |             Owner-only            |
     |__________________________________*/
 
-    function setPausedState(bool state) external onlyOwner {
-        _paused = state;
-        emit PausedStateSet(state);
+    /// @notice Defines the paused state of the Auction
+    /// @dev Only owner
+    /// @param _state New state
+    function setPausedState(bool _state) external onlyOwner {
+        paused = _state;
+        emit PausedStateSet(_state);
     }
 
-    // Set minimum bid increment to avoid people bidding up by .000000001
+    /// @notice Sets minimum bid increment 
+    /// @dev Used to avoid people micro-bidding up by .000000001
+    /// @param _bid_increment New increment
     function setMinimumBidIncrement(uint256 _bid_increment) public onlyOwner {
         bid_increment = _bid_increment;
         emit MinimumBidIncrementSet(_bid_increment);
     }
 
-    // Set Gelato Ops in case it ever changes
+    /// @notice Sets address of Ops
+    /// @dev Ops is allowed to call {processAutopayJobs}
+    /// @param _ops New operator of crontabs
     function setOps(address _ops) public onlyOwner {
         ops = _ops;
         emit OpsSet(_ops);
     }
 
-    // Set minimum balance
+    /// @notice Sets minimum balance a checkpoint must meet to be considered for autoship
+    /// @dev This amount will always override validator preferences if greater
+    /// @param _minAmount Minimum amount
     function setMinimumAutoShipThreshold(uint128 _minAmount) public onlyOwner {
         minAutoShipThreshold = _minAmount;
         emit MinimumAutoshipThresholdSet(_minAmount);
     }
 
-    // Set max gwei for resolver
+    /// @notice Sets maximum network gas for autoship
+    /// @dev Past this value autoship will have to be manually called until gwei goes lower or this gets upped
+    /// @param _maxgas Maximum gas
     function setResolverMaxGasPrice(uint128 _maxgas) public onlyOwner {
         max_gas_price = _maxgas;
         emit ResolverMaxGasPriceSet(_maxgas);
     }
 
-    // Set the protocol fee (out of 1000000 (ie v2 fee decimals)).
-    // Initially set to 50000 (5%)
-    // For now we can't change the fee during an ongoing auction since the bids
-    // do not store the fee value at bidding time
+    /// @notice Sets the protocol fee (out of 1000000 (ie v2 fee decimals))
+    /// @dev Initially set to 50000 (5%) For now we can't change the fee during an ongoing auction since the bids do not store the fee value at bidding time
+    /// @param _fastLaneFee Protocl fee on bids
     function setFastlaneFee(uint24 _fastLaneFee)
         public
         onlyOwner
         notLiveStage
     {
-        require(_fastLaneFee < 1000000,"FL:E-213");
+        if (_fastLaneFee > 1000000) revert InequalityTooHigh();
         fast_lane_fee = _fastLaneFee;
         emit FastLaneFeeSet(_fastLaneFee);
     }
 
-    // Set the ERC20 token that is treated as the base currency for bidding purposes.
-    // Initially set to WMATIC
+    /// @notice Sets the ERC20 token that is treated as the base currency for bidding purposes
+    /// @dev Initially set to WMATIC, changing it is not allowed during auctions, special considerations must be taken care of if changing this value, such as paying all outstanding validators first to not mix ERC's.
+    /// @param _bid_token_address Address of the bid token
     function setBidToken(address _bid_token_address)
         public
         onlyOwner
         notLiveStage
     {
         // Prevent QBridge Finance issues
-        require(_bid_token_address != address(0),"FL:E-000");
+        if (_bid_token_address == address(0)) revert GeneralFailure();
         bid_token = ERC20(_bid_token_address);
         emit BidTokenSet(_bid_token_address);
     }
 
 
-    // Set auction starter role
+    /// @notice Sets the auction starter role
+    /// @dev Both owner and starter will be able to trigger starts/stops
+    /// @param _starter Address of the starter role
     function setStarter(address _starter) public onlyOwner {
         auctionStarter = _starter;
         emit AuctionStarterSet(auctionStarter);
     }
 
 
-
-    // Add an address to the opportunity address array.
-    // Should be a router/aggregator etc.
-    // Opportunities are queued to the next auction
-    // Do not use on already enabled opportunity or it will be stopped for current auction round
-    function enableOpportunityAddress(address opportunityAddress)
+    /// @notice Adds an address to the allowed entity mapping as opportunity
+    /// @dev Should be a router/aggregator etc. Opportunities are queued to the next auction
+    /// @dev Do not use on already enabled opportunity or it will be stopped for current auction round
+    /// @param _opportunityAddress Address of the opportunity
+    function enableOpportunityAddress(address _opportunityAddress)
         external
         onlyOwner
     {
         // Enable for after auction ends if live
         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
-        statusMap[opportunityAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.OPPORTUNITY);
-        emit OpportunityAddressEnabled(opportunityAddress, target_auction_number);
+        statusMap[_opportunityAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.OPPORTUNITY);
+        emit OpportunityAddressEnabled(_opportunityAddress, target_auction_number);
     }
 
-    function disableOpportunityAddress(address opportunityAddress)
+    /// @notice Disables an opportunity
+    /// @dev If auction is live, only takes effect at next round
+    /// @param _opportunityAddress Address of the opportunity
+    function disableOpportunityAddress(address _opportunityAddress)
         external
         onlyOwner
     {
-        Status storage existingStatus = statusMap[opportunityAddress];
-        require(existingStatus.kind == statusType.OPPORTUNITY, "FL:E-105");
+        Status storage existingStatus = statusMap[_opportunityAddress];
+        if (existingStatus.kind != statusType.OPPORTUNITY) revert PermissionInvalidOpportunityAddress();
         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
 
-        existingStatus.inactiveAtAuction = target_auction_number;
-        emit OpportunityAddressDisabled(opportunityAddress, target_auction_number);
+        existingStatus.inactiveAtAuctionRound = target_auction_number;
+        emit OpportunityAddressDisabled(_opportunityAddress, target_auction_number);
     }
 
+    /// @notice Internal, enables a validator checkpoint
+    /// @dev If auction is live, only takes effect at next round
+    /// @param _validatorAddress Address of the validator
     function _enableValidatorCheckpoint(address _validatorAddress) internal {
         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
         statusMap[_validatorAddress] = Status(target_auction_number, MAX_AUCTION_VALUE, statusType.VALIDATOR);
@@ -328,7 +395,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         emit ValidatorAddressEnabled(_validatorAddress, target_auction_number);
     }
 
-    // Do not use on already enabled validator or it will be stopped for current auction round
+    /// @notice Enables a validator checkpoint
+    /// @dev If auction is live, only takes effect at next round
+    /// @param _validatorAddress Address of the validator
     function enableValidatorAddress(address _validatorAddress)
         external
         onlyOwner
@@ -336,6 +405,11 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
        _enableValidatorCheckpoint(_validatorAddress);
     }
 
+    /// @notice Enables a validator checkpoint and sets preferences
+    /// @dev If auction is live, only takes effect at next round
+    /// @param _validatorAddress Address of the validator
+    /// @param _minAutoshipAmount Amount desired before autoship kicks in
+    /// @param _validatorPayableAddress Address the auction proceeds will go to for this validator
     function enableValidatorAddressWithPreferences(address _validatorAddress, uint128 _minAutoshipAmount, address _validatorPayableAddress) 
         external
         onlyOwner
@@ -344,26 +418,31 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             _updateValidatorPreferences(_validatorAddress, _minAutoshipAmount, _validatorPayableAddress);
     }
 
-    //remove an address from the participating validator address array
+    /// @notice Disables a validator
+    /// @dev If auction is live, only takes effect at next round
+    /// @param _validatorAddress Address of the validator
     function disableValidatorAddress(address _validatorAddress)
         external
         onlyOwner
     {
         Status storage existingStatus = statusMap[_validatorAddress];
-        require(existingStatus.kind == statusType.VALIDATOR, "FL:E-104");
+        if (existingStatus.kind != statusType.VALIDATOR) revert PermissionMustBeValidator();
         uint128 target_auction_number = auction_live ? auction_number + 1 : auction_number;
 
-        existingStatus.inactiveAtAuction = target_auction_number;
+        existingStatus.inactiveAtAuctionRound = target_auction_number;
         emit ValidatorAddressDisabled(_validatorAddress, target_auction_number);
     }
 
-    // Start auction / Enable bidding
+    /// @notice Start auction round / Enable bidding
+    /// @dev Both starter and owner roles are allowed to start
     function startAuction() external onlyStarterOrOwner notLiveStage {
-        //enable bidding
         auction_live = true;
         emit AuctionStarted(auction_number);
     }
 
+    /// @notice Ends an auction round
+    /// @dev Ending an auction round transfers the cuts to PFL and enables validators to collect theirs from the auction that ended
+    /// @dev Also enables fastlane privileges of pairs winners until endAuction gets called again at next auction round
     function endAuction()
         external
         onlyStarterOrOwner
@@ -382,38 +461,50 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         uint256 ownerBalance = outstandingFLBalance;
         outstandingFLBalance = 0;
 
-        //transfer to PFL the sorely needed $ to cover our high infra costs
+        // Last for C-E-I.
         bid_token.safeTransfer(owner(), ownerBalance);
 
         return true;
     }
 
-    function setAutopayBatchSize(uint16 size) public onlyOwner {
-        autopay_batch_size = size;
+    /// @notice Sets autopay batch size
+    /// @dev Defines the maximum number of addresses the ops will try to pay outstanding balances per block
+    /// @param _size Size of the batch
+    function setAutopayBatchSize(uint16 _size) public onlyOwner {
+        autopay_batch_size = _size;
         emit AutopayBatchSizeSet(autopay_batch_size);
     }
 
-    function setOffchainCheckerDisabledState(bool state) external onlyOwner {
-        _offchain_checker_disabled = state;
+    /// @notice Defines if the offchain checked is disabled
+    /// @dev If true autoship will be disabled
+    /// @param _state Disabled state
+    function setOffchainCheckerDisabledState(bool _state) external onlyOwner {
+        _offchain_checker_disabled = _state;
     }
 
-    function withdrawStuckNativeToken(uint256 amount)
+    /// @notice Withdraws stuck matic
+    /// @dev In the event people send matic instead of WMATIC we can send it back 
+    /// @param _amount Amount to send to owner
+    function withdrawStuckNativeToken(uint256 _amount)
         external
         onlyOwner
         nonReentrant
     {
-        if (address(this).balance >= amount) {
-            payable(owner()).sendValue(amount);
-            emit WithdrawStuckNativeToken(owner(), amount);
+        if (address(this).balance >= _amount) {
+            payable(owner()).sendValue(_amount);
+            emit WithdrawStuckNativeToken(owner(), _amount);
         }
     }
 
+    /// @notice Withdraws stuck ERC20
+    /// @dev In the event people send ERC20 instead of bid_token ERC20 we can send them back 
+    /// @param _tokenAddress Address of the stuck token
     function withdrawStuckERC20(address _tokenAddress)
         external
         onlyOwner
         nonReentrant
     {
-        require(_tokenAddress != address(bid_token), "FL:E-102");
+        if (_tokenAddress == address(bid_token)) revert InequalityWrongToken();
         ERC20 oopsToken = ERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
@@ -423,28 +514,23 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         }
     }
 
+    /// @notice Internal, receives a bid
+    /// @dev Requires approval of this contract beforehands
+    /// @param _currentTopBidAmount Value of the current top bid
+    /// @param _currentTopBidSearcherPayableAddress Address of the current top bidder for that bid pair
     function _receiveBid(
         Bid memory bid,
-        uint256 currentTopBidAmount,
-        address currentTopBidSearcherPayableAddress
+        uint256 _currentTopBidAmount,
+        address _currentTopBidSearcherPayableAddress
     ) internal {
         // Verify the bid exceeds previous bid + minimum increment
-        require(
-            bid.bidAmount >= currentTopBidAmount + bid_increment,
-            "FL:E-203"
-        );
+        if (bid.bidAmount < _currentTopBidAmount + bid_increment) revert InequalityTooLow();
 
         // Verify the new bidder isnt the previous bidder as self-spam protection
-        require(
-            bid.searcherPayableAddress != currentTopBidSearcherPayableAddress,
-            "FL:E-204"
-        );
+        if (bid.searcherPayableAddress == _currentTopBidSearcherPayableAddress) revert InequalityAlreadyTopBidder();
 
         // Verify the bidder has the balance.
-        require(
-            bid_token.balanceOf(bid.searcherPayableAddress) >= bid.bidAmount,
-            "FL:E-206"
-        );
+        if (bid_token.balanceOf(bid.searcherPayableAddress) < bid.bidAmount) revert InequalityNotEnoughFunds();
 
         // Transfer the bid amount (requires approval)
         bid_token.safeTransferFrom(
@@ -454,32 +540,44 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         );
     }
 
+    /// @notice Internal, refunds previous top bidder
+    /// @dev Be very careful about changing bid token to any ERC777
+    /// @param bid Bid to refund
     function _refundPreviousBidder(Bid memory bid) internal {
-        // Be very careful about changing bid token to any ERC777
-        // Refund the previous top bid
         bid_token.safeTransfer(
             bid.searcherPayableAddress,
             bid.bidAmount
         );
     }
 
+    /// @notice Internal, calculates cuts
+    /// @dev vCut 
+    /// @param amount Amount to calculates cuts from
+    /// @return vCut validator cut
+    /// @return flCut protocol cut
     function _calculateCuts(uint256 amount) internal view returns (uint256 vCut, uint256 flCut) {
         vCut = (amount * (1000000 - fast_lane_fee)) / 1000000;
         flCut = amount - vCut;
     }
 
+    /// @notice Internal, calculates if a validator balance checkpoint is redeemable as of current auction_number against a certain amount
+    /// @dev Not pure, depends of global auction_number, could be only outstandingBalance or outstandingBalance + pendingBalanceAtlastBid if last bid was at an oldest round than auction_number
+    /// @param valCheckpoint Validator checkpoint to validate against `minAmount`
+    /// @param minAmount Amount to calculates cuts from
+    /// @return bool Is there balance to redeem for validator and amount at current auction_number
     function _checkRedeemableOutstanding(ValidatorBalanceCheckpoint memory valCheckpoint,uint256 minAmount) internal view returns (bool) {
         return valCheckpoint.outstandingBalance >= minAmount || ((valCheckpoint.lastBidReceivedAuction < auction_number) && ((valCheckpoint.pendingBalanceAtlastBid + valCheckpoint.outstandingBalance) >= minAmount));    
     }
-    function _redeemOutstanding(address outstandingValidatorWithBalance) internal {
-        require(statusMap[outstandingValidatorWithBalance].kind == statusType.VALIDATOR, "FL:E-104");
-        ValidatorBalanceCheckpoint storage valCheckpoint = validatorsCheckpoints[outstandingValidatorWithBalance];
+
+    /// @notice Internal, attemps to redeem a validator outstanding balance to its validatorPayableAddress
+    /// @dev Must be owed at least 1 of `bid_token`
+    /// @param _outstandingValidatorWithBalance Validator address
+    function _redeemOutstanding(address _outstandingValidatorWithBalance) internal {
+        if (statusMap[_outstandingValidatorWithBalance].kind != statusType.VALIDATOR) revert PermissionMustBeValidator();
+        ValidatorBalanceCheckpoint storage valCheckpoint = validatorsCheckpoints[_outstandingValidatorWithBalance];
        
         // Either we have outstandingBalance or we have pendingBalanceAtlastBid from previous auctions.
-        require(
-               _checkRedeemableOutstanding(valCheckpoint, 1),
-            "FL:E-207"
-        );
+        if (!_checkRedeemableOutstanding(valCheckpoint, 1)) revert InequalityNothingToRedeem();
 
         uint256 redeemable = 0;
         if (valCheckpoint.lastBidReceivedAuction < auction_number) {
@@ -496,7 +594,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         valCheckpoint.outstandingBalance = 0;
         valCheckpoint.lastWithdrawnAuction = auction_number;
 
-        address dst = outstandingValidatorWithBalance;
+        address dst = _outstandingValidatorWithBalance;
         ValidatorPreferences memory valPrefs = validatorsPreferences[dst];
         if (valPrefs.validatorPayableAddress != address(0)) {
             dst = valPrefs.validatorPayableAddress;
@@ -508,7 +606,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         );
 
         emit ValidatorWithdrawnBalance(
-            outstandingValidatorWithBalance,
+            _outstandingValidatorWithBalance,
             auction_number,
             redeemable,
             dst,
@@ -520,8 +618,10 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     |             Public                |
     |__________________________________*/
 
-    // Bidding function for searchers to submit their bids
-    // Each bid pulls funds on submission and searchers are refunded when they are outbid
+
+    /// @notice Bidding function for searchers to submit their bids
+    /// @dev Each bid pulls funds on submission and searchers are refunded when they are outbid
+    /// @param bid Bid struct as tuple (validatorAddress, opportunityAddress, searcherContractAddress ,searcherPayableAddress, bidAmount)
     function submitBid(Bid calldata bid)
         external
         atLiveStage
@@ -529,25 +629,26 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         nonReentrant
     {
         // Verify that the bid is coming from the EOA that's paying
-        require(msg.sender == bid.searcherPayableAddress, "FL:E-103");
+        if (msg.sender != bid.searcherPayableAddress) revert PermissionOnlyFromPayorEoa();
 
         Status memory validatorStatus = statusMap[bid.validatorAddress];
         Status memory opportunityStatus = statusMap[bid.opportunityAddress];
 
         // Verify that the opportunity and the validator are both participating addresses
-        require(validatorStatus.kind == statusType.VALIDATOR, "FL:E-104");
-        require(opportunityStatus.kind == statusType.OPPORTUNITY, "FL:E-105");
+        if (validatorStatus.kind != statusType.VALIDATOR) revert PermissionMustBeValidator();
+        if (opportunityStatus.kind != statusType.OPPORTUNITY) revert PermissionInvalidOpportunityAddress();
 
+        // We want auction_number be in the [activeAtAuctionRound - inactiveAtAuctionRound] window.
         // Verify not flagged as inactive
-        require(validatorStatus.inactiveAtAuction > auction_number, "FL:E-209");
-        require(opportunityStatus.inactiveAtAuction > auction_number, "FL:E-210");
+        if (validatorStatus.inactiveAtAuctionRound <= auction_number) revert InequalityValidatorDisabledAtTime();
+        if (opportunityStatus.inactiveAtAuctionRound <= auction_number) revert InequalityOpportunityDisabledAtTime();
 
         // Verify still flagged active
-        require(validatorStatus.activeAtAuction <= auction_number, "FL:E-211");
-        require(opportunityStatus.activeAtAuction <= auction_number, "FL:E-212");
+        if (validatorStatus.activeAtAuctionRound > auction_number) revert InequalityValidatorNotEnabledYet();
+        if (opportunityStatus.activeAtAuctionRound > auction_number) revert InequalityOpportunityNotEnabledYet();
 
-        // Figure out if we have an existing bid
-        
+
+        // Figure out if we have an existing bid 
         Bid memory current_top_bid = auctionsMap[auction_number][
                 bid.validatorAddress
             ][bid.opportunityAddress];
@@ -604,9 +705,9 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
         }
 
-        // Try adding to the validatorsActiveAtAuction so the keeper can loop on it
+        // Try adding to the validatorsactiveAtAuctionRound so the keeper can loop on it
         // EnumerableSet already checks key pre-existence
-        validatorsActiveAtAuction[auction_number].add(bid.validatorAddress);
+        validatorsactiveAtAuctionRound[auction_number].add(bid.validatorAddress);
 
         emit BidAdded(
             bid.searcherContractAddress,
@@ -617,15 +718,17 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         );
     }
 
-
-    // Validators can always withdraw right after an amount is due
-    // It can be during an ongoing auction with pendingBalanceAtlastBid being the current auction
-    // Or lastBidReceivedAuction being a previous auction, in which case outstanding+pending can be withdrawn
-    function redeemOutstandingBalance(address outstandingValidatorWithBalance)
+    /// @notice Validators can always withdraw right after an amount is due
+    /// @dev It can be during an ongoing auction with pendingBalanceAtlastBid being the current auction
+    /// @dev Or lastBidReceivedAuction being a previous auction, in which case outstanding+pending can be withdrawn
+    /// @dev _Anyone_ can initiate a validator to be paid what it's owed
+    /// @param _outstandingValidatorWithBalance Redeems outstanding balance for a validator
+    function redeemOutstandingBalance(address _outstandingValidatorWithBalance)
         external
+        whenNotPaused
         nonReentrant
     {
-        _redeemOutstanding(outstandingValidatorWithBalance);
+        _redeemOutstanding(_outstandingValidatorWithBalance);
     }
 
     /***********************************|
@@ -634,14 +737,14 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
 
     /// @notice Gelato Offchain Resolver
     /// @dev Automated function checked each block offchain by Gelato Network if there is outstanding payments to process
-    /// @return canExec - should the worker trigger
-    /// @return execPayload - the payload if canExec is true
+    /// @return canExec Should the worker trigger
+    /// @return execPayload The payload if canExec is true
     function checker()
         external
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        if (_offchain_checker_disabled || _paused  || tx.gasprice > max_gas_price) return (false, "");
+        if (_offchain_checker_disabled || paused  || tx.gasprice > max_gas_price) return (false, "");
             // Go workers go
             canExec = false;
             (
@@ -659,12 +762,16 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
         return (false, "");
     }
 
-    function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant onlyGelato {
+    /// @notice Processes a list of addresses to transfer their outstanding balance
+    /// @dev Genrally called by Ops with array length of autopay_batch_size
+    /// @param autopayRecipients Array of recipents to consider for autopay
+    function processAutopayJobs(address[] calldata autopayRecipients) external nonReentrant onlyOwnerStarterOps {
         // Reassert checks if insane spike between gelato trigger and tx picked up
-        require(!_offchain_checker_disabled && !_paused, "FL:E-101");
-        require(tx.gasprice <= max_gas_price, "FL:E-307");
+        if (_offchain_checker_disabled || paused) revert PermissionPaused();
+        if (tx.gasprice > max_gas_price) revert TimeGasNotSuitable();
+
         uint length = autopayRecipients.length;
-        for (uint i = 0;i<length;) {
+        for (uint i = 0;i < length;) {
             if (autopayRecipients[i] != address(0)) {
                 _redeemOutstanding(autopayRecipients[i]);
             }
@@ -676,11 +783,16 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
     |             Views                 |
     |__________________________________*/
 
-    // Most likely called off chain by Gelato
-    function getAutopayJobs(uint16 batch_size, uint128 auction_index) public view returns (bool hasJobs, address[] memory autopayRecipients) {
-        autopayRecipients = new address[](batch_size); // Filled with 0x0
+    /// @notice Returns if there is autopays to be done for given `_auction_index`
+    /// @dev  Most likely called off chain by Gelato
+    /// @param _batch_size Max recipients to return
+    /// @param _auction_index Auction round
+    /// @return hasJobs If there was jobs found to be done by ops
+    /// @return autopayRecipients List of addresses eligible to be paid
+    function getAutopayJobs(uint16 _batch_size, uint128 _auction_index) public view returns (bool hasJobs, address[] memory autopayRecipients) {
+        autopayRecipients = new address[](_batch_size); // Filled with 0x0
         // An active validator means a bid happened so potentially balances were moved to outstanding while the bid happened
-        EnumerableSet.AddressSet storage prevRoundAddrSet = validatorsActiveAtAuction[auction_index];
+        EnumerableSet.AddressSet storage prevRoundAddrSet = validatorsactiveAtAuctionRound[_auction_index];
         uint16 assigned = 0;
         uint256 len = prevRoundAddrSet.length();
         for (uint256 i = 0; i < len; i++) {
@@ -691,55 +803,75 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
                 autopayRecipients[assigned] = current_validator;
                 ++assigned;
             }
-            if (assigned >= batch_size) {
+            if (assigned >= _batch_size) {
                 break;
             }
         }
         hasJobs = assigned > 0;
     }
 
-    // Gets the status of an address
-    function getStatus(address who) external view returns (Status memory) {
-        return statusMap[who];
+    /// @notice Gets the status of an address
+    /// @dev Contains (activeAtAuctionRound, inactiveAtAuctionRound, statusType)
+    /// @param _who Address we want the status of
+    /// @return Status Status of the given address
+    function getStatus(address _who) external view returns (Status memory) {
+        return statusMap[_who];
     }
 
-    // Gets the validators involved with a given auction
-    function getValidatorsActiveAtAuction(uint128 auction_index) external view returns (address[] memory) {
-        return validatorsActiveAtAuction[auction_index].values();
+    /// @notice Gets the validators involved with a given auction
+    /// @dev validatorsactiveAtAuctionRound being an EnumerableSet
+    /// @param _auction_index Auction Round
+    /// @return Array of validator addresses that received a bid during round `_auction_index`
+    function getValidatorsactiveAtAuctionRound(uint128 _auction_index) external view returns (address[] memory) {
+        return validatorsactiveAtAuctionRound[_auction_index].values();
     }
 
-    // Gets the auction number for which the fast lane privileges are active
+
+    /// @notice Gets the auction number for which the fast lane privileges are active
+    /// @return auction round
     function getActivePrivilegesAuctionNumber() public view returns (uint128) {
         return auction_number - 1;
     }
 
-    // Gets the checkpoint of an address
-    function getCheckpoint(address who) external view returns (ValidatorBalanceCheckpoint memory) {
-        return validatorsCheckpoints[who];
+    /// @notice Gets the checkpoint of an address
+    /// @param _who Address we want the checkpoint of
+    /// @return Validator checkpoint
+    function getCheckpoint(address _who) external view returns (ValidatorBalanceCheckpoint memory) {
+        return validatorsCheckpoints[_who];
+    }
+ 
+    /// @notice Gets the preferences of an address
+    /// @param _who Address we want the preferences of
+    /// @return Validator preferences
+    function getPreferences(address _who) external view returns (ValidatorPreferences memory) {
+        return validatorsPreferences[_who];
     }
 
-    // Gets the preferences of an address
-    function getPreferences(address who) external view returns (ValidatorPreferences memory) {
-        return validatorsPreferences[who];
-    }
-
-    //function for determining the current top bid for an ongoing (live) auction
-    function findLiveAuctionTopBid(address validatorAddress, address opportunityAddress)
+    /// @notice Determines the current top bid of a pair for the current ongoing (live) auction
+    /// @param _validatorAddress Validator for the given pair
+    /// @param _opportunityAddress Opportunity for the given pair
+    /// @return Tuple (bidAmount, auction_round)
+    function findLiveAuctionTopBid(address _validatorAddress, address _opportunityAddress)
         external
         view
         atLiveStage
         returns (uint256, uint128)
     {
             Bid memory topBid = auctionsMap[auction_number][
-                validatorAddress
-            ][opportunityAddress];
+                _validatorAddress
+            ][_opportunityAddress];
             return (topBid.bidAmount, auction_number);
     }
 
+    /// @notice Returns the top bid of a past auction round for a given pair
+    /// @param _auction_index Auction round
+    /// @param _validatorAddress Validator for the given pair
+    /// @param _opportunityAddress Opportunity for the given pair
+    /// @return Tuple (true|false, winningSearcher, auction_index)
     function findFinalizedAuctionWinnerAtAuction(
-        uint128 auction_index,
-        address validatorAddress,
-        address opportunityAddress
+        uint128 _auction_index,
+        address _validatorAddress,
+        address _opportunityAddress
     ) public view
                 returns (
             bool,
@@ -747,24 +879,27 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             uint128
         )
     {
-        require(auction_index < auction_number,"FL-E:201");
-        //get the winning searcher
-        address winningSearcher = auctionsMap[auction_index][
-            validatorAddress
-        ][opportunityAddress].searcherContractAddress;
+        if (_auction_index >= auction_number) revert InequalityInvalidIndex();
+        // Get the winning searcher
+        address winningSearcher = auctionsMap[_auction_index][
+            _validatorAddress
+        ][_opportunityAddress].searcherContractAddress;
 
-        //check if there is a winning searcher (no bids mean the winner is address(0))
+        // Check if there is a winning searcher (no bids mean the winner is address(0))
         if (winningSearcher != address(0)) {
-            return (true, winningSearcher, auction_index);
+            return (true, winningSearcher, _auction_index);
         } else {
-            return (false, winningSearcher, auction_index);
+            return (false, winningSearcher, _auction_index);
         }
     }
 
-    // Function for determining the winner of the last completed auction
+    /// @notice Returns the the winner of the last completed auction for a given pair
+    /// @param _validatorAddress Validator for the given pair
+    /// @param _opportunityAddress Opportunity for the given pair
+    /// @return Tuple (true|false, winningSearcher, auction_index)
     function findLastFinalizedAuctionWinner(
-        address validatorAddress,
-        address opportunityAddress
+        address _validatorAddress,
+        address _opportunityAddress
     )
         external
         view
@@ -774,7 +909,7 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
             uint128
         )
     {
-        return findFinalizedAuctionWinnerAtAuction(getActivePrivilegesAuctionNumber(), validatorAddress, opportunityAddress);
+        return findFinalizedAuctionWinnerAtAuction(getActivePrivilegesAuctionNumber(), _validatorAddress, _opportunityAddress);
     }
 
   /***********************************|
@@ -782,32 +917,32 @@ contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
   |__________________________________*/
 
     modifier notLiveStage() {
-        require(!auction_live, "FL:E-301");
+        if (auction_live) revert TimeNotWhenAuctionIsLive();
         _;
     }
 
     modifier atLiveStage() {
-        require(auction_live, "FL:E-302");
+        if (!auction_live) revert TimeNotWhenAuctionIsStopped();
         _;
     }
 
     modifier whenNotPaused() {
-        require(_paused == false, "FL:E-101");
+        if (paused) revert PermissionPaused();
         _;
     }
 
     modifier onlyValidator() {
-        require(statusMap[msg.sender].kind == statusType.VALIDATOR, "FL:E-104");
+        if(statusMap[msg.sender].kind != statusType.VALIDATOR) revert PermissionMustBeValidator();
         _;
     }
 
-    modifier onlyGelato() {
-        require(msg.sender == ops, "FL:E-106");
+    modifier onlyOwnerStarterOps() {
+        if (msg.sender != ops && msg.sender != auctionStarter && msg.sender != owner()) revert PermissionOnlyOps();
         _;
     }
 
     modifier onlyStarterOrOwner() {
-        require(msg.sender == auctionStarter || msg.sender == owner(), "FL:E-107");
+        if (msg.sender != auctionStarter && msg.sender != owner()) revert PermissionNotOwnerNorStarter();
         _;
     }
 }
