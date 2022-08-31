@@ -2,11 +2,13 @@
 pragma solidity 0.8.16;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
+import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
+import "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
 
 /// @notice Auction bid struct
 /// @dev Current owners need to allow opportunity and validator addresses to participate beforehands
@@ -158,12 +160,24 @@ abstract contract FastLaneEvents {
 /// @title FastLaneAuction
 /// @author Elyx0
 /// @notice Fastlane.finance auction contract
-contract FastLaneAuction is FastLaneEvents, Ownable, ReentrancyGuard {
+    contract FastLaneAuction is Initializable, OwnableUpgradeable , UUPSUpgradeable, ReentrancyGuard, FastLaneEvents {
     using Address for address payable;
     using EnumerableSet for EnumerableSet.AddressSet;
     using SafeTransferLib for ERC20;
 
     ERC20 public bid_token;
+
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _newOwner) public initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        _transferOwnership(_newOwner);
+    }
+
+    function _authorizeUpgrade(address) internal virtual override onlyOwner() {}
 
 
     /// @notice Initializes the auction
