@@ -167,7 +167,8 @@ abstract contract FastLaneEvents {
 
     ERC20 public bid_token;
 
-    constructor() {
+    constructor(address _newOwner) {
+        _transferOwnership(_newOwner);
         _disableInitializers();
     }
 

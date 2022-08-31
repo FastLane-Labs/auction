@@ -44,7 +44,7 @@ contract Deploy is Script {
         // vm.startBroadcast(vm.addr(deployerPrivateKey));
 
         vm.startBroadcast();
-        fastlane = address(new FastLaneAuction());
+        fastlane = address(new FastLaneAuction(msg.sender));
         
         FastLaneAuction(fastlane).initialSetupAuction(initial_bid_token, ops, msg.sender);
 

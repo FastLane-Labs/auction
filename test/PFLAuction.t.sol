@@ -104,7 +104,7 @@ contract PFLAuctionTest is Test, PFLHelper {
 
         vm.prank(OWNER);
         
-        FLA = new FastLaneAuction();
+        FLA = new FastLaneAuction(OWNER);
 
         vm.prank(OWNER);
         FLA.initialSetupAuction(MUMBAI_MATIC, OPS_ADDRESS, OWNER);

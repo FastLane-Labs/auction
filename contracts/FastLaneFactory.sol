@@ -19,7 +19,7 @@ contract FastLaneFactory {
     function _createFastLane(bytes32 _salt, address _initial_bid_token, address _ops) internal {
         
         // use CREATE2 so we can get a deterministic address based on the salt
-        fastlane = address(new FastLaneAuction{salt: _salt}());
+        fastlane = address(new FastLaneAuction{salt: _salt}(msg.sender));
 
         // CREATE2 can return address(0), add a check to verify this isn't the case
         // See: https://eips.ethereum.org/EIPS/eip-1014
@@ -27,8 +27,7 @@ contract FastLaneFactory {
         emit FastLaneCreated(fastlane);
 
         FastLaneAuction(fastlane).initialSetupAuction(_initial_bid_token, _ops, msg.sender);
-        // Give back to deployer
-        FastLaneAuction(fastlane).transferOwnership(msg.sender);
+
     }
 
     function getArgs() public view returns (address initial_bid_token, address ops) {

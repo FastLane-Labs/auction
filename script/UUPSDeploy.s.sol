@@ -43,14 +43,26 @@ contract Deploy is Script {
         vm.startBroadcast();
 
         //bytes32 proxySaltStr = 0x023049182d9b870591683334cb8bdaf382f49ff092d076afb86b4dec503e30fc;
-        bytes32 proxySaltStr = 0x9895a818d16bb699eb012ece09099df773c60395785d2423d6bdb2e7770fde33;
+        bytes32 proxySaltStr = 0xdedd35ceaec8d2aae8506b7c1466e0e256b6576d4dbcf8560d4634bc01114856;
         bytes32 implementationSaltStr = "hello";
 
         address foundryFactory = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
         address eoa = msg.sender;
 
-        fastlaneImplementation = address(new FastLaneAuction{salt: implementationSaltStr}()); // 0x2962a95ee7d5aef7205a944d6d5b25d68a510c68
+
+        console2.log("CREATE2 Implementation Predict Bytecode:");
+        // Copy this into init_code_implementation.txt
+        console2.logBytes(abi.encodePacked(type(FastLaneAuction).creationCode, abi.encode(eoa)));
+
+
+        FastLaneAuction FLAImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa); // 0x2962a95ee7d5aef7205a944d6d5b25d68a510c68
+        fastlaneImplementation = address(FLAImplementation); 
+
+        console2.log("Implementation Deployed at:");
+        console2.log(fastlaneImplementation);
+        console2.log(fastlaneImplementation.code.length);
+        console2.log("------------------------------------");
 
         console2.log("Current Sender:");
         console2.log(msg.sender);
@@ -73,31 +85,34 @@ contract Deploy is Script {
         console2.logBytes(address(proxy).code);
         console2.log("------------------------------------");
 
-        console2.log("CREATE2 Predict Bytecode:");
-        console2.logBytes(abi.encodePacked(address(proxy).code, abi.encode(fastlaneImplementation,encodedPostProxyDeployCall)));
+        console2.log("CREATE2 Proxy Predict Bytecode:");
+        // Copy this into init_code.txt
+        console2.logBytes(abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(fastlaneImplementation,encodedPostProxyDeployCall)));
 
 
-        console2.log("Deployed:");
+        console2.log("Deployed Proxy @:");
         address deployedProxyAddress = address(proxy);
         console2.log(deployedProxyAddress);
         console2.log("------------------------------------");
 
         //address expectedProxyAddress = 0xfA571a11EB379578588920CA78FBf26C0b4956CC;
-        address expectedProxyAddress = 0x1337e5869366bE22AD9Ab124998aBa183605C266;
+        address expectedProxyAddress = 0x1337Ac52169E2a97EBa85c736B6Ba435Ec93a543;
         require(deployedProxyAddress == expectedProxyAddress, "Wrong Addresses");
 
         // (bool successInitializeProxy,) = address(proxy).call(abi.encodeWithSignature("initialize()"));
 
         // Setup the FastlaneAuction through the proxy.
         address STARTER_ROLE = msg.sender; // Change me
-        (bool successInitialSetupAuction,) = address(proxy).call(abi.encodeWithSignature("initialSetupAuction(address, address, address)", initial_bid_token, ops, STARTER_ROLE));
+        (bool successInitialSetupAuction, bytes memory returnSetupData) = deployedProxyAddress.call(abi.encodeWithSignature("initialSetupAuction(address,address,address)", initial_bid_token, ops, STARTER_ROLE));
         
-        require(successInitialSetupAuction,"Proxy calls fail");
-      
-        (bool success, bytes memory res) = address(proxy).call(abi.encodeWithSignature("getImplementation()"));
-        console2.log(abi.decode(res, (address)));
+        console2.log("initialSetupAuction call:");
+        console2.log(successInitialSetupAuction);
+        console2.log(string(returnSetupData));
+        console2.log("------------------------------------");
+        console2.log(fastlaneImplementation.code.length);
+        console2.log("------------------------------------");
 
-        console2.log("Implementation:");
+        require(successInitialSetupAuction,"Proxy calls fail");
     }
 
 }
