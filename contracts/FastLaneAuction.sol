@@ -136,6 +136,7 @@ abstract contract FastLaneEvents {
     error PermissionInvalidOpportunityAddress();       // E-105 // 0xcf440a8e
     error PermissionOnlyOps();                         // E-106 // 0x68da148f
     error PermissionNotOwnerNorStarter();              // E-107 // 0x8b4fb0bf
+    error PermissionNotAllowed();                      // E-108 // 0xba6c5093
 
     error InequalityInvalidIndex();                    // E-201 // 0x102bd785
     error InequalityAddressMismatch();                 // E-202 // 0x17de231a
@@ -160,7 +161,7 @@ abstract contract FastLaneEvents {
 /// @title FastLaneAuction
 /// @author Elyx0
 /// @notice Fastlane.finance auction contract
-    contract FastLaneAuction is Initializable, OwnableUpgradeable , UUPSUpgradeable, ReentrancyGuard, FastLaneEvents {
+contract FastLaneAuction is Initializable, OwnableUpgradeable , UUPSUpgradeable, ReentrancyGuard, FastLaneEvents {
     using Address for address payable;
     using EnumerableSet for EnumerableSet.AddressSet;
     using SafeTransferLib for ERC20;

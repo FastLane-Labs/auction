@@ -46,7 +46,8 @@
     "deploy-anvil-factory": "source .env && forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast",
     "deploy-anvil-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --fork-url http://localhost:8545  --private-key $TESTNET_KEY --broadcast",
     "deploy-anvil-proxy": "source .env && forge script script/UUPSDeploy.s.sol:Deploy --fork-url http://localhost:8545  --private-key $TESTNET_KEY --broadcast",
-    "deploy-live-trial-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --fork-url $ALCHEMY_APIKEY_POLYGON --private-key $TESTNET_KEY --broadcast --etherscan-api-key $POLYGONSCAN_APIKEY --verify --gas-price 50000000000 --with-gas-price 50000000000"
+    "deploy-live-beta-proxy": "source .env && forge script script/UUPSDeploy.s.sol:Deploy --rpc-url $ALCHEMY_APIKEY_POLYGON --private-key $TESTNET_KEY --broadcast --etherscan-api-key $POLYGONSCAN_APIKEY --verify --gas-price 50000000000 --with-gas-price 50000000000",
+    "deploy-live-trial-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --rpc-url $ALCHEMY_APIKEY_POLYGON --private-key $TESTNET_KEY --broadcast --etherscan-api-key $POLYGONSCAN_APIKEY --verify --gas-price 50000000000 --with-gas-price 50000000000"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",

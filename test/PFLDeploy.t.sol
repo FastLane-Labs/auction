@@ -23,11 +23,11 @@ contract PFLDeployTest is Test, PFLHelper {
     event Initialized(uint8 version);
 
     function setUp() public {
-        bytes32 implementationSaltStr = "hello";
+        bytes32 implementationSaltStr = 0x2141af04bf09baab736a447148a230ae150f8f6fc929d6c6f2ccc364f364fb5a;
         // Deploy impl as foundry factory with salt
         vm.prank(foundryFactory);
         fastlaneImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa);
-        // 0x2962a95ee7d5aef7205a944d6d5b25d68a510c68
+
         console2.log("Implementation Deployed at:");
         console2.log(address(fastlaneImplementation));
         console2.log(address(fastlaneImplementation).code.length);
@@ -35,7 +35,7 @@ contract PFLDeployTest is Test, PFLHelper {
     }
 
     function testDeploy() public {
-        bytes32 proxySaltStr = 0xdedd35ceaec8d2aae8506b7c1466e0e256b6576d4dbcf8560d4634bc01114856;
+        bytes32 proxySaltStr = 0xb225d27dc65c353234f5c8ec7c01d2a08967b60d774b801949184d7dfe8a1b9f;
         
 
         // Call that will be made after deploy of Proxy
@@ -59,7 +59,7 @@ contract PFLDeployTest is Test, PFLHelper {
         console2.log(deployedProxyAddress);
         console2.log("------------------------------------");
 
-        address expectedProxyAddress = 0x1337Ac52169E2a97EBa85c736B6Ba435Ec93a543;
+        address expectedProxyAddress = 0xfa571A11e01d7759B816B41B5018432B2D202043;
         assertEq(deployedProxyAddress,expectedProxyAddress, "Addresses mismatch");
 
         vm.startPrank(eoa);
@@ -127,11 +127,17 @@ contract PFLDeployTest is Test, PFLHelper {
         
         assertTrue(successUpgrade);
 
-        vm.prank(eoa);
+        vm.startPrank(eoa);
         vm.expectEmit(true, true, true, true, address(deployedProxyAddress));
         emit OpsSet(eoa);
         (bool successCallAsOwner,) = deployedProxyAddress.call(abi.encodeWithSignature("setOps(address)", address(eoa)));
         
         assertTrue(successCallAsOwner);
+
+        vm.expectEmit(true, true, true, true, address(deployedProxyAddress));
+        emit OwnershipTransferred(eoa, VALIDATOR1);
+        (bool successCallTransfer,) = deployedProxyAddress.call(abi.encodeWithSignature("transferOwnership(address)", address(VALIDATOR1)));
+        
+        assertTrue(successCallTransfer);
     }
 }

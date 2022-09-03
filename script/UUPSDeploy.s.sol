@@ -43,8 +43,8 @@ contract Deploy is Script {
         vm.startBroadcast();
 
         //bytes32 proxySaltStr = 0x023049182d9b870591683334cb8bdaf382f49ff092d076afb86b4dec503e30fc;
-        bytes32 proxySaltStr = 0xdedd35ceaec8d2aae8506b7c1466e0e256b6576d4dbcf8560d4634bc01114856;
-        bytes32 implementationSaltStr = "hello";
+        bytes32 proxySaltStr = 0xb225d27dc65c353234f5c8ec7c01d2a08967b60d774b801949184d7dfe8a1b9f;
+        bytes32 implementationSaltStr = 0x2141af04bf09baab736a447148a230ae150f8f6fc929d6c6f2ccc364f364fb5a; // 0x111be7a544ba60d162f5d75ea6bda7254d650d8b
 
         address foundryFactory = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
@@ -96,7 +96,7 @@ contract Deploy is Script {
         console2.log("------------------------------------");
 
         //address expectedProxyAddress = 0xfA571a11EB379578588920CA78FBf26C0b4956CC;
-        address expectedProxyAddress = 0x1337Ac52169E2a97EBa85c736B6Ba435Ec93a543;
+        address expectedProxyAddress = 0xfa571A11e01d7759B816B41B5018432B2D202043;
         require(deployedProxyAddress == expectedProxyAddress, "Wrong Addresses");
 
         // (bool successInitializeProxy,) = address(proxy).call(abi.encodeWithSignature("initialize()"));
