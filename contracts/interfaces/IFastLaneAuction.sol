@@ -43,10 +43,15 @@ interface IFastLaneAuction {
         uint256 e;
     }
 
+    enum statusType {
+        INVALID, // 0
+        VALIDATOR, // 1 
+        OPPORTUNITY // 2
+    }
     struct Status {
-        uint128 a;
-        uint128 b;
-        uint8 c;
+        uint128 activeAtAuctionRound;
+        uint128 inactiveAtAuctionRound;
+        statusType kind;  
     }
 
     struct ValidatorBalanceCheckpoint {

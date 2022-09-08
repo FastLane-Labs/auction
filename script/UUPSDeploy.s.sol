@@ -42,7 +42,6 @@ contract Deploy is Script {
 
         vm.startBroadcast();
 
-        //bytes32 proxySaltStr = 0x023049182d9b870591683334cb8bdaf382f49ff092d076afb86b4dec503e30fc;
         bytes32 proxySaltStr = 0xb225d27dc65c353234f5c8ec7c01d2a08967b60d774b801949184d7dfe8a1b9f;
         bytes32 implementationSaltStr = 0x2141af04bf09baab736a447148a230ae150f8f6fc929d6c6f2ccc364f364fb5a; // 0x111be7a544ba60d162f5d75ea6bda7254d650d8b
 
@@ -56,7 +55,7 @@ contract Deploy is Script {
         console2.logBytes(abi.encodePacked(type(FastLaneAuction).creationCode, abi.encode(eoa)));
 
 
-        FastLaneAuction FLAImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa); // 0x2962a95ee7d5aef7205a944d6d5b25d68a510c68
+        FastLaneAuction FLAImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa); // 0x111be7a544ba60d162f5d75ea6bda7254d650d8b
         fastlaneImplementation = address(FLAImplementation); 
 
         console2.log("Implementation Deployed at:");
@@ -95,7 +94,6 @@ contract Deploy is Script {
         console2.log(deployedProxyAddress);
         console2.log("------------------------------------");
 
-        //address expectedProxyAddress = 0xfA571a11EB379578588920CA78FBf26C0b4956CC;
         address expectedProxyAddress = 0xfa571A11e01d7759B816B41B5018432B2D202043;
         require(deployedProxyAddress == expectedProxyAddress, "Wrong Addresses");
 

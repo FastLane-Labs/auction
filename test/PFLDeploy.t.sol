@@ -16,14 +16,18 @@ import {PFLHelper} from "./PFLAuction.t.sol";
 contract PFLDeployTest is Test, PFLHelper {
     FastLaneAuction public fastlaneImplementation;
     address constant foundryFactory = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-    address constant expectedImplementationAddress = 0x2962A95eE7d5AEF7205A944D6d5b25D68a510c68;
+    address constant expectedImplementationAddress = 0x111bE7a544ba60D162f5d75Ea6bdA7254D650D8b;
+    address expectedProxyAddress = 0xfa571A11e01d7759B816B41B5018432B2D202043;
     address constant eoa = 0x1BA0f96bf6b26df11a58553c6db9a0314938Cf70;
     event Upgraded(address indexed implementation);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event Initialized(uint8 version);
 
+    bytes32 implementationSaltStr = 0x2141af04bf09baab736a447148a230ae150f8f6fc929d6c6f2ccc364f364fb5a;
+    bytes32 proxySaltStr = 0xb225d27dc65c353234f5c8ec7c01d2a08967b60d774b801949184d7dfe8a1b9f;
+        
     function setUp() public {
-        bytes32 implementationSaltStr = 0x2141af04bf09baab736a447148a230ae150f8f6fc929d6c6f2ccc364f364fb5a;
+
         // Deploy impl as foundry factory with salt
         vm.prank(foundryFactory);
         fastlaneImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa);
@@ -35,8 +39,7 @@ contract PFLDeployTest is Test, PFLHelper {
     }
 
     function testDeploy() public {
-        bytes32 proxySaltStr = 0xb225d27dc65c353234f5c8ec7c01d2a08967b60d774b801949184d7dfe8a1b9f;
-        
+
 
         // Call that will be made after deploy of Proxy
         // will transfer ownership to `eoa` after receiving it from `foundryFactory`
@@ -59,7 +62,7 @@ contract PFLDeployTest is Test, PFLHelper {
         console2.log(deployedProxyAddress);
         console2.log("------------------------------------");
 
-        address expectedProxyAddress = 0xfa571A11e01d7759B816B41B5018432B2D202043;
+
         assertEq(deployedProxyAddress,expectedProxyAddress, "Addresses mismatch");
 
         vm.startPrank(eoa);
@@ -90,7 +93,7 @@ contract PFLDeployTest is Test, PFLHelper {
     }
 
         function testUpgrade() public {
-        bytes32 proxySaltStr = 0xdedd35ceaec8d2aae8506b7c1466e0e256b6576d4dbcf8560d4634bc01114856;
+        
         bytes memory encodedPostProxyDeployCall = abi.encodeWithSignature("initialize(address)", eoa);
 
         vm.prank(foundryFactory);
@@ -101,7 +104,6 @@ contract PFLDeployTest is Test, PFLHelper {
         console2.log(deployedProxyAddress);
         console2.log("------------------------------------");
 
-        address expectedProxyAddress = 0x1337Ac52169E2a97EBa85c736B6Ba435Ec93a543;
         assertEq(deployedProxyAddress,expectedProxyAddress, "Addresses mismatch");
 
         vm.prank(eoa);
@@ -122,7 +124,7 @@ contract PFLDeployTest is Test, PFLHelper {
 
         vm.prank(eoa);
         vm.expectEmit(true, true, true, true);
-        emit Upgraded(expectedImplementationAddress);
+        emit Upgraded(address(fastlaneV2ImplementationV2));
         (bool successUpgrade, bytes memory returnUpgradeData) = deployedProxyAddress.call(abi.encodeWithSignature("upgradeTo(address)", address(fastlaneV2ImplementationV2)));
         
         assertTrue(successUpgrade);
