@@ -50,6 +50,8 @@
     "auctionTest": "forge test -vvv --match-contract PFLAuctionTest",
     "solc": "solc-select install 0.8.16 && solc-select use 0.8.16",
     "layout": "slither-read-storage contracts/FastLaneAuction.sol 0xc71cf7eb2839d864f356da13ebe22883fcbc9b0f --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/  openzeppelin-contracts-upgradeable/=./lib/openzeppelin-contracts-upgradeable/  solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-layout",
+    "layout-relay": "slither-read-storage contracts/FastLaneRelay.sol 0x3b7B38362bB7E2F000Cd2432343F3483F785F435 --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/  openzeppelin-contracts-upgradeable/=./lib/openzeppelin-contracts-upgradeable/  solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-relay-layout",
+    
     "deploy-anvil-factory": "source .env && forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast",
     "deploy-anvil-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --fork-url http://localhost:8545  --private-key $TESTNET_KEY --broadcast",
     "deploy-anvil-proxy": "source .env && forge script script/UUPSDeploy.s.sol:Deploy --fork-url http://localhost:8545  --private-key $TESTNET_KEY --broadcast",
