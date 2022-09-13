@@ -2,6 +2,7 @@ pragma solidity ^0.8.16;
 
 
 contract SearcherMinimalRawContract {
+
     address private owner;
     address payable private PFLRepayAddress;
     address private relayer;
@@ -9,13 +10,15 @@ contract SearcherMinimalRawContract {
     error WrongPermissions();
     error OriginEOANotOwner();
 
-    constructor(address _relayer, address payable _PFLRepayAddress) {
+    constructor(address _relayer, address _PFLRepayAddress) {
         relayer = _relayer; // PFL Relayer
         owner = msg.sender;
-        PFLRepayAddress = _PFLRepayAddress;
+        PFLRepayAddress = payable(_PFLRepayAddress);
     }
 
-    function doMEV(uint256 _paymentAmount, bytes calldata _forwardedExecData) external payable onlyRelayer {
+    // You choose your params as you want,
+    // You will declare them in the `submitBid` transaction to PFL
+    function doMEV(uint256 _paymentAmount, address _target, bytes calldata _encodedCall) external payable onlyRelayer {
 
         // In a relayed context _msgSender() will point back to the EOA that signed the searcherTX
         // as the normal `msg.sender` points to the relayer.
@@ -30,10 +33,11 @@ contract SearcherMinimalRawContract {
             ...
         */
         
-        // MySearcherMEVContract.call(_forwardedCalldata);
-
+        // MySearcherMEVContract.call(whatever); or
+        // Someopportunity.call(whatever)
+        _target.call(_encodedCall);
         // Repay PFL at the end
-        safeTransferETH(PFLRepayAddress,_paymentAmount);
+        safeTransferETH(PFLRepayAddress, _paymentAmount);
     }
 
     function _msgSender() internal view returns (address sender) {
@@ -47,6 +51,9 @@ contract SearcherMinimalRawContract {
             return msg.sender;
         }
     }
+
+    // Can receive ETH
+    fallback() external payable {}
 
     function isTrustedForwarder(address forwarder) public view returns (bool) {
         return forwarder == relayer;

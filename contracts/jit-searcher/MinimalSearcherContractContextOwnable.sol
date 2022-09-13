@@ -18,6 +18,9 @@ contract MinimalSearcherContractContextOwnable is ERC2771Context, Ownable {
           PFLRepayAddress = _PFLRepayAddress;
      }
 
+     // Can receive ETH
+     fallback() external payable {}
+
      function doMEV(address payable callTo, uint256 flags, uint256 _paybackAmount, bytes calldata params) external payable onlyRelayer {
 
           // In a relayed context _msgSender() will point back to the EOA that signed the searcherTX
