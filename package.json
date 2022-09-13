@@ -38,6 +38,10 @@
     "gen-inheritance": "slither contracts/FastLaneAuction.sol --print inheritance-graph",
     "gen-interface": "cast interface -n IFastLaneAuction -o contracts/interfaces/IFastLaneAuction.sol ./out/FastLaneAuction.sol/FastLaneAuction.json",
     "gen-abi": "jq '.abi' out/FastLaneAuction.sol/FastLaneAuction.json > contracts/abis/FastLaneAuctionAbi.json",
+    "gen-relay-inheritance": "slither contracts/jit-relay/FastLaneRelay.sol --print inheritance-graph",
+    "gen-relay-interface": "cast interface -n IFastLaneRelay -o contracts/interfaces/IFastLaneRelay.sol ./out/FastLaneRelay.sol/FastLaneRelay.json",
+    "gen-relay-abi": "jq '.abi' out/FastLaneRelay.sol/FastLaneRelay.json > contracts/abis/FastLaneRelayAbi.json",
+    
     "slither": "slither . --compile-force-framework foundry --filter-paths 'test|lib'",
     "snapshot": "source .env && forge snapshot -vvv --gas-report",
     "gen-prepush": "yarn gen-inheritance && yarn gen-interface && yarn gen-abi",
