@@ -47,6 +47,7 @@
     "gen-prepush": "yarn gen-inheritance && yarn gen-interface && yarn gen-abi",
     "sizes": "forge build --sizes",
     "relayTest": "forge test -vvv --match-contract PFLRelayTest",
+    "snapshot-relay": "source .env && forge snapshot -vvv --match-contract PFLRelayTest --gas-report",
     "auctionTest": "forge test -vvv --match-contract PFLAuctionTest",
     "solc": "solc-select install 0.8.16 && solc-select use 0.8.16",
     "layout": "slither-read-storage contracts/FastLaneAuction.sol 0xc71cf7eb2839d864f356da13ebe22883fcbc9b0f --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/  openzeppelin-contracts-upgradeable/=./lib/openzeppelin-contracts-upgradeable/  solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-layout",

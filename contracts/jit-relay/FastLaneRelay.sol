@@ -2,7 +2,7 @@
 pragma solidity ^0.8.16;
 
 import { IFastLaneAuction } from "../interfaces/IFastLaneAuction.sol";
-import "openzeppelin-contracts/contracts//access/Ownable.sol";
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 
 
