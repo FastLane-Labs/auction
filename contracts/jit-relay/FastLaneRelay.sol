@@ -49,6 +49,7 @@ abstract contract FastLaneRelayEvents {
     error AuctionBidReceivedLate();
 
     error ProcessingRoundNotOver();
+    error ProcessingRoundFullyPaidOut();
 }
 
 contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
@@ -98,7 +99,6 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         uint256 _bidAmount, // Value commited to be repaid at the end of execution
         bytes32 _oppTxHash, // Target TX
         address _searcherToAddress,
-        address _validator,
         bytes calldata _toForwardExecData 
         // _toForwardExecData should contain _bidAmount somewhere in the data to be decoded on the receiving searcher contract
         ) external payable nonReentrant whenNotPaused onlyParticipatingValidators {
@@ -118,13 +118,10 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
                 }
             }
 
-            if (_validator != address(0) && _validator != block.coinbase) revert RelayWrongSpecifiedValidator();
             if (_searcherToAddress == address(0) || _bidAmount == 0) revert RelaySearcherWrongParams();
             
             
             uint256 balanceBefore = vaultAddress.balance;
-      
-            // (uint256 validatorShare, uint256 stakeShare) = _calculateStakeShare(_bidAmount, fastlaneStakeShare);
 
             (bool success, bytes memory retData) = _searcherToAddress.call{value: msg.value}(abi.encodePacked(_toForwardExecData, msg.sender));
             if (!success) revert RelaySearcherCallFailure(retData);
@@ -133,6 +130,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
             uint256 balanceAfter = vaultAddress.balance;
             if (balanceAfter < expected) revert RelayNotRepaid(expected - balanceAfter);
 
+            address _validator = block.coinbase;
             validatorBalanceMap[currentRoundNumber][_validator] += _bidAmount;
             fulfilledAuctionMap[auction_key] = _bidAmount;
 
@@ -225,6 +223,8 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
 
     function payValidators(uint24 roundNumber) external onlyOwner returns (bool) {
         if (roundNumber >= currentRoundNumber) revert ProcessingRoundNotOver();
+
+        if (roundDataMap[roundNumber].completedPayments) revert ProcessingRoundFullyPaidOut();
 
         uint24 stakeAllocation = roundDataMap[roundNumber].stakeAllocation;
         uint256 removedValidatorsLength = removedValidators.length;
