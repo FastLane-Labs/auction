@@ -10,14 +10,26 @@ import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
 
+struct Round {
+    uint24 roundNumber;
+    uint24 stakeAllocation;
+    uint64 startBlock;
+    uint64 endBlock;
+    uint256 revenueCollected;
+    uint256 revenuePaid;
+    uint256 paidValidatorIndex;
+    bool completedPayments;
+}
+
 abstract contract FastLaneRelayEvents {
 
     event RelayPausedStateSet(bool state);
     event RelayValidatorEnabled(address validator);
     event RelayValidatorDisabled(address validator);
     event RelayInitialized(address vault);
-    event RelayFeeSet(uint24 amount);
+    event RelayShareSet(uint24 amount);
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
+    event RelayNewRound(uint24 newRoundNumber);
 
     error RelayInequalityTooHigh();
 
@@ -30,9 +42,15 @@ abstract contract FastLaneRelayEvents {
 
     error RelaySearcherCallFailure(bytes retData);
     error RelayNotRepaid(uint256 missingAmount);
-    
 
+    error AuctionEOANotEnabled();
+    error AuctionValidatorNotParticipating(address validator);
+    error AuctionSearcherNotWinner(uint256 searcherBid, uint256 winningBid);
+    error AuctionBidReceivedLate();
+
+    error ProcessingRoundNotOver();
 }
+
 contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
 
     using SafeTransferLib for address payable;
@@ -44,35 +62,61 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     address public fastlaneAddress;
     address public vaultAddress;
 
+    uint24 internal currentRoundNumber;
+    Round internal currentRoundData;
+    
     mapping(address => bool) internal validatorsMap;
+    mapping(uint24 => mapping(address => uint256)) internal validatorBalanceMap; // map[round][validator] = balance
+    mapping(uint24 => Round) internal roundDataMap;
+    mapping(address => mapping(address => bool)) internal searcherContractEOAMap;
+    mapping(bytes32 => uint256) internal fulfilledAuctionMap;
 
     bool public paused = false;
 
-    uint24 public fastlaneRelayFee;
+    uint24 public fastlaneStakeShare;
 
-    constructor(address _vaultAddress, uint24 _fee) {
-        if (_vaultAddress == address(0) || _fee == 0) revert RelayWrongInit();
+    address[] internal participatingValidators;
+    address[] internal removedValidators; 
+
+    constructor(address _vaultAddress, uint24 _share) {
+        if (_vaultAddress == address(0)) revert RelayWrongInit();
         
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
 
-
         vaultAddress = _vaultAddress;
         
-        setFastlaneRelayFee(_fee);
+        setFastlaneStakeShare(_share);
+
+        currentRoundNumber = uint24(1);
+        currentRoundData = Round(currentRoundNumber, fastlaneStakeShare, block.number, 0, 0, 0, 0, false);
 
         emit RelayInitialized(_vaultAddress);
     }
-
-
+    
     function submitFlashBid(
         uint256 _bidAmount, // Value commited to be repaid at the end of execution
         bytes32 _oppTxHash, // Target TX
-        address _validator, // Set to address(0) if any PFL validator works
         address _searcherToAddress,
+        address _validator,
         bytes calldata _toForwardExecData 
         // _toForwardExecData should contain _bidAmount somewhere in the data to be decoded on the receiving searcher contract
         ) external payable nonReentrant whenNotPaused onlyParticipatingValidators {
+
+            if (searcherContractEOAMap[_searcherToAddress][msg.sender]) {
+                revert AuctionEOANotEnabled();
+            }
+
+            bytes32 auction_key = keccak256(_oppTxHash, abi.encode(tx.gasprice));
+            uint256 existing_bid = fulfilledAuctionMap[auction_key];
+
+            if (existing_bid != uint256(0)) {
+                if (_bidAmount >= existing_bid) {
+                    revert AuctionBidReceivedLate();
+                } else {
+                    revert AuctionSearcherNotWinner(_bidAmount, existing_bid);
+                }
+            }
 
             if (_validator != address(0) && _validator != block.coinbase) revert RelayWrongSpecifiedValidator();
             if (_searcherToAddress == address(0) || _bidAmount == 0) revert RelaySearcherWrongParams();
@@ -80,7 +124,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
             
             uint256 balanceBefore = vaultAddress.balance;
       
-            //(uint256 vCut, uint256 flCut) = _calculateRelayCuts(_bidAmount, _fee);
+            // (uint256 validatorShare, uint256 stakeShare) = _calculateStakeShare(_bidAmount, fastlaneStakeShare);
 
             (bool success, bytes memory retData) = _searcherToAddress.call{value: msg.value}(abi.encodePacked(_toForwardExecData, msg.sender));
             if (!success) revert RelaySearcherCallFailure(retData);
@@ -88,19 +132,39 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
             uint256 expected = balanceBefore + _bidAmount;
             uint256 balanceAfter = vaultAddress.balance;
             if (balanceAfter < expected) revert RelayNotRepaid(expected - balanceAfter);
+
+            validatorBalanceMap[currentRoundNumber][_validator] += _bidAmount;
+            fulfilledAuctionMap[auction_key] = _bidAmount;
+
             emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, _validator, _searcherToAddress);
+    }
+
+    function authorizeSearcherEOA(
+        address _searcherEOA
+    ) external {
+        // This is designed to be called by searchers' smart contracts
+        // therefore msg.sender should be the smart contract. 
+        searcherContractEOAMap[msg.sender][_searcherEOA] = true;
+    }
+
+    function deauthorizeSearcherEOA(
+        address _searcherEOA
+    ) external {
+        // This is designed to be called by searchers' smart contracts
+        // therefore msg.sender will be the smart contract. 
+        searcherContractEOAMap[msg.sender][_searcherEOA] = false;
     }
 
 
     /// @notice Internal, calculates cuts
-    /// @dev vCut 
+    /// @dev validatorCut 
     /// @param _amount Amount to calculates cuts from
-    /// @param _fee Fee bps
-    /// @return vCut validator cut
-    /// @return flCut protocol cut
-    function _calculateRelayCuts(uint256 _amount, uint24 _fee) internal pure returns (uint256 vCut, uint256 flCut) {
-        vCut = (_amount * (1000000 - _fee)) / 1000000;
-        flCut = _amount - vCut;
+    /// @param _share bps
+    /// @return validatorCut validator cut
+    /// @return stakeCut protocol cut
+    function _calculateStakeShare(uint256 _amount, uint24 _share) internal pure returns (uint256 validatorCut, uint256 stakeCut) {
+        validatorCut = (_amount * (1000000 - _share)) / 1000000;
+        stakeCut = _amount - validatorCut;
     }
 
     // Unused
@@ -145,26 +209,134 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         emit RelayPausedStateSet(_state);
     }
 
+    function newRound() external onlyOwner {
+        uint64 currentBlockNumber = uint64(block.number);
+        
+        // copy existing struct to then store in map
+        Round memory _currentRoundData = currentRoundData;
+        _currentRoundData.endBlock = currentBlockNumber;
 
-    /// @notice Sets the protocol fee (out of 1000000 (ie v2 fee decimals))
-    /// @dev Initially set to 50000 (5%) For now we can't change the fee during an ongoing auction since the bids do not store the fee value at bidding time
-    /// @param _fastLaneRelayFee Protocol fee on bids
-    function setFastlaneRelayFee(uint24 _fastLaneRelayFee)
+        roundDataMap[currentRoundNumber] = _currentRoundData;
+        currentRoundNumber++;
+
+        currentRoundData = Round(currentRoundNumber, fastlaneStakeShare, currentBlockNumber, 0, 0, 0, 0, false);
+        // any changes in 
+    }
+
+    function payValidators(uint24 roundNumber) external onlyOwner returns (bool) {
+        if (roundNumber >= currentRoundNumber) revert ProcessingRoundNotOver();
+
+        uint24 stakeAllocation = roundDataMap[roundNumber].stakeAllocation;
+        uint256 removedValidatorsLength = removedValidators.length;
+        uint256 participatingValidatorsLength = participatingValidators.length;
+        address validator;
+        uint256 grossRevenue;
+        uint256 netValidatorRevenue;
+        uint256 netStakeRevenue;
+        uint256 netStakeRevenueCollected;
+        // uint256 newIndex; // is this necessary? Or does n retain the loop's ++'s?
+
+        uint256 n = roundDataMap[roundNumber].paidValidatorIndex;
+        
+        if (n < removedValidatorsLength) {
+            // check removed validators too - they may have been removed partway through a round
+            for (n; n < removedValidatorsLength; n++) {
+                if (gasleft() < 80_000) {
+                    // newIndex = n;
+                    break;
+                }
+                validator = removedValidators[n];
+                grossRevenue = validatorBalanceMap[currentRoundNumber][validator];
+                if (grossRevenue > 0) {
+                    (netValidatorRevenue, netStakeRevenue) = _calculateStakeShare(grossRevenue, stakeAllocation);
+                    payable(validator).transfer(netValidatorRevenue);
+                    netStakeRevenueCollected += netStakeRevenue;
+                }
+            }
+        }
+
+        if (n < removedValidatorsLength + participatingValidatorsLength && n >= removedValidatorsLength) {
+            for (n; n < removedValidatorsLength + participatingValidatorsLength; n++) {
+                if (gasleft() < 80_000) {
+                    // newIndex = n;
+                    break;
+                }
+                validator = removedValidators[n - removedValidatorsLength];
+                grossRevenue = validatorBalanceMap[currentRoundNumber][validator];
+                if (grossRevenue > 0) {
+                    (netValidatorRevenue, netStakeRevenue) = _calculateStakeShare(grossRevenue, stakeAllocation);
+                    payable(validator).transfer(netValidatorRevenue);
+                    netStakeRevenueCollected += netStakeRevenue;
+                }
+            }
+        }
+
+        roundDataMap[roundNumber].paidValidatorIndex = n;
+        roundDataMap[roundNumber].revenueCollected += netStakeRevenueCollected;
+        if (n >= removedValidatorsLength + participatingValidatorsLength - 1) {
+            roundDataMap[roundNumber].completedPayments = true;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
+    /// @notice Sets the stake revenue allocation (out of 1000000 (ie v2 fee decimals))
+    /// @dev Initially set to 50000 (5%) For now we can't change the stake revenue allocation
+    // during an ongoing auction since the bids do not store the stake allocation value at bidding time
+    /// @param _fastlaneStakeShare Protocol stake allocation on bids
+    function setFastlaneStakeShare(uint24 _fastlaneStakeShare)
         public
         onlyOwner
     {
-        if (_fastLaneRelayFee > 1000000) revert RelayInequalityTooHigh();
-        fastlaneRelayFee = _fastLaneRelayFee;
-        emit RelayFeeSet(_fastLaneRelayFee);
+        if (_fastlaneStakeShare > 1000000) revert RelayInequalityTooHigh();
+        fastlaneStakeShare = _fastlaneStakeShare;
+        emit RelayShareSet(_fastlaneStakeShare);
     }
     
 
     function enableRelayValidatorAddress(address _validator) external onlyOwner {
+        if (!validatorsMap[_validator]) {
+            // check to see if this validator is being re-added
+            bool existing = false;
+            uint256 validatorIndex;
+            address lastElement = removedValidators[removedValidators.length - 1];
+            for (uint256 z=0; z < removedValidators.length; z++) {
+                if (removedValidators[z] == _validator) {
+                    validatorIndex = z;
+                    existing = true;
+                    break;
+                }
+            }
+            if (existing) {
+                removedValidators[z] = lastElement;
+                delete removedValidators[removedValidators.length - 1];
+            }
+            participatingValidators.push(_validator);
+        }
         validatorsMap[_validator] = true;
         emit RelayValidatorEnabled(_validator);
     }
 
     function disableRelayValidatorAddress(address _validator) external onlyOwner {
+        if (validatorsMap[_validator]) {
+            bool existing = false;
+            uint256 validatorIndex;
+            address lastElement = participatingValidators[participatingValidators.length - 1];
+            for (uint256 z=0; z < participatingValidators.length; z++) {
+                if (participatingValidators[z] == _validator) {
+                    validatorIndex = z;
+                    existing = true;
+                    break;
+                }
+            }
+            if (existing) {
+                participatingValidators[z] = lastElement;
+                delete participatingValidators[participatingValidators.length - 1];
+            }
+            removedValidators.push(_validator);
+        }
         validatorsMap[_validator] = false;
         emit RelayValidatorDisabled(_validator);
     }
