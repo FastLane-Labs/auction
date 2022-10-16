@@ -124,7 +124,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
 
             if (msg.sender != tx.origin) revert AuctionCallerMustBeSender();
 
-            if (searcherContractEOAMap[_searcherToAddress][msg.sender]) {
+            if (!searcherContractEOAMap[_searcherToAddress][msg.sender]) {
                 revert AuctionEOANotEnabled();
             }
 
