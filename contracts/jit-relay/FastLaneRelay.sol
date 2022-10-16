@@ -224,7 +224,8 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         roundDataMap[currentRoundNumber] = Round(currentRoundNumber, fastlaneStakeShare, currentBlockNumber, 0, 0, false);
     }
 
-    function processValidatorsBalances() external onlyOwner returns (bool) {
+    function processValidatorsBalances() external returns (bool) {
+        // can be called by anyone
         // process rounds sequentially
         uint24 roundNumber = lastRoundProcessed + 1;
 
@@ -280,7 +281,8 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         }
 
         if (completedLoop) n += 1; // makes sure we didn't run out of gas on final validator in list
-        roundDataMap[roundNumber].nextValidatorIndex = n;
+        
+        roundDataMap[roundNumber].nextValidatorIndex = uint24(n);
         stakeSharePayable += netStakeRevenueCollected;
 
         if (n > removedValidatorsLength + participatingValidatorsLength) {
