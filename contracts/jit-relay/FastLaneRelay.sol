@@ -15,9 +15,7 @@ struct Round {
     uint24 stakeAllocation;
     uint64 startBlock;
     uint64 endBlock;
-    uint256 revenueCollected;
-    uint256 revenuePaid;
-    uint256 paidValidatorIndex;
+    uint24 nextValidatorIndex;
     bool completedPayments;
 }
 
@@ -30,6 +28,9 @@ abstract contract FastLaneRelayEvents {
     event RelayShareSet(uint24 amount);
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
     event RelayNewRound(uint24 newRoundNumber);
+
+    event ProcessingPaidValidator(address validator, uint256 validatorPayment);
+    event ProcessingWithdrewStakeShare(address recipient, uint256 amountWithdrawn);
 
     error RelayInequalityTooHigh();
 
@@ -44,12 +45,16 @@ abstract contract FastLaneRelayEvents {
     error RelayNotRepaid(uint256 missingAmount);
 
     error AuctionEOANotEnabled();
+    error AuctionCallerMustBeSender();
     error AuctionValidatorNotParticipating(address validator);
     error AuctionSearcherNotWinner(uint256 searcherBid, uint256 winningBid);
     error AuctionBidReceivedLate();
 
     error ProcessingRoundNotOver();
     error ProcessingRoundFullyPaidOut();
+    error ProcessingInProgress();
+    error ProcessingNoBalancePayable();
+    error ProcessingAmountExceedsBalance(uint256 amountRequested, uint256 balance);
 }
 
 contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
@@ -64,17 +69,20 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     address public vaultAddress;
 
     uint24 internal currentRoundNumber;
-    Round internal currentRoundData;
-    
+    uint24 internal lastRoundProcessed;
+    uint24 public fastlaneStakeShare;
+
+    uint256 internal stakeSharePayable;
+
+    bool public paused = false;
+    bool internal isProcessingPayments = false;
+
     mapping(address => bool) internal validatorsMap;
     mapping(uint24 => mapping(address => uint256)) internal validatorBalanceMap; // map[round][validator] = balance
+    mapping(address => uint256) internal validatorBalancePayableMap;
     mapping(uint24 => Round) internal roundDataMap;
     mapping(address => mapping(address => bool)) internal searcherContractEOAMap;
     mapping(bytes32 => uint256) internal fulfilledAuctionMap;
-
-    bool public paused = false;
-
-    uint24 public fastlaneStakeShare;
 
     address[] internal participatingValidators;
     address[] internal removedValidators; 
@@ -90,7 +98,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         setFastlaneStakeShare(_share);
 
         currentRoundNumber = uint24(1);
-        currentRoundData = Round(currentRoundNumber, fastlaneStakeShare, block.number, 0, 0, 0, 0, false);
+        roundDataMap[currentRoundNumber] = Round(currentRoundNumber, fastlaneStakeShare, uint64(block.number), 0, 0, false);
 
         emit RelayInitialized(_vaultAddress);
     }
@@ -103,14 +111,10 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         // _toForwardExecData should contain _bidAmount somewhere in the data to be decoded on the receiving searcher contract
         ) external payable nonReentrant whenNotPaused onlyParticipatingValidators {
 
-            if (searcherContractEOAMap[_searcherToAddress][msg.sender]) {
-                revert AuctionEOANotEnabled();
-            }
-
             bytes32 auction_key = keccak256(_oppTxHash, abi.encode(tx.gasprice));
             uint256 existing_bid = fulfilledAuctionMap[auction_key];
 
-            if (existing_bid != uint256(0)) {
+            if (existing_bid != 0) {
                 if (_bidAmount >= existing_bid) {
                     revert AuctionBidReceivedLate();
                 } else {
@@ -118,20 +122,24 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
                 }
             }
 
+            if (msg.sender != tx.origin) revert AuctionCallerMustBeSender();
+
+            if (searcherContractEOAMap[_searcherToAddress][msg.sender]) {
+                revert AuctionEOANotEnabled();
+            }
+
             if (_searcherToAddress == address(0) || _bidAmount == 0) revert RelaySearcherWrongParams();
             
-            
-            uint256 balanceBefore = vaultAddress.balance;
+            uint256 balanceBefore = address(this).balance;
 
             (bool success, bytes memory retData) = _searcherToAddress.call{value: msg.value}(abi.encodePacked(_toForwardExecData, msg.sender));
             if (!success) revert RelaySearcherCallFailure(retData);
 
             uint256 expected = balanceBefore + _bidAmount;
-            uint256 balanceAfter = vaultAddress.balance;
+            uint256 balanceAfter = address(this).balance;
             if (balanceAfter < expected) revert RelayNotRepaid(expected - balanceAfter);
 
-            address _validator = block.coinbase;
-            validatorBalanceMap[currentRoundNumber][_validator] += _bidAmount;
+            validatorBalanceMap[currentRoundNumber][block.coinbase] += _bidAmount;
             fulfilledAuctionMap[auction_key] = _bidAmount;
 
             emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, _validator, _searcherToAddress);
@@ -210,21 +218,21 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     function newRound() external onlyOwner {
         uint64 currentBlockNumber = uint64(block.number);
         
-        // copy existing struct to then store in map
-        Round memory _currentRoundData = currentRoundData;
-        _currentRoundData.endBlock = currentBlockNumber;
-
-        roundDataMap[currentRoundNumber] = _currentRoundData;
+        roundDataMap[currentRoundNumber].endBlock = currentBlockNumber;
         currentRoundNumber++;
 
-        currentRoundData = Round(currentRoundNumber, fastlaneStakeShare, currentBlockNumber, 0, 0, 0, 0, false);
-        // any changes in 
+        roundDataMap[currentRoundNumber] = Round(currentRoundNumber, fastlaneStakeShare, currentBlockNumber, 0, 0, false);
     }
 
-    function payValidators(uint24 roundNumber) external onlyOwner returns (bool) {
+    function processValidatorsBalances() external onlyOwner returns (bool) {
+        // process rounds sequentially
+        uint24 roundNumber = lastRoundProcessed + 1;
+
         if (roundNumber >= currentRoundNumber) revert ProcessingRoundNotOver();
 
         if (roundDataMap[roundNumber].completedPayments) revert ProcessingRoundFullyPaidOut();
+
+        isProcessingPayments = true;
 
         uint24 stakeAllocation = roundDataMap[roundNumber].stakeAllocation;
         uint256 removedValidatorsLength = removedValidators.length;
@@ -234,22 +242,22 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         uint256 netValidatorRevenue;
         uint256 netStakeRevenue;
         uint256 netStakeRevenueCollected;
-        // uint256 newIndex; // is this necessary? Or does n retain the loop's ++'s?
+        bool completedLoop = true;
 
-        uint256 n = roundDataMap[roundNumber].paidValidatorIndex;
+        uint256 n = uint256(roundDataMap[roundNumber].nextValidatorIndex);
         
         if (n < removedValidatorsLength) {
             // check removed validators too - they may have been removed partway through a round
             for (n; n < removedValidatorsLength; n++) {
                 if (gasleft() < 80_000) {
-                    // newIndex = n;
+                    completedLoop = false;
                     break;
                 }
                 validator = removedValidators[n];
                 grossRevenue = validatorBalanceMap[currentRoundNumber][validator];
                 if (grossRevenue > 0) {
                     (netValidatorRevenue, netStakeRevenue) = _calculateStakeShare(grossRevenue, stakeAllocation);
-                    payable(validator).transfer(netValidatorRevenue);
+                    validatorBalancePayableMap[validator] += netValidatorRevenue;
                     netStakeRevenueCollected += netStakeRevenue;
                 }
             }
@@ -258,29 +266,62 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         if (n < removedValidatorsLength + participatingValidatorsLength && n >= removedValidatorsLength) {
             for (n; n < removedValidatorsLength + participatingValidatorsLength; n++) {
                 if (gasleft() < 80_000) {
-                    // newIndex = n;
+                    completedLoop = false;
                     break;
                 }
-                validator = removedValidators[n - removedValidatorsLength];
+                validator = participatingValidators[n - removedValidatorsLength];
                 grossRevenue = validatorBalanceMap[currentRoundNumber][validator];
                 if (grossRevenue > 0) {
                     (netValidatorRevenue, netStakeRevenue) = _calculateStakeShare(grossRevenue, stakeAllocation);
-                    payable(validator).transfer(netValidatorRevenue);
+                    validatorBalancePayableMap[validator] += netValidatorRevenue;
                     netStakeRevenueCollected += netStakeRevenue;
                 }
             }
         }
 
-        roundDataMap[roundNumber].paidValidatorIndex = n;
-        roundDataMap[roundNumber].revenueCollected += netStakeRevenueCollected;
-        if (n >= removedValidatorsLength + participatingValidatorsLength - 1) {
+        if (completedLoop) n += 1; // makes sure we didn't run out of gas on final validator in list
+        roundDataMap[roundNumber].nextValidatorIndex = n;
+        stakeSharePayable += netStakeRevenueCollected;
+
+        if (n > removedValidatorsLength + participatingValidatorsLength) {
+            // TODO: check if n keeps the final ++ increment that pushes it out of range of for loop
             roundDataMap[roundNumber].completedPayments = true;
+            lastRoundProcessed = roundNumber;
+            isProcessingPayments = false;
             return true;
         } else {
             return false;
         }
     }
 
+    function getValidatorBalance(address validator) public view returns (uint256, uint256) {
+        // returns balancePayable, balancePending
+        if (isProcessingPayments) revert ProcessingInProgress();
+        uint256 balancePending;
+        for (uint256 _roundNumber = lastRoundProcessed + 1; _roundNumber <= currentRoundNumber; _roundNumber++) {
+            (netValidatorRevenue,) = _calculateStakeShare(grossRevenue, roundDataMap[_roundNumber].stakeAllocation);
+            balancePending += netValidatorRevenue;
+        }
+        return (validatorBalancePayableMap[validator], balancePending);
+    }
+
+    function payValidator(address validator) public returns (uint256) {
+        if (validatorBalancePayableMap[validator] == 0) revert ProcessingNoBalancePayable();
+        if (isProcessingPayments) revert ProcessingInProgress();
+        uint256 payableBalance = validatorBalancePayableMap[validator];
+        validatorBalancePayableMap[validator] = 0;
+        payable(validator).transfer(payableBalance);
+        emit ProcessingPaidValidator(validator, payableBalance);
+        return payableBalance;
+    }
+
+    function withdrawStakeShare(address recipient, uint256 amount) external onlyOwner {
+        // TODO: Add limitations around recipient & amount (integrate DAO controls / voting results)
+        if (amount > stakeSharePayable) revert ProcessingAmountExceedsBalance(amount, stakeSharePayable);
+        stakeSharePayable -= amount;
+        payable(recipient).transfer(amount);
+        emit ProcessingWithdrewStakeShare(recipient, amount);
+    }
 
     /// @notice Sets the stake revenue allocation (out of 1000000 (ie v2 fee decimals))
     /// @dev Initially set to 50000 (5%) For now we can't change the stake revenue allocation
@@ -354,4 +395,10 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         if (!validatorsMap[block.coinbase]) revert RelayPermissionNotFastlaneValidator();
         _;
     }
+
+    modifier onlyOwnerStarterOps() {
+        if (msg.sender != ops && msg.sender != auctionStarter && msg.sender != owner()) revert PermissionOnlyOps();
+        _;
+    }
 }
+
