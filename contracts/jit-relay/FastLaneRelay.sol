@@ -103,7 +103,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         emit RelayInitialized(_vaultAddress);
     }
     
-    function submitFlashBid(
+    function submitFastLaneBid(
         uint256 _bidAmount, // Value commited to be repaid at the end of execution
         bytes32 _oppTxHash, // Target TX
         address _searcherToAddress,
