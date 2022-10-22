@@ -1,14 +1,8 @@
 //SPDX-License-Identifier: Unlicensed
 pragma solidity ^0.8.16;
 
-import { IFastLaneAuction } from "../interfaces/IFastLaneAuction.sol";
-import "openzeppelin-contracts/contracts//access/Ownable.sol";
-
-
-
-import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
-
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 struct Round {
     uint24 roundNumber;
@@ -59,14 +53,9 @@ abstract contract FastLaneRelayEvents {
 
 contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
 
-    using SafeTransferLib for address payable;
-
     uint256 internal immutable INITIAL_CHAIN_ID;
 
     bytes32 internal immutable INITIAL_DOMAIN_SEPARATOR;
-
-    address public fastlaneAddress;
-    address public vaultAddress;
 
     uint24 internal currentRoundNumber;
     uint24 internal lastRoundProcessed;
@@ -87,20 +76,20 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     address[] internal participatingValidators;
     address[] internal removedValidators; 
 
-    constructor(address _vaultAddress, uint24 _share) {
-        if (_vaultAddress == address(0)) revert RelayWrongInit();
+    constructor() {
+        if (address(this) == address(0)) revert RelayWrongInit();
         
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
 
-        vaultAddress = _vaultAddress;
+        uint24 _share = 5_000;
         
         setFastlaneStakeShare(_share);
 
         currentRoundNumber = uint24(1);
         roundDataMap[currentRoundNumber] = Round(currentRoundNumber, fastlaneStakeShare, uint64(block.number), 0, 0, false);
 
-        emit RelayInitialized(_vaultAddress);
+        emit RelayInitialized(address(this));
     }
     
     function submitFastLaneBid(
@@ -109,9 +98,12 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         address _searcherToAddress,
         bytes calldata _toForwardExecData 
         // _toForwardExecData should contain _bidAmount somewhere in the data to be decoded on the receiving searcher contract
-        ) external payable nonReentrant whenNotPaused onlyParticipatingValidators {
+        ) external payable nonReentrant whenNotPaused onlyParticipatingValidators senderIsOrigin {
 
-            bytes32 auction_key = keccak256(_oppTxHash, abi.encode(tx.gasprice));
+            bytes32 auction_key = keccak256(abi.encode(_oppTxHash, tx.gasprice));
+            // NOTE: using abi.encodePacked may make this spoofable by clever antagonists 
+            // who shift decimals in certain (rare) scenarios
+
             uint256 existing_bid = fulfilledAuctionMap[auction_key];
 
             if (existing_bid != 0) {
@@ -121,8 +113,6 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
                     revert AuctionSearcherNotWinner(_bidAmount, existing_bid);
                 }
             }
-
-            if (msg.sender != tx.origin) revert AuctionCallerMustBeSender();
 
             if (!searcherContractEOAMap[_searcherToAddress][msg.sender]) {
                 revert AuctionEOANotEnabled();
@@ -142,7 +132,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
             validatorBalanceMap[currentRoundNumber][block.coinbase] += _bidAmount;
             fulfilledAuctionMap[auction_key] = _bidAmount;
 
-            emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, _validator, _searcherToAddress);
+            emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
     }
 
     function authorizeSearcherEOA(
@@ -171,19 +161,6 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     function _calculateStakeShare(uint256 _amount, uint24 _share) internal pure returns (uint256 validatorCut, uint256 stakeCut) {
         validatorCut = (_amount * (1000000 - _share)) / 1000000;
         stakeCut = _amount - validatorCut;
-    }
-
-    // Unused
-    function checkAllowedInAuction(address _coinbase) public view returns (bool) {
-        uint128 auction_number = IFastLaneAuction(fastlaneAddress).auction_number();
-        IFastLaneAuction.Status memory coinbaseStatus = IFastLaneAuction(fastlaneAddress).getStatus(_coinbase);
-        if (coinbaseStatus.kind != IFastLaneAuction.statusType.VALIDATOR) return false;
-
-        // Validator is past his inactivation round number
-        if (auction_number >= coinbaseStatus.inactiveAtAuctionRound) return false;
-        // Validator is not yet at his activation round number
-        if (auction_number < coinbaseStatus.activeAtAuctionRound) return false;
-        return true;
     }
 
     function DOMAIN_SEPARATOR() public view virtual returns (bytes32) {
@@ -215,7 +192,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         emit RelayPausedStateSet(_state);
     }
 
-    function newRound() external onlyOwner {
+    function newRound() external onlyOwner whenNotPaused {
         uint64 currentBlockNumber = uint64(block.number);
         
         roundDataMap[currentRoundNumber].endBlock = currentBlockNumber;
@@ -224,7 +201,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         roundDataMap[currentRoundNumber] = Round(currentRoundNumber, fastlaneStakeShare, currentBlockNumber, 0, 0, false);
     }
 
-    function processValidatorsBalances() external returns (bool) {
+    function processValidatorsBalances() external whenNotPaused senderIsOrigin returns (bool) {
         // can be called by anyone
         // process rounds sequentially
         uint24 roundNumber = lastRoundProcessed + 1;
@@ -299,15 +276,16 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     function getValidatorBalance(address validator) public view returns (uint256, uint256) {
         // returns balancePayable, balancePending
         if (isProcessingPayments) revert ProcessingInProgress();
-        uint256 balancePending;
-        for (uint256 _roundNumber = lastRoundProcessed + 1; _roundNumber <= currentRoundNumber; _roundNumber++) {
-            (netValidatorRevenue,) = _calculateStakeShare(grossRevenue, roundDataMap[_roundNumber].stakeAllocation);
+        uint256 balancePending; 
+        uint256 netValidatorRevenue;
+        for (uint24 _roundNumber = lastRoundProcessed + 1; _roundNumber <= currentRoundNumber; _roundNumber++) {
+            (netValidatorRevenue,) = _calculateStakeShare(validatorBalanceMap[_roundNumber][validator], roundDataMap[_roundNumber].stakeAllocation);
             balancePending += netValidatorRevenue;
         }
         return (validatorBalancePayableMap[validator], balancePending);
     }
 
-    function payValidator(address validator) public returns (uint256) {
+    function payValidator(address validator) public whenNotPaused senderIsOrigin returns (uint256) {
         if (validatorBalancePayableMap[validator] == 0) revert ProcessingNoBalancePayable();
         if (isProcessingPayments) revert ProcessingInProgress();
         uint256 payableBalance = validatorBalancePayableMap[validator];
@@ -325,9 +303,9 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         emit ProcessingWithdrewStakeShare(recipient, amount);
     }
 
-    /// @notice Sets the stake revenue allocation (out of 1000000 (ie v2 fee decimals))
-    /// @dev Initially set to 50000 (5%) For now we can't change the stake revenue allocation
-    // during an ongoing auction since the bids do not store the stake allocation value at bidding time
+    /// @notice Sets the stake revenue allocation (out of 1_000_000 (ie v2 fee decimals))
+    /// @dev Initially set to 50_000 (5%) 
+    /// Can't change the stake revenue allocation mid round - all changes go into effect in next round
     /// @param _fastlaneStakeShare Protocol stake allocation on bids
     function setFastlaneStakeShare(uint24 _fastlaneStakeShare)
         public
@@ -353,7 +331,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
                 }
             }
             if (existing) {
-                removedValidators[z] = lastElement;
+                removedValidators[validatorIndex] = lastElement;
                 delete removedValidators[removedValidators.length - 1];
             }
             participatingValidators.push(_validator);
@@ -375,7 +353,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
                 }
             }
             if (existing) {
-                participatingValidators[z] = lastElement;
+                participatingValidators[validatorIndex] = lastElement;
                 delete participatingValidators[participatingValidators.length - 1];
             }
             removedValidators.push(_validator);
@@ -393,13 +371,13 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         _;
     }
 
-    modifier onlyParticipatingValidators() {
-        if (!validatorsMap[block.coinbase]) revert RelayPermissionNotFastlaneValidator();
+    modifier senderIsOrigin() {
+        if (msg.sender != tx.origin) revert AuctionCallerMustBeSender();
         _;
     }
 
-    modifier onlyOwnerStarterOps() {
-        if (msg.sender != ops && msg.sender != auctionStarter && msg.sender != owner()) revert PermissionOnlyOps();
+    modifier onlyParticipatingValidators() {
+        if (!validatorsMap[block.coinbase]) revert RelayPermissionNotFastlaneValidator();
         _;
     }
 }
