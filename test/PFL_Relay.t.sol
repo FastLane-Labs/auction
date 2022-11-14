@@ -20,9 +20,7 @@ import { PFLHelper } from "./PFLAuction.t.sol";
 
 import "contracts/jit-relay/FastLaneRelay.sol";
 
-import { MinimalSearcherContractContextOwnable } from "contracts/jit-searcher/MinimalSearcherContractContextOwnable.sol";
-import { SearcherMinimalRawContract } from "contracts/jit-searcher/MinimalSearcherRawContract.sol";
-
+import { FastLaneSearcherWrapper } from "contracts/jit-searcher/FastLaneSearcherWrapper.sol";
 
 // Fake opportunity to backrun
 contract BrokenUniswap {
@@ -47,9 +45,9 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         }
         vm.prank(OWNER);
 
-        uint24 fee = 5000;
+        uint24 stakeShare = 50000;
         // Use PFL_VAULT as vault for repay checks
-        PFR = new FastLaneRelay(PFL_VAULT,fee);
+        PFR = new FastLaneRelay(stakeShare, 1 ether, false);
         brokenUniswap = new BrokenUniswap();
 
         vm.deal(address(brokenUniswap), 100 ether);
@@ -57,100 +55,68 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         console.log("Block Coinbase: %s",block.coinbase);
     }
 
-    function testStartOrder() public {
-        vm.startPrank(OWNER);
+    function testSubmitFlashBid() public {
+        uint256 bidAmount = 0.001 ether;
+        bytes32 oppTx = bytes32("tx1");
 
-        PFR.enableRelayValidatorAddress(VALIDATOR1);
+        // Deploy Searcher Wrapper as SEARCHER_ADDRESS1
+        vm.prank(SEARCHER_ADDRESS1);
+        FastLaneSearcherWrapper FSW = new FastLaneSearcherWrapper();
+        address to = address(FSW);
 
-        uint256 _bidAmount = 100;
-        bytes32 _oppTxHash = keccak256("opp"); // No need to keccak, just easy way to get bytes32
+        address expectedAnAddress = vm.addr(12);
+        uint256 expectedAnAmount = 1337;
+        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address, uint256)", expectedAnAddress, expectedAnAmount);
 
-        vm.stopPrank();
-        vm.startPrank(SEARCHER_ADDRESS1);
-        
-        // We will need to craft the arguments for `submitFlashBid` to call our MinimalSearcherContractContextOwnable
-        MinimalSearcherContractContextOwnable MSCCO = new MinimalSearcherContractContextOwnable(address(PFR),PFL_VAULT);
-        address _searcherToAddress = address(MSCCO);
+        console.log("Tx origin: %s", tx.origin);
+        console.log("Address this: %s", address(this));
+        console.log("Address PFR: %s", address(PFR));
+        console.log("Owner FSW: %s", FSW.owner());
 
-        // Craft selector we intend `submitFlashBid` to call
-        bytes4 selector = bytes4(keccak256("doMEV(address,uint256,uint256,bytes)"));
+        vm.prank(SEARCHER_ADDRESS1);
 
-        // Encode random params for that selector
-        address _paramsDoMEVcallTo = vm.addr(1337);
-        uint256 _paramsDoMEVflags = 12345;
-        uint256 _paramsDoMEVPaybackAmount = _bidAmount;
-        // Encode anything here as it's not used anyways by MinimalSearcherContractContextOwnable (but could in your case)
-        bytes memory _paramsDoMEVCalldataParams = abi.encodeWithSignature("SomeCall(uint256)", 11111);
-
-        // Encode full calldata for doMEV(address,uint256,uint256,bytes)
-        bytes memory _toForwardExecData = abi.encodeWithSelector(selector,_paramsDoMEVcallTo,_paramsDoMEVflags,_paramsDoMEVPaybackAmount,_paramsDoMEVCalldataParams);
-       
-  
-
-        // Flash not repaid
-        bytes memory transferErrorBytes = abi.encodeWithSignature("Error(string)","ETH_TRANSFER_FAILED");
-        vm.expectRevert(abi.encodeWithSelector(FastLaneRelayEvents.RelaySearcherCallFailure.selector,transferErrorBytes));
-        
-        // No specific validator
-        PFR.submitFlashBid(_bidAmount, _oppTxHash, address(0), _searcherToAddress, _toForwardExecData);
- 
-
-        vm.coinbase(VALIDATOR2);
-        // Wrong coinbase
         vm.expectRevert(FastLaneRelayEvents.RelayPermissionNotFastlaneValidator.selector);
-        PFR.submitFlashBid(_bidAmount, _oppTxHash, VALIDATOR2, _searcherToAddress, _toForwardExecData);
+        PFR.submitFlashBid(bidAmount, oppTx, to, searcherCallData);
 
-   
-        // Mined by validator 1 when expecting 2, revert.
-        vm.coinbase(VALIDATOR1);
-        vm.expectRevert(FastLaneRelayEvents.RelayWrongSpecifiedValidator.selector);
-        PFR.submitFlashBid(_bidAmount, _oppTxHash, VALIDATOR2, _searcherToAddress, _toForwardExecData);
-
-
-        // Set specific validator to succeed
+        vm.prank(OWNER);
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBid(SEARCHER_ADDRESS1,_bidAmount, _oppTxHash, VALIDATOR1, _searcherToAddress);
+        emit RelayValidatorEnabled(VALIDATOR1, VALIDATOR1);
+        PFR.enableRelayValidator(VALIDATOR1, VALIDATOR1);
 
-        uint256 balanceVaultBefore = PFL_VAULT.balance;
-        // Pass the $, receive it back
-        
-        PFR.submitFlashBid{value:_bidAmount}(_bidAmount, _oppTxHash, VALIDATOR1, _searcherToAddress, _toForwardExecData);
-        assertEq(PFL_VAULT.balance,balanceVaultBefore + _bidAmount);
-
-    }
-
-    function testStartRawSample() public {
-        vm.startPrank(OWNER);
-        PFR.enableRelayValidatorAddress(VALIDATOR1);
-
-        uint256 _bidAmount = 100;
-        bytes32 _oppTxHash = keccak256("opp"); // No need to keccak, just easy way to get bytes32
-
-        vm.stopPrank();
         vm.startPrank(SEARCHER_ADDRESS1);
-        
-   
-        bytes4 selector = bytes4(keccak256("doMEV(uint256,address,bytes)"));
+        vm.expectRevert(FastLaneRelayEvents.RelaySearcherWrongParams.selector);
+        PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
 
-        SearcherMinimalRawContract SMRC = new SearcherMinimalRawContract(address(PFR),PFL_VAULT);
-        address _searcherToAddress = address(SMRC);
+        bidAmount = 2 ether;
 
-        uint256 _paramsDoMEVPaybackAmount = _bidAmount;
-        // Encode a juicy call to be called
-        bytes memory _paramsDoMEVencodedCall = abi.encodeWithSignature("sickTrade(uint256)", 0);
+        vm.expectRevert(bytes("InvalidPermissions"));
+        PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
+        // Authorize Relay as Searcher
+        FSW.setPFLAuctionAddress(address(PFR));
 
-        // doMEV(uint256,address,bytes)
-        address _paramsDoMEVtarget = address(brokenUniswap);
-        bytes memory _toForwardExecData = abi.encodeWithSelector(selector,_paramsDoMEVPaybackAmount, _paramsDoMEVtarget, _paramsDoMEVencodedCall);
+        // Authorize test address as EOA
+        FSW.approveFastLaneEOA(address(this));
 
-        // Pass the $, receive it back through target + encodedCall 
-        uint256 balanceVaultBefore = PFL_VAULT.balance;
+        vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 0"));
+        PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
 
-        PFR.submitFlashBid(_bidAmount, _oppTxHash, VALIDATOR1, _searcherToAddress, _toForwardExecData);
 
-        assertEq(PFL_VAULT.balance,balanceVaultBefore + _bidAmount);
 
-       
+        vm.expectEmit(true, true, true, true);
+        emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(FSW));
+        PFR.submitFlashBid{value: 2 ether}(bidAmount, oppTx, to,  searcherCallData);
+
+        // Check Balances
     }
 
+
+    function testEnableValidator() public {
+        vm.startPrank(OWNER);
+        vm.expectRevert(FastLaneRelayEvents.RelayCannotBeZero.selector);
+        PFR.enableRelayValidator(VALIDATOR1, address(0));
+    }
+
+    function testPayValidator() public {
+
+    }
 }
