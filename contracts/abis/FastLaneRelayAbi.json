@@ -2,18 +2,54 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_vaultAddress",
-        "type": "address"
+        "internalType": "uint24",
+        "name": "_initialStakeShare",
+        "type": "uint24"
       },
       {
-        "internalType": "uint24",
-        "name": "_fee",
-        "type": "uint24"
+        "internalType": "uint256",
+        "name": "_minRelayBidAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "_restrictEOA",
+        "type": "bool"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "RelayAuctionBidReceivedLate",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "current",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "existing",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayAuctionSearcherNotWinner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayCannotBeSelf",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayCannotBeZero",
+    "type": "error"
   },
   {
     "inputs": [],
@@ -24,7 +60,12 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "missingAmount",
+        "name": "bidAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "actualAmount",
         "type": "uint256"
       }
     ],
@@ -39,6 +80,37 @@
   {
     "inputs": [],
     "name": "RelayPermissionPaused",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayPermissionSenderNotOrigin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayPermissionUnauthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "amountRequested",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "balance",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayProcessingAmountExceedsBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayProcessingNoBalancePayable",
     "type": "error"
   },
   {
@@ -59,12 +131,12 @@
   },
   {
     "inputs": [],
-    "name": "RelayWrongInit",
+    "name": "RelayTimeUnsuitable",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "RelayWrongSpecifiedValidator",
+    "name": "RelayWrongInit",
     "type": "error"
   },
   {
@@ -84,19 +156,6 @@
       }
     ],
     "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint24",
-        "name": "amount",
-        "type": "uint24"
-      }
-    ],
-    "name": "RelayFeeSet",
     "type": "event"
   },
   {
@@ -141,12 +200,37 @@
     "inputs": [
       {
         "indexed": false,
-        "internalType": "address",
-        "name": "vault",
-        "type": "address"
+        "internalType": "uint24",
+        "name": "initialStakeShare",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "restrictEOA",
+        "type": "bool"
       }
     ],
     "name": "RelayInitialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayMinAmountSet",
     "type": "event"
   },
   {
@@ -160,6 +244,82 @@
       }
     ],
     "name": "RelayPausedStateSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "validator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "validatorPayment",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "initiator",
+        "type": "address"
+      }
+    ],
+    "name": "RelayProcessingPaidValidator",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountWithdrawn",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayProcessingWithdrewStakeShare",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "amount",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "deadline",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayShareProposed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "amount",
+        "type": "uint24"
+      }
+    ],
+    "name": "RelayShareSet",
     "type": "event"
   },
   {
@@ -183,33 +343,106 @@
         "internalType": "address",
         "name": "validator",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "payee",
+        "type": "address"
       }
     ],
     "name": "RelayValidatorEnabled",
     "type": "event"
   },
   {
-    "inputs": [],
-    "name": "DOMAIN_SEPARATOR",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
+    "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
         "internalType": "address",
-        "name": "_coinbase",
+        "name": "_validator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_payee",
         "type": "address"
       }
     ],
-    "name": "checkAllowedInAuction",
+    "name": "RelayValidatorPayeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayWithdrawDust",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayWithdrawStuckERC20",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayWithdrawStuckNativeToken",
+    "type": "event"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "fallback"
+  },
+  {
+    "inputs": [],
+    "name": "RESTRICT_EOA",
     "outputs": [
       {
         "internalType": "bool",
@@ -228,7 +461,7 @@
         "type": "address"
       }
     ],
-    "name": "disableRelayValidatorAddress",
+    "name": "disableRelayValidator",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -239,21 +472,26 @@
         "internalType": "address",
         "name": "_validator",
         "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_payee",
+        "type": "address"
       }
     ],
-    "name": "enableRelayValidatorAddress",
+    "name": "enableRelayValidator",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "fastlaneAddress",
+    "name": "flStakeSharePayable",
     "outputs": [
       {
-        "internalType": "address",
+        "internalType": "uint256",
         "name": "",
-        "type": "address"
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -261,12 +499,191 @@
   },
   {
     "inputs": [],
-    "name": "fastlaneRelayFee",
+    "name": "flStakeShareRatio",
     "outputs": [
       {
         "internalType": "uint24",
         "name": "",
         "type": "uint24"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "fulfilledAuctionsMap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getCurrentStakeBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getCurrentStakeRatio",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "",
+        "type": "uint24"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getPendingDeadline",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_timeDeadline",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getPendingStakeRatio",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "_fastLaneStakeShare",
+        "type": "uint24"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      }
+    ],
+    "name": "getValidatorBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_validatorBalance",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      }
+    ],
+    "name": "getValidatorPayee",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "_payee",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      }
+    ],
+    "name": "getValidatorRecipient",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "_recipient",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      }
+    ],
+    "name": "getValidatorStatus",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes",
+        "name": "_errorData",
+        "type": "bytes"
+      }
+    ],
+    "name": "humanizeError",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "decoded",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minRelayBidAmount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -299,6 +716,77 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      }
+    ],
+    "name": "payValidator",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pendingStakeShareUpdate",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "proposalDeadline",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "proposalStakeShareRatio",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "",
+        "type": "uint24"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "recoverDust",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "renounceOwnership",
     "outputs": [],
@@ -309,11 +797,24 @@
     "inputs": [
       {
         "internalType": "uint24",
-        "name": "_fastLaneRelayFee",
+        "name": "_fastLaneStakeShare",
         "type": "uint24"
       }
     ],
-    "name": "setFastlaneRelayFee",
+    "name": "setFastLaneStakeShare",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_minAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMininumBidAmount",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -345,17 +846,12 @@
       },
       {
         "internalType": "address",
-        "name": "_validator",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
         "name": "_searcherToAddress",
         "type": "address"
       },
       {
         "internalType": "bytes",
-        "name": "_toForwardExecData",
+        "name": "_searcherCallData",
         "type": "bytes"
       }
     ],
@@ -379,15 +875,126 @@
   },
   {
     "inputs": [],
-    "name": "vaultAddress",
-    "outputs": [
+    "name": "triggerPendingStakeShareUpdate",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_payee",
+        "type": "address"
+      }
+    ],
+    "name": "updateValidatorPayee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
       {
         "internalType": "address",
         "name": "",
         "type": "address"
       }
     ],
+    "name": "validatorsBalanceMap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "validatorsStatusMap",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "validatorsTotal",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawStakeShare",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_tokenAddress",
+        "type": "address"
+      }
+    ],
+    "name": "withdrawStuckERC20",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawStuckNativeToken",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
   }
 ]
