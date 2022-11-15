@@ -1,0 +1,195 @@
+INFO:Slither-read-storage:
+Contract Ownable not found in storage layout. It is possibly a parent contract
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.name with type string is located at slot: 0
+
+INFO:Slither-read-storage:
+Name: name
+Type: string
+Slot: 0
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.symbol with type string is located at slot: 1
+
+INFO:Slither-read-storage:
+Name: symbol
+Type: string
+Slot: 1
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.totalSupply with type uint256 is located at slot: 2
+
+INFO:Slither-read-storage:
+Name: totalSupply
+Type: uint256
+Slot: 2
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.balanceOf with type mapping(address => uint256) is located at slot: 3
+
+INFO:Slither-read-storage:
+Name: balanceOf
+Type: mapping(address => uint256)
+Slot: 3
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.allowance with type mapping(address => mapping(address => uint256)) is located at slot: 4
+
+INFO:Slither-read-storage:
+Name: allowance
+Type: mapping(address => mapping(address => uint256))
+Slot: 4
+
+INFO:Slither-read-storage:
+Contract 'ERC20'
+ERC20.nonces with type mapping(address => uint256) is located at slot: 5
+
+INFO:Slither-read-storage:
+Name: nonces
+Type: mapping(address => uint256)
+Slot: 5
+
+INFO:Slither-read-storage:
+Contract ReentrancyGuard not found in storage layout. It is possibly a parent contract
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+Ownable._owner with type address is located at slot: 0
+
+INFO:Slither-read-storage:
+Name: _owner
+Type: address
+Slot: 0
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+ReentrancyGuard.locked with type uint256 is located at slot: 1
+
+INFO:Slither-read-storage:
+Name: locked
+Type: uint256
+Slot: 1
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.validatorsStatusMap with type mapping(address => bool) is located at slot: 2
+
+INFO:Slither-read-storage:
+Name: validatorsStatusMap
+Type: mapping(address => bool)
+Slot: 2
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.validatorsDataMap with type mapping(address => ValidatorData) is located at slot: 3
+
+INFO:Slither-read-storage:
+Name: validatorsDataMap
+Type: mapping(address => ValidatorData)
+Slot: 3
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.validatorsBalanceMap with type mapping(address => uint256) is located at slot: 4
+
+INFO:Slither-read-storage:
+Name: validatorsBalanceMap
+Type: mapping(address => uint256)
+Slot: 4
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.fulfilledAuctionsMap with type mapping(bytes32 => uint256) is located at slot: 5
+
+INFO:Slither-read-storage:
+Name: fulfilledAuctionsMap
+Type: mapping(bytes32 => uint256)
+Slot: 5
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.validatorsTotal with type uint256 is located at slot: 6
+
+INFO:Slither-read-storage:
+Name: validatorsTotal
+Type: uint256
+Slot: 6
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.flStakeSharePayable with type uint256 is located at slot: 7
+
+INFO:Slither-read-storage:
+Name: flStakeSharePayable
+Type: uint256
+Slot: 7
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.flStakeShareRatio with type uint24 is located at slot: 8
+
+INFO:Slither-read-storage:
+Name: flStakeShareRatio
+Type: uint24
+Slot: 8
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.proposalStakeShareRatio with type uint24 is located at slot: 8
+
+INFO:Slither-read-storage:
+Name: proposalStakeShareRatio
+Type: uint24
+Slot: 8
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.proposalDeadline with type uint256 is located at slot: 9
+
+INFO:Slither-read-storage:
+Name: proposalDeadline
+Type: uint256
+Slot: 9
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.minRelayBidAmount with type uint256 is located at slot: 10
+
+INFO:Slither-read-storage:
+Name: minRelayBidAmount
+Type: uint256
+Slot: 10
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.pendingStakeShareUpdate with type bool is located at slot: 11
+
+INFO:Slither-read-storage:
+Name: pendingStakeShareUpdate
+Type: bool
+Slot: 11
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.paused with type bool is located at slot: 11
+
+INFO:Slither-read-storage:
+Name: paused
+Type: bool
+Slot: 11
+
+INFO:Slither-read-storage:
+Contract 'FastLaneRelay'
+FastLaneRelay.RESTRICT_EOA with type bool is located at slot: 11
+
+INFO:Slither-read-storage:
+Name: RESTRICT_EOA
+Type: bool
+Slot: 11
+

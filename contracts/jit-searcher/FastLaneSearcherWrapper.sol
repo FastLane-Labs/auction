@@ -4,7 +4,7 @@ pragma solidity ^0.8.16;
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 
-contract FastLaneSearcherWrapper is ReentrancyGuard {
+abstract contract FastLaneSearcherWrapper is ReentrancyGuard {
 
     address public owner;
     address payable private PFLAuction;
@@ -27,7 +27,7 @@ contract FastLaneSearcherWrapper is ReentrancyGuard {
     function fastLaneCall(
             uint256 _bidAmount,
             address _sender, // Relay will always set this to msg.sender that called it. Ideally you (owner) or an approvedEOA.
-            bytes calldata _searcherCallData // contains func selector and calldata for your MEV transaction ie: abi.encodeWithSignature("doStuff(address, uint256)", 0xF00, 1212);
+            bytes calldata _searcherCallData // contains func selector and calldata for your MEV transaction ie: abi.encodeWithSignature("doStuff(address,uint256)", 0xF00, 1212);
     ) external payable onlyRelayer nonReentrant returns (bool, bytes memory) {
         
         // Make sure it's your own EOA that's calling your contract 
@@ -37,7 +37,9 @@ contract FastLaneSearcherWrapper is ReentrancyGuard {
         (bool success, bytes memory returnedData) = address(this).call(_searcherCallData);
         
         // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
-        require(success, "SearcherCallUnsuccessful");
+        if (!success) {
+            return (false, returnedData);
+        }
 
         // Balance check then Repay PFL at the end
         require(
@@ -83,7 +85,13 @@ contract FastLaneSearcherWrapper is ReentrancyGuard {
         return _forwarder == PFLAuction;
     }
 
-    fallback() external payable {}
+    // Be aware with a fallback fn that:
+    // `address(this).call(_searcherCallData);` 
+    // Will hit this if _searcherCallData function is not implemented. 
+    // And success will be true.
+    fallback() external payable {
+        
+    }
     receive() external payable {}
 
     modifier onlyRelayer {
@@ -112,5 +120,16 @@ contract SearcherContractExample is FastLaneSearcherWrapper {
         anAmount = _anAmount;
         bool isSuccessful = true;
         return isSuccessful;
+    }
+
+    function doFail() public payable {
+        if (msg.sender != address(this)) { 
+            // NOTE: msg.sender becomes address(this) if using call from inside contract per above example in `fasfastLaneCall`
+            require(approvedEOAs[msg.sender], "SenderEOANotApproved");
+        }
+        // Will cause Error(string) of: 0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000
+        // to bubble up to the relay contract.
+        // Use the read function `FastLaneRelay.humanizeError(bytes error)` to get a human readable version of an error should your searcher contract fail on a require.
+        require(false,"FAIL_ON_PURPOSE");
     }
 }

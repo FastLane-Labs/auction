@@ -1,2 +1,4 @@
-PFLRelayTest:testStartOrder() (gas: 490130)
-PFLRelayTest:testStartRawSample() (gas: 345255)
+PFLRelayTest:testEnableValidator() (gas: 15515)
+PFLRelayTest:testPayValidator() (gas: 188)
+PFLRelayTest:testSubmitFlashBid() (gas: 1311625)
+PFLRelayTest:testWrongSearcherRepay() (gas: 629498)

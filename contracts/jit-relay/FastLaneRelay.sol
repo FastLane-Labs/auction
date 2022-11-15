@@ -22,6 +22,7 @@ abstract contract FastLaneRelayEvents {
 
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
 
+    event RelayWithdrawDust(address indexed receiver, uint256 amount);
     event RelayWithdrawStuckERC20(
         address indexed receiver,
         address indexed token,
@@ -40,7 +41,7 @@ abstract contract FastLaneRelayEvents {
     error RelayWrongInit();
     error RelaySearcherWrongParams();
 
-    error RelaySearcherCallFailure();
+    error RelaySearcherCallFailure(bytes retData);
     error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);
 
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
@@ -93,6 +94,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     /// @notice Map key is keccak hash of opp tx's gasprice and tx hash
     mapping(bytes32 => uint256) public fulfilledAuctionsMap;
 
+    uint256 public validatorsTotal;
 
     uint256 public flStakeSharePayable;
     uint24 public flStakeShareRatio;
@@ -137,13 +139,13 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
 
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
-            (bool success,) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
+            (bool success, bytes memory retData) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
                         _bidAmount,
                         msg.sender,
                         _searcherCallData
             );
 
-            if (!success) revert RelaySearcherCallFailure();
+            if (!success) revert RelaySearcherCallFailure(retData);
 
             // Verify that the searcher paid the amount they bid & emit the event
             _handleBalances(_bidAmount, balanceBefore);
@@ -187,6 +189,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(_bidAmount, flStakeShareRatio);
 
         validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
+        validatorsTotal += amtPayableToValidator;
         flStakeSharePayable += amtPayableToStakers;
     }
 
@@ -273,6 +276,20 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         emit RelayValidatorDisabled(_validator);
     }
 
+    /// @notice Recover bids repaid to the relay over bidAmount
+    /// @dev Owner only, can never tap into validator balances nor flStake.
+    /// @param _amount amount desired, capped to max
+    function recoverDust(uint256 _amount) 
+        external
+        onlyOwner
+        nonReentrant
+    {
+        uint256 maxDust = address(this).balance - validatorsTotal - flStakeSharePayable;
+        if (_amount > maxDust) _amount = maxDust;
+        SafeTransferLib.safeTransferETH(owner(), _amount);
+        emit RelayWithdrawDust(owner(), _amount);
+    }
+
     /// @notice Withdraws stuck matic
     /// @dev In the event something went really wrong / vuln report
     /// @dev When out of beta role will be moved to gnosis multisig for added safety
@@ -316,6 +333,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         uint256 payableBalance = validatorsBalanceMap[_validator];
         if (payableBalance > 0) {
             validatorsBalanceMap[_validator] = 0;
+            validatorsTotal -= validatorsBalanceMap[_validator];
             SafeTransferLib.safeTransferETH(
                 _validatorPayee(_validator), 
                 payableBalance
@@ -361,6 +379,118 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         flStakeShareRatio = proposalStakeShareRatio;
         pendingStakeShareUpdate = false;
         emit RelayShareSet(proposalStakeShareRatio);
+    }
+
+    /// @notice Returns validator pending balance
+    function getValidatorBalance(address _validator) public view returns (uint256 _validatorBalance) {
+        _validatorBalance = validatorsBalanceMap[_validator];
+    }
+
+    /// @notice Returns the listed payee address regardless of whether or not it has passed the time lock.
+    function getValidatorPayee(address _validator) public view returns (address _payee) {
+        _payee = validatorsDataMap[_validator].payee;
+    }
+
+    /// @notice For validators to determine where their payments will go
+    /// @dev Will return the Payee if blockTimeLock has passed, will return Validator if not.
+    /// @param _validator Address
+    function getValidatorRecipient(address _validator) public view returns (address _recipient) {
+        _recipient = _validatorPayee(_validator);
+    }
+
+    function getCurrentStakeRatio() public view returns (uint24) {
+        return flStakeShareRatio;
+    }
+
+    function getCurrentStakeBalance() public view returns (uint256) {
+       return flStakeSharePayable;
+    }
+
+    function getPendingStakeRatio() public view returns (uint24 _fastLaneStakeShare) {
+        _fastLaneStakeShare = pendingStakeShareUpdate ? proposalStakeShareRatio : flStakeShareRatio;
+    }
+
+    function getPendingDeadline() public view returns (uint256 _timeDeadline) {
+        _timeDeadline = pendingStakeShareUpdate ? proposalDeadline : block.timestamp;
+    }
+
+    function getValidatorStatus(address _validator) public view returns (bool) {
+        return validatorsStatusMap[_validator];
+    }
+
+    function humanizeError(bytes memory _errorData) public pure returns (string memory decoded) {
+        uint256 len = _errorData.length;
+        bytes memory firstPass = abi.decode(slice(_errorData, 4, len-4), (bytes));
+        decoded = abi.decode(slice(firstPass, 4, firstPass.length-4), (string));
+    }
+
+    function slice(
+        bytes memory _bytes,
+        uint256 _start,
+        uint256 _length
+    )
+        internal
+        pure
+        returns (bytes memory)
+    {
+        require(_length + 31 >= _length, "slice_overflow");
+        require(_bytes.length >= _start + _length, "slice_outOfBounds");
+
+        bytes memory tempBytes;
+
+        assembly {
+            switch iszero(_length)
+            case 0 {
+                // Get a location of some free memory and store it in tempBytes as
+                // Solidity does for memory variables.
+                tempBytes := mload(0x40)
+
+                // The first word of the slice result is potentially a partial
+                // word read from the original array. To read it, we calculate
+                // the length of that partial word and start copying that many
+                // bytes into the array. The first word we copy will start with
+                // data we don't care about, but the last `lengthmod` bytes will
+                // land at the beginning of the contents of the new array. When
+                // we're done copying, we overwrite the full first word with
+                // the actual length of the slice.
+                let lengthmod := and(_length, 31)
+
+                // The multiplication in the next line is necessary
+                // because when slicing multiples of 32 bytes (lengthmod == 0)
+                // the following copy loop was copying the origin's length
+                // and then ending prematurely not copying everything it should.
+                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
+                let end := add(mc, _length)
+
+                for {
+                    // The multiplication in the next line has the same exact purpose
+                    // as the one above.
+                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
+                } lt(mc, end) {
+                    mc := add(mc, 0x20)
+                    cc := add(cc, 0x20)
+                } {
+                    mstore(mc, mload(cc))
+                }
+
+                mstore(tempBytes, _length)
+
+                //update free-memory pointer
+                //allocating the array padded to 32 bytes like the compiler does now
+                mstore(0x40, and(add(mc, 31), not(31)))
+            }
+            //if we want a zero-length slice let's just return a zero-length array
+            default {
+                tempBytes := mload(0x40)
+                //zero out the 32 bytes slice we are about to return
+                //we need to do it because Solidity does not garbage collect
+                mstore(tempBytes, 0)
+
+                mstore(0x40, add(tempBytes, 0x20))
+            }
+        }
+
+        return tempBytes;
     }
 
     /***********************************|
