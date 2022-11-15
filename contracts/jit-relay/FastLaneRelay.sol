@@ -2,7 +2,7 @@
 pragma solidity ^0.8.16;
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-
+import "openzeppelin-contracts/contracts/utils/Address.sol";
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
@@ -12,7 +12,7 @@ abstract contract FastLaneRelayEvents {
     event RelayPausedStateSet(bool state);
     event RelayValidatorEnabled(address validator, address payee);
     event RelayValidatorDisabled(address validator);
-    event RelayValidatorPayeeUpdated(address _validator, address _payee);
+    event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
 
     event RelayInitialized(uint24 initialStakeShare, uint256 minAmount, bool restrictEOA);
 
@@ -80,7 +80,6 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
 
 
 
-    using SafeTransferLib for address payable;
 
     /// @notice If a validator is active or not
     mapping(address => bool) public validatorsStatusMap;
@@ -332,8 +331,8 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
     function payValidator(address _validator) external whenNotPaused nonReentrant onlyValidatorProxy(_validator) returns (uint256) {        
         uint256 payableBalance = validatorsBalanceMap[_validator];
         if (payableBalance > 0) {
-            validatorsBalanceMap[_validator] = 0;
             validatorsTotal -= validatorsBalanceMap[_validator];
+            validatorsBalanceMap[_validator] = 0;
             SafeTransferLib.safeTransferETH(
                 _validatorPayee(_validator), 
                 payableBalance
@@ -353,7 +352,7 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
         validatorsDataMap[_validator].payee = _payee;
         validatorsDataMap[_validator].timeUpdated = block.timestamp;
 
-        emit RelayValidatorPayeeUpdated(_validator, _payee);   
+        emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);   
     }
 
     function _isPayeeNotTimeLocked(address _validator) internal view returns (bool _valid) {

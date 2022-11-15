@@ -77,6 +77,11 @@ abstract contract FastLaneSearcherWrapper is ReentrancyGuard {
         approvedEOAs[_eoaAddress] = true;
     }
 
+    function revokeFastLaneEOA(address _eoaAddress) public {
+        require(msg.sender == owner, "OriginEOANotOwner");
+        approvedEOAs[_eoaAddress] = false;
+    }
+
     function checkFastLaneEOA(address _eoaAddress) view internal {
         require(approvedEOAs[_eoaAddress] || _eoaAddress == owner, "SenderEOANotApproved");
     }

@@ -33,6 +33,8 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
             address currentSearcher = SEARCHERS[i];
             uint256 soonWMaticBidder = (10 ether * (i + 1));
             uint256 soonWMaticSearcher = (33 ether * (i + 1));
+            vm.label(currentBidder,string.concat("BIDDER",Strings.toString(i+1)));
+            vm.label(currentSearcher,string.concat("SEARCHER",Strings.toString(i+1)));
             vm.deal(currentBidder, soonWMaticBidder + 1);
             vm.deal(currentSearcher, soonWMaticSearcher + 1);
         }
@@ -45,12 +47,14 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
         vm.deal(address(brokenUniswap), 100 ether);
         vm.coinbase(VALIDATOR1);
+        vm.label(VALIDATOR1,"VALIDATOR1");
+        vm.label(OWNER,"OWNER");
         console.log("Block Coinbase: %s",block.coinbase);
     }
 
     function testSubmitFlashBid() public {
 
-        vm.deal(SEARCHER_ADDRESS1, 10 ether);
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
 
         uint256 bidAmount = 0.001 ether;
         bytes32 oppTx = bytes32("tx1");
@@ -211,6 +215,71 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
     function testPayValidator() public {
 
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
+
+        uint256 bidAmount = 2 ether;
+        bytes32 oppTx = bytes32("tx1");
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, VALIDATOR1);
+        SearcherRepayerEcho SRE = new SearcherRepayerEcho();
+
+        vm.prank(SEARCHER_ADDRESS1);
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+
+        uint256 snap = vm.snapshot();
+
+        vm.prank(VALIDATOR2);
+        vm.expectRevert(FastLaneRelayEvents.RelayPermissionUnauthorized.selector);
+        PFR.payValidator(VALIDATOR1);
+
+        
+
+        vm.prank(VALIDATOR1);
+        vm.expectEmit(true, true, true, true);
+        emit RelayProcessingPaidValidator(VALIDATOR1, 1.9 ether, VALIDATOR1);
+
+        uint256 balanceBefore = VALIDATOR1.balance;
+        PFR.payValidator(VALIDATOR1);
+
+        // Validator actually got paid
+        assertEq(VALIDATOR1.balance, balanceBefore + 1.9 ether);
+        
+        assertEq(0, PFR.validatorsTotal());
+
+        // Again
+        vm.prank(VALIDATOR1);
+        uint256 payableBalance = PFR.payValidator(VALIDATOR1);
+        assertEq(0, payableBalance);
+
+        // Back to pre-payment. VALIDATOR1 has 1.9 matic to withdraw.
+        vm.revertTo(snap);
+
+        // As SEARCHER_2 try to update VALIDATOR1 payee, no-no.
+        vm.prank(SEARCHER_ADDRESS2);
+        vm.expectRevert(FastLaneRelayEvents.RelayPermissionUnauthorized.selector);
+        PFR.updateValidatorPayee(VALIDATOR1, SEARCHER_ADDRESS2);
+
+        // Legit update
+        vm.prank(VALIDATOR1);
+
+        vm.expectEmit(true, true, true, true);
+        emit RelayValidatorPayeeUpdated(VALIDATOR1, SEARCHER_ADDRESS2, VALIDATOR1);
+
+        PFR.updateValidatorPayee(VALIDATOR1, SEARCHER_ADDRESS2);
+
+    }
+
+    function testOwnerOnly() public {
+        vm.startPrank(OWNER);
+        vm.expectEmit(true, true, true, true);
+        emit RelayPausedStateSet(true);
+        PFR.setPausedState(true);
+         
+
+        vm.expectRevert(FastLaneRelayEvents.RelayPermissionPaused.selector);
+        PFR.payValidator(vm.addr(3333));
     }
 }
 
@@ -256,6 +325,44 @@ contract BrokenSearcherRepayerPartial {
     ) external payable returns (bool, bytes memory) {
         bool success;
         uint256 amount = 1 ether;
+        address to = msg.sender;
+        assembly {
+            // Transfer the ETH and store if it succeeded or not.
+            success := call(gas(), to, amount, 0, 0, 0, 0)
+        }
+
+        require(success, "ETH_TRANSFER_FAILED");
+        return (true,bytes("ok"));
+    }
+}
+
+
+contract SearcherRepayerEcho {
+    function fastLaneCall(
+            address _sender,
+            uint256 _bidAmount,
+            bytes calldata _searcherCallData
+    ) external payable returns (bool, bytes memory) {
+        bool success;
+        address to = msg.sender;
+        assembly {
+            // Transfer the ETH and store if it succeeded or not.
+            success := call(gas(), to, _bidAmount, 0, 0, 0, 0)
+        }
+
+        require(success, "ETH_TRANSFER_FAILED");
+        return (true,bytes("ok"));
+    }
+}
+
+contract SearcherRepayerOverpayerDouble {
+    function fastLaneCall(
+            address _sender,
+            uint256 _bidAmount,
+            bytes calldata _searcherCallData
+    ) external payable returns (bool, bytes memory) {
+        bool success;
+        uint256 amount = _bidAmount * 2;
         address to = msg.sender;
         assembly {
             // Transfer the ETH and store if it succeeded or not.

@@ -18,7 +18,7 @@ interface IFastLaneRelay {
     event RelayShareSet(uint24 amount);
     event RelayValidatorDisabled(address validator);
     event RelayValidatorEnabled(address validator, address payee);
-    event RelayValidatorPayeeUpdated(address _validator, address _payee);
+    event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
     event RelayWithdrawDust(address indexed receiver, uint256 amount);
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
     event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
