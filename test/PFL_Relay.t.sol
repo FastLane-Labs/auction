@@ -228,8 +228,8 @@ contract BrokenSearcherForgotFastLaneCallFn {
 
 contract BrokenSearcherForgotReturnBoolBytes {
     function fastLaneCall(
-            uint256 _bidAmount,
             address _sender,
+            uint256 _bidAmount,
             bytes calldata _searcherCallData
     ) external payable /* returns (bool, bytes memory) <- FORGOTTEN */ {
     }
@@ -239,8 +239,8 @@ contract BrokenSearcherForgotReturnBoolBytes {
 // Purpose is to do nothing, hence not repaying the relay
 contract BrokenSearcherRepayer {
     function fastLaneCall(
-            uint256 _bidAmount,
             address _sender,
+            uint256 _bidAmount,
             bytes calldata _searcherCallData
     ) external payable returns (bool, bytes memory) {
         return (true,bytes("ok"));
@@ -250,8 +250,8 @@ contract BrokenSearcherRepayer {
 // Purpose is only repay partially the relay
 contract BrokenSearcherRepayerPartial {
     function fastLaneCall(
-            uint256 _bidAmount,
             address _sender,
+            uint256 _bidAmount,
             bytes calldata _searcherCallData
     ) external payable returns (bool, bytes memory) {
         bool success;

@@ -25,8 +25,8 @@ abstract contract FastLaneSearcherWrapper is ReentrancyGuard {
     // PFL will pass along the original msg.sender as _sender for the searcher to do additional checks
     // Do NOT forget `onlyRelayer` and `checkFastLaneEOA(_sender);` or ANYONE will be able to call your contract with arbitrary calldata
     function fastLaneCall(
-            uint256 _bidAmount,
             address _sender, // Relay will always set this to msg.sender that called it. Ideally you (owner) or an approvedEOA.
+            uint256 _bidAmount,
             bytes calldata _searcherCallData // contains func selector and calldata for your MEV transaction ie: abi.encodeWithSignature("doStuff(address,uint256)", 0xF00, 1212);
     ) external payable onlyRelayer nonReentrant returns (bool, bytes memory) {
         

@@ -67,7 +67,7 @@ struct ValidatorData {
 }
 
 interface ISearcherContract {
-    function fastLaneCall(uint256, address, bytes calldata) external payable returns (bool, bytes memory);
+    function fastLaneCall(address, uint256, bytes calldata) external payable returns (bool, bytes memory);
 }
 
 contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
@@ -140,8 +140,8 @@ contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
             (bool success, bytes memory retData) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
-                        _bidAmount,
                         msg.sender,
+                        _bidAmount,
                         _searcherCallData
             );
 
