@@ -6,7 +6,7 @@ import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
 
-abstract contract FastLaneRelayEvents {
+abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayPausedStateSet(bool state);
     event RelayValidatorEnabled(address validator, address payee);
@@ -69,7 +69,7 @@ interface ISearcherContract {
     function fastLaneCall(address, uint256, bytes calldata) external payable returns (bool, bytes memory);
 }
 
-contract FastLaneRelay is FastLaneRelayEvents, Ownable, ReentrancyGuard {
+contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, ReentrancyGuard {
 
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;

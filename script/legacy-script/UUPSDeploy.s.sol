@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 import "forge-std/Test.sol";
 import "forge-std/Script.sol";
 
-import {FastLaneAuction} from "../contracts/FastLaneAuction.sol";
+import {FastLaneLegacyAuction} from "../../contracts/legacy/FastLaneLegacyAuction.sol";
 import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract Deploy is Script {
@@ -52,10 +52,10 @@ contract Deploy is Script {
 
         console2.log("CREATE2 Implementation Predict Bytecode:");
         // Copy this into init_code_implementation.txt
-        console2.logBytes(abi.encodePacked(type(FastLaneAuction).creationCode, abi.encode(eoa)));
+        console2.logBytes(abi.encodePacked(type(FastLaneLegacyAuction).creationCode, abi.encode(eoa)));
 
 
-        FastLaneAuction FLAImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa); // 0x111be7a544ba60d162f5d75ea6bda7254d650d8b
+        FastLaneLegacyAuction FLAImplementation = new FastLaneLegacyAuction{salt: implementationSaltStr}(eoa); // 0x111be7a544ba60d162f5d75ea6bda7254d650d8b
         fastlaneImplementation = address(FLAImplementation); 
 
         console2.log("Implementation Deployed at:");

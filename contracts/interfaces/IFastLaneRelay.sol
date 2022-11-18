@@ -1,6 +1,6 @@
 pragma solidity ^0.8.10;
 
-interface IFastLaneRelay {
+interface IFastLaneAuctionHandler {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event RelayFlashBid(
         address indexed sender,

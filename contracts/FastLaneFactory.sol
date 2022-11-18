@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Unlicensed
 pragma solidity 0.8.16;
 
-import {FastLaneAuction} from "./FastLaneAuction.sol";
+import {FastLaneLegacyAuction} from "./legacy/FastLaneLegacyAuction.sol";
 
 
 contract FastLaneFactory {
@@ -12,21 +12,21 @@ contract FastLaneFactory {
     mapping(uint256 => address) public wrappedNativeAddresses;
 
     // Todo: Remove Unused
-    bytes32 private constant INIT_CODEHASH = keccak256(type(FastLaneAuction).creationCode);
+    bytes32 private constant INIT_CODEHASH = keccak256(type(FastLaneLegacyAuction).creationCode);
 
     event FastLaneCreated(address fastlaneContract);
 
     function _createFastLane(bytes32 _salt, address _initial_bid_token, address _ops) internal {
         
         // use CREATE2 so we can get a deterministic address based on the salt
-        fastlane = address(new FastLaneAuction{salt: _salt}(msg.sender));
+        fastlane = address(new FastLaneLegacyAuction{salt: _salt}(msg.sender));
 
         // CREATE2 can return address(0), add a check to verify this isn't the case
         // See: https://eips.ethereum.org/EIPS/eip-1014
         require(fastlane != address(0), "Wrong init");
         emit FastLaneCreated(fastlane);
 
-        FastLaneAuction(fastlane).initialSetupAuction(_initial_bid_token, _ops, msg.sender);
+        FastLaneLegacyAuction(fastlane).initialSetupAuction(_initial_bid_token, _ops, msg.sender);
 
     }
 
@@ -66,7 +66,7 @@ contract FastLaneFactory {
             address(this),
             _salt,
             keccak256(abi.encodePacked(
-                type(FastLaneAuction).creationCode
+                type(FastLaneLegacyAuction).creationCode
             )
         ))))));
         isDeployed = predictedAddress.code.length != 0;

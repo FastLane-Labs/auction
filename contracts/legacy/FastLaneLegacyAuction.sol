@@ -161,7 +161,7 @@ abstract contract FastLaneEvents {
 /// @title FastLaneAuction
 /// @author Elyx0
 /// @notice Fastlane.finance auction contract
-contract FastLaneAuction is Initializable, OwnableUpgradeable , UUPSUpgradeable, ReentrancyGuard, FastLaneEvents {
+contract FastLaneLegacyAuction is Initializable, OwnableUpgradeable , UUPSUpgradeable, ReentrancyGuard, FastLaneEvents {
     using Address for address payable;
     using EnumerableSet for EnumerableSet.AddressSet;
     using SafeTransferLib for ERC20;

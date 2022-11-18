@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 
-import "contracts/FastLaneAuction.sol";
+import "contracts/legacy/FastLaneLegacyAuction.sol";
 
 
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
@@ -16,14 +16,14 @@ import "contracts/interfaces/IWMatic.sol";
 
 import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
 
-import { PFLHelper } from "./PFLAuction.t.sol";
+import { PFLHelper } from "./legacy-test/PFLAuction.t.sol";
 
-import "contracts/jit-relay/FastLaneRelay.sol";
+import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
-import { SearcherContractExample } from "contracts/jit-searcher/FastLaneSearcherWrapper.sol";
+import { SearcherContractExample } from "contracts/searcher-proxy/FastLaneSearcherProxy.sol";
 
-contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
-    FastLaneRelay PFR;
+contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
+    FastLaneAuctionHandler PFR;
     BrokenUniswap brokenUniswap;
     address PFL_VAULT = OPS_ADDRESS;
     function setUp() public {
@@ -42,10 +42,11 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
         uint24 stakeShare = 50_000;
         // Use PFL_VAULT as vault for repay checks
-        PFR = new FastLaneRelay(stakeShare, 1 ether, false);
+        PFR = new FastLaneAuctionHandler(stakeShare, 1 ether, false);
         brokenUniswap = new BrokenUniswap();
 
         vm.deal(address(brokenUniswap), 100 ether);
+        vm.deal(OWNER, 100 ether);
         vm.coinbase(VALIDATOR1);
         vm.label(VALIDATOR1,"VALIDATOR1");
         vm.label(OWNER,"OWNER");
@@ -54,7 +55,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
     function testSubmitFlashBid() public {
 
-        vm.deal(SEARCHER_ADDRESS1, 100 ether);
+        vm.deal(SEARCHER_ADDRESS1, 150 ether);
 
         uint256 bidAmount = 0.001 ether;
         bytes32 oppTx = bytes32("tx1");
@@ -79,7 +80,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
         vm.prank(SEARCHER_ADDRESS1);
 
-        vm.expectRevert(FastLaneRelayEvents.RelayPermissionNotFastlaneValidator.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionNotFastlaneValidator.selector);
         PFR.submitFlashBid(bidAmount, oppTx, to, searcherCallData);
 
         vm.prank(OWNER);
@@ -88,11 +89,11 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         PFR.enableRelayValidator(VALIDATOR1, VALIDATOR1);
 
         vm.startPrank(SEARCHER_ADDRESS1);
-        vm.expectRevert(FastLaneRelayEvents.RelaySearcherWrongParams.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
         PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
-        vm.expectRevert(FastLaneRelayEvents.RelaySearcherWrongParams.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
         PFR.submitFlashBid(bidAmount, oppTx, address(0),  searcherCallData);
-        vm.expectRevert(FastLaneRelayEvents.RelaySearcherWrongParams.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
         PFR.submitFlashBid(0.001 ether, oppTx, to,  searcherCallData);
 
         bidAmount = 2 ether;
@@ -108,7 +109,9 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 0"));
         PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
 
+        // Can oddly revert with "EvmError: OutOfFund".
         vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 1000000000000000000"));
+        console.log("Balance SCE: %s", to.balance);
         PFR.submitFlashBid{value: 1 ether}(bidAmount, oppTx, to,  searcherCallData);
 
 
@@ -134,11 +137,11 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         console.log("Balance Coinbase: %s",  PFR.getValidatorBalance(block.coinbase));
 
         // Replay attempt
-        vm.expectRevert(FastLaneRelayEvents.RelayAuctionBidReceivedLate.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayAuctionBidReceivedLate.selector);
         PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
 
         // Not winner
-        vm.expectRevert(abi.encodeWithSelector(FastLaneRelayEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount));
+        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount));
         PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, oppTx, to,  searcherCallData);
 
         // Failed searcher call inside their contract
@@ -157,7 +160,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         // Helper: PFR.humanizeError()
  
         {
-        bytes memory encoded = abi.encodeWithSelector(FastLaneRelayEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE"));
+        bytes memory encoded = abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE"));
         
         console.logBytes(encoded);
         console.log(PFR.humanizeError(encoded));
@@ -165,7 +168,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         // Decode error
         assertEq(PFR.humanizeError(encoded), "FAIL_ON_PURPOSE");
 
-        vm.expectRevert(abi.encodeWithSelector(FastLaneRelayEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE")));
+        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE")));
         PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to,  searcherFailCallData);
 
         }
@@ -195,13 +198,13 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
         // Searcher implemented but doesn't manage to repay the relay
         BrokenSearcherRepayer BRP = new BrokenSearcherRepayer();
-        vm.expectRevert(abi.encodeWithSelector(FastLaneRelayEvents.RelayNotRepaid.selector, bidAmount, 0));
+        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayNotRepaid.selector, bidAmount, 0));
         PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BRP),  searcherUnusedData);
 
         // Searcher implemented but doesn't manage to repay the relay in full
         BrokenSearcherRepayerPartial BRPP = new BrokenSearcherRepayerPartial();
         vm.deal(address(BRPP), 10 ether);
-        vm.expectRevert(abi.encodeWithSelector(FastLaneRelayEvents.RelayNotRepaid.selector, bidAmount, 1 ether));
+        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayNotRepaid.selector, bidAmount, 1 ether));
         PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BRPP),  searcherUnusedData);
         
     }
@@ -209,7 +212,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
     function testEnableValidator() public {
         vm.startPrank(OWNER);
-        vm.expectRevert(FastLaneRelayEvents.RelayCannotBeZero.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCannotBeZero.selector);
         PFR.enableRelayValidator(VALIDATOR1, address(0));
     }
 
@@ -231,7 +234,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         uint256 snap = vm.snapshot();
 
         vm.prank(VALIDATOR2);
-        vm.expectRevert(FastLaneRelayEvents.RelayPermissionUnauthorized.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
         PFR.payValidator(VALIDATOR1);
 
         
@@ -258,7 +261,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
 
         // As SEARCHER_2 try to update VALIDATOR1 payee, no-no.
         vm.prank(SEARCHER_ADDRESS2);
-        vm.expectRevert(FastLaneRelayEvents.RelayPermissionUnauthorized.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
         PFR.updateValidatorPayee(VALIDATOR1, SEARCHER_ADDRESS2);
 
         // Legit update
@@ -278,7 +281,7 @@ contract PFLRelayTest is PFLHelper, FastLaneRelayEvents {
         PFR.setPausedState(true);
          
 
-        vm.expectRevert(FastLaneRelayEvents.RelayPermissionPaused.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionPaused.selector);
         PFR.payValidator(vm.addr(3333));
     }
 }

@@ -4,7 +4,7 @@ pragma solidity ^0.8.16;
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 
-abstract contract FastLaneSearcherWrapper is ReentrancyGuard {
+abstract contract FastLaneSearcherProxyContract is ReentrancyGuard {
 
     address public owner;
     address payable private PFLAuction;
@@ -49,7 +49,8 @@ abstract contract FastLaneSearcherWrapper is ReentrancyGuard {
 
         safeTransferETH(PFLAuction, _bidAmount);
         
-        // Return the return data (optional)
+        // /!\ Important to return success true or relay will revert.
+        // In case of success == false, `returnedData` will be used as revert message that can be decoded with `.humanizeError()`
         return (success, returnedData);
     }
 
@@ -105,7 +106,7 @@ abstract contract FastLaneSearcherWrapper is ReentrancyGuard {
      }
 }
 
-contract SearcherContractExample is FastLaneSearcherWrapper {
+contract SearcherContractExample is FastLaneSearcherProxyContract {
     // Your own MEV contract / functions here 
     // NOTE: its security checks must be compatible w/ calls from the FastLane Auction Contract
 

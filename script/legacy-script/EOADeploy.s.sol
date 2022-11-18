@@ -4,7 +4,7 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "forge-std/Script.sol";
 
-import {FastLaneAuction} from "../contracts/FastLaneAuction.sol";
+import {FastLaneLegacyAuction} from "../../contracts/legacy/FastLaneLegacyAuction.sol";
 
 contract Deploy is Script {
 
@@ -44,9 +44,9 @@ contract Deploy is Script {
         // vm.startBroadcast(vm.addr(deployerPrivateKey));
 
         vm.startBroadcast();
-        fastlane = address(new FastLaneAuction(msg.sender));
+        fastlane = address(new FastLaneLegacyAuction(msg.sender));
         
-        FastLaneAuction(fastlane).initialSetupAuction(initial_bid_token, ops, msg.sender);
+        FastLaneLegacyAuction(fastlane).initialSetupAuction(initial_bid_token, ops, msg.sender);
 
         console2.log(fastlane);
     }

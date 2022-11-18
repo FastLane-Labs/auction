@@ -1,5 +1,5 @@
 TN:
-SF:contracts/FastLaneAuction.sol
+SF:contracts/legacy/FastLaneLegacyAuction.sol
 FN:176,FastLaneAuction.initialize
 FNDA:1,FastLaneAuction.initialize
 DA:177,1

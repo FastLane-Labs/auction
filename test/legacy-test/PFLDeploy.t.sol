@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.16;
 
-import "contracts/FastLaneAuction.sol";
+import "contracts/legacy/FastLaneLegacyAuction.sol";
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 
-import "contracts/FastLaneAuction.sol";
+import "contracts/legacy/FastLaneLegacyAuction.sol";
 
 import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {PFLHelper} from "./PFLAuction.t.sol";
 
 contract PFLDeployTest is Test, PFLHelper {
-    FastLaneAuction public fastlaneImplementation;
+    FastLaneLegacyAuction public fastlaneImplementation;
     address constant foundryFactory = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
     address constant expectedImplementationAddress = 0x111bE7a544ba60D162f5d75Ea6bdA7254D650D8b;
     address expectedProxyAddress = 0xfa571A11e01d7759B816B41B5018432B2D202043;
@@ -30,7 +30,7 @@ contract PFLDeployTest is Test, PFLHelper {
 
         // Deploy impl as foundry factory with salt
         vm.prank(foundryFactory);
-        fastlaneImplementation = new FastLaneAuction{salt: implementationSaltStr}(eoa);
+        fastlaneImplementation = new FastLaneLegacyAuction{salt: implementationSaltStr}(eoa);
 
         console2.log("Implementation Deployed at:");
         console2.log(address(fastlaneImplementation));
@@ -120,7 +120,7 @@ contract PFLDeployTest is Test, PFLHelper {
         bytes32 implementationV2SaltStrV2 = "V2";
         // Deploy impl as foundry factory with salt
         vm.prank(foundryFactory);
-        FastLaneAuction fastlaneV2ImplementationV2 = new FastLaneAuction{salt: implementationV2SaltStrV2}(eoa); // 0x368845aff2b7051c33ca5db927eceb6e54efce5c
+        FastLaneLegacyAuction fastlaneV2ImplementationV2 = new FastLaneLegacyAuction{salt: implementationV2SaltStrV2}(eoa); // 0x368845aff2b7051c33ca5db927eceb6e54efce5c
 
         vm.prank(eoa);
         vm.expectEmit(true, true, true, true);

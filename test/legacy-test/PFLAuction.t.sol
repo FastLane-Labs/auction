@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 
-import "contracts/FastLaneAuction.sol";
+import "contracts/legacy/FastLaneLegacyAuction.sol";
 
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/utils/Address.sol";
@@ -22,7 +22,7 @@ import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
 abstract contract PFLHelper is Test, FastLaneEvents {
 
     using Address for address payable;
-    FastLaneAuction public FLA;
+    FastLaneLegacyAuction public FLA;
     address constant MUMBAI_MATIC = 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889;
     address constant OPS_ADDRESS = address(0xBEEF);
     WMATIC public wMatic;
@@ -101,7 +101,7 @@ abstract contract PFLHelper is Test, FastLaneEvents {
         vm.prank(OWNER);
 
         if (noAuction == false) {
-            FLA = new FastLaneAuction(OWNER);
+            FLA = new FastLaneLegacyAuction(OWNER);
 
             vm.prank(OWNER);
             FLA.initialSetupAuction(MUMBAI_MATIC, OPS_ADDRESS, OWNER);
