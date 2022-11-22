@@ -4,11 +4,10 @@ pragma solidity ^0.8.16;
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 
-contract FastLaneSearcherProxyContract is ReentrancyGuard {
+abstract contract FastLaneSearcherProxyContract is ReentrancyGuard {
 
     address public owner;
     address payable private PFLAuction;
-    address payable private searcherContract;
 
     error WrongPermissions();
     error OriginEOANotOwner();
@@ -17,9 +16,8 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
 
     mapping(address => bool) internal approvedEOAs;
 
-    constructor(address _searcherContract) {
+    constructor() {
         owner = msg.sender;
-        searcherContract = _searcherContract;
     }
 
     // The FastLane Auction contract will call this function
@@ -35,23 +33,15 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
         // Make sure it's your own EOA that's calling your contract 
         checkFastLaneEOA(_sender);
 
-        // Track gasleft() to make sure you aren't hitting a fallback function
-        uint256 initialGasLeft = gasleft();
-
         // Execute the searcher's intended function
-        (bool success, bytes memory returnedData) = searcherContract.call(_searcherCallData);
+        (bool success, bytes memory returnedData) = address(this).call(_searcherCallData);
         
-        // Verify you spent more gas than the max for a fallback function
-        if (initialGasLeft - gasleft() <= 5_000) {
-            return (false, returnedData);
-        }
-
         // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
         if (!success) {
             return (false, returnedData);
         }
 
-        // Balance check then pay FastLane Auction Handler contract at the end
+        // Balance check then pay PFL at the end
         require(
             (address(this).balance >= _bidAmount), 
             string(abi.encodePacked("SearcherInsufficientFunds  ", Strings.toString(_bidAmount), " ", Strings.toString(address(this).balance)))
@@ -81,11 +71,6 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
     function setPFLAuctionAddress(address _pflAuction) public {
         require(msg.sender == owner, "OriginEOANotOwner");
         PFLAuction = payable(_pflAuction);
-    }
-
-    function setSearcherContractAddress(address _searcherContract) public {
-        require(msg.sender == owner, "OriginEOANotOwner");
-        searcherContract = payable(_searcherContract);
     }
 
     function approveFastLaneEOA(address _eoaAddress) public {
@@ -119,4 +104,38 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
           if (!isTrustedForwarder(msg.sender)) revert("InvalidPermissions");
           _;
      }
+}
+
+contract SearcherContractExample is FastLaneSearcherProxyContract {
+    // Your own MEV contract / functions here 
+    // NOTE: its security checks must be compatible w/ calls from the FastLane Auction Contract
+
+    address public anAddress; // just a var to change for the placeholder MEV function
+    uint256 public anAmount; // another var to change for the placeholder MEV function
+
+    function doStuff(address _anAddress, uint256 _anAmount) public payable returns (bool) {
+        // NOTE: this function can't be external as the FastLaneCall func will call it internally
+        if (msg.sender != address(this)) { 
+            // NOTE: msg.sender becomes address(this) if using call from inside contract per above example in `fasfastLaneCall`
+            require(approvedEOAs[msg.sender], "SenderEOANotApproved");
+        }
+        
+        // Do MEV stuff here
+        // placeholder
+        anAddress = _anAddress;
+        anAmount = _anAmount;
+        bool isSuccessful = true;
+        return isSuccessful;
+    }
+
+    function doFail() public payable {
+        if (msg.sender != address(this)) { 
+            // NOTE: msg.sender becomes address(this) if using call from inside contract per above example in `fasfastLaneCall`
+            require(approvedEOAs[msg.sender], "SenderEOANotApproved");
+        }
+        // Will cause Error(string) of: 0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000
+        // to bubble up to the relay contract.
+        // Use the read function `FastLaneRelay.humanizeError(bytes error)` to get a human readable version of an error should your searcher contract fail on a require.
+        require(false,"FAIL_ON_PURPOSE");
+    }
 }
