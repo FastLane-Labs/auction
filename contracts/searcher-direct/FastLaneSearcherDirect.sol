@@ -4,7 +4,7 @@ pragma solidity ^0.8.16;
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 
-abstract contract FastLaneSearcherProxyContract is ReentrancyGuard {
+abstract contract FastLaneSearcherDirectContract is ReentrancyGuard {
 
     address public owner;
     address payable private PFLAuction;
@@ -106,7 +106,7 @@ abstract contract FastLaneSearcherProxyContract is ReentrancyGuard {
      }
 }
 
-contract SearcherContractExample is FastLaneSearcherProxyContract {
+contract SearcherContractExample is FastLaneSearcherDirectContract {
     // Your own MEV contract / functions here 
     // NOTE: its security checks must be compatible w/ calls from the FastLane Auction Contract
 
