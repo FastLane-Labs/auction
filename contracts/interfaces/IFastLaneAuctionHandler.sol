@@ -9,13 +9,21 @@ interface IFastLaneAuctionHandler {
         address indexed validator,
         address searcherContractAddress
     );
-    event RelayInitialized(uint24 initialStakeShare, uint256 minAmount, bool restrictEOA);
+    event RelayInitialized(uint24 initialStakeShare, uint256 minAmount);
     event RelayMinAmountSet(uint256 minAmount);
     event RelayPausedStateSet(bool state);
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
     event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
     event RelayShareProposed(uint24 amount, uint256 deadline);
     event RelayShareSet(uint24 amount);
+    event RelaySimulatedFlashBid(
+        address indexed sender,
+        uint256 amount,
+        bytes32 indexed oppTxHash,
+        address indexed validator,
+        address searcherContractAddress
+    );
+    event RelaySimulatorStateSet(bool state);
     event RelayValidatorDisabled(address validator);
     event RelayValidatorEnabled(address validator, address payee);
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -23,7 +31,7 @@ interface IFastLaneAuctionHandler {
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
     event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
 
-    function RESTRICT_EOA() external view returns (bool);
+    function bid_simulator_enabled() external view returns (bool);
     function disableRelayValidator(address _validator) external;
     function enableRelayValidator(address _validator, address _payee) external;
     function flStakeSharePayable() external view returns (uint256);
@@ -50,6 +58,13 @@ interface IFastLaneAuctionHandler {
     function setFastLaneStakeShare(uint24 _fastLaneStakeShare) external;
     function setMininumBidAmount(uint256 _minAmount) external;
     function setPausedState(bool _state) external;
+    function setSimulatorState(bool _state) external;
+    function simulateFlashBid(
+        uint256 _bidAmount,
+        bytes32 _oppTxHash,
+        address _searcherToAddress,
+        bytes memory _searcherCallData
+    ) external payable;
     function submitFlashBid(
         uint256 _bidAmount,
         bytes32 _oppTxHash,

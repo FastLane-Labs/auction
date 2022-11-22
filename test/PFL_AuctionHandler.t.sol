@@ -20,7 +20,7 @@ import { PFLHelper } from "./legacy-test/PFLAuction.t.sol";
 
 import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
-import { SearcherContractExample } from "contracts/searcher-proxy/FastLaneSearcherProxy.sol";
+import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     FastLaneAuctionHandler PFR;
@@ -42,7 +42,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         uint24 stakeShare = 50_000;
         // Use PFL_VAULT as vault for repay checks
-        PFR = new FastLaneAuctionHandler(stakeShare, 1 ether, false);
+        PFR = new FastLaneAuctionHandler(stakeShare, 1 ether);
         brokenUniswap = new BrokenUniswap();
 
         vm.deal(address(brokenUniswap), 100 ether);
@@ -78,7 +78,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         console.log("Address PFR: %s", address(PFR));
         console.log("Owner SCE: %s", SCE.owner());
 
-        vm.prank(SEARCHER_ADDRESS1);
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
 
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionNotFastlaneValidator.selector);
         PFR.submitFlashBid(bidAmount, oppTx, to, searcherCallData);
@@ -88,7 +88,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         emit RelayValidatorEnabled(VALIDATOR1, VALIDATOR1);
         PFR.enableRelayValidator(VALIDATOR1, VALIDATOR1);
 
-        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
         PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
@@ -181,7 +181,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         uint256 bidAmount = 2 ether;
 
-        vm.prank(SEARCHER_ADDRESS1);
+        vm.startPrank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
 
         bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
 
@@ -216,6 +216,29 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.enableRelayValidator(VALIDATOR1, address(0));
     }
 
+    function testSimulateFlashBid() public {
+        vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        SearcherRepayerEcho SRE = new SearcherRepayerEcho();
+
+        uint256 bidAmount = 0.00002 ether;
+        bytes32 oppTx = bytes32("fakeTx1");
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+
+        vm.expectEmit(true, true, true, true);
+        emit RelaySimulatedFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, block.coinbase, address(SRE));
+        PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(SRE),  searcherUnusedData);
+
+        vm.stopPrank();
+        vm.prank(OWNER);
+        vm.expectEmit(true,true,true, true);
+        emit RelaySimulatorStateSet(false);
+        PFR.setSimulatorState(false);
+
+        vm.prank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
+        PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(SRE),  searcherUnusedData);
+    }
+
     function testPayValidator() public {
 
         vm.deal(SEARCHER_ADDRESS1, 100 ether);
@@ -228,7 +251,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.enableRelayValidator(VALIDATOR1, VALIDATOR1);
         SearcherRepayerEcho SRE = new SearcherRepayerEcho();
 
-        vm.prank(SEARCHER_ADDRESS1);
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
 
         uint256 snap = vm.snapshot();

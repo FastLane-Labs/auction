@@ -10,11 +10,6 @@
         "internalType": "uint256",
         "name": "_minRelayBidAmount",
         "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "_restrictEOA",
-        "type": "bool"
       }
     ],
     "stateMutability": "nonpayable",
@@ -130,6 +125,33 @@
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "bidAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "actualAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelaySimulatedNotRepaid",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes",
+        "name": "retData",
+        "type": "bytes"
+      }
+    ],
+    "name": "RelaySimulatedSearcherCallFailure",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "RelayTimeUnsuitable",
     "type": "error"
@@ -209,12 +231,6 @@
         "internalType": "uint256",
         "name": "minAmount",
         "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "restrictEOA",
-        "type": "bool"
       }
     ],
     "name": "RelayInitialized",
@@ -320,6 +336,56 @@
       }
     ],
     "name": "RelayShareSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "oppTxHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "validator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "searcherContractAddress",
+        "type": "address"
+      }
+    ],
+    "name": "RelaySimulatedFlashBid",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "state",
+        "type": "bool"
+      }
+    ],
+    "name": "RelaySimulatorStateSet",
     "type": "event"
   },
   {
@@ -448,7 +514,7 @@
   },
   {
     "inputs": [],
-    "name": "RESTRICT_EOA",
+    "name": "bid_simulator_enabled",
     "outputs": [
       {
         "internalType": "bool",
@@ -836,6 +902,47 @@
     "name": "setPausedState",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "_state",
+        "type": "bool"
+      }
+    ],
+    "name": "setSimulatorState",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_bidAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_oppTxHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "_searcherToAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "_searcherCallData",
+        "type": "bytes"
+      }
+    ],
+    "name": "simulateFlashBid",
+    "outputs": [],
+    "stateMutability": "payable",
     "type": "function"
   },
   {

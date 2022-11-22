@@ -12,14 +12,16 @@ abstract contract FastLaneAuctionHandlerEvents {
     event RelayValidatorEnabled(address validator, address payee);
     event RelayValidatorDisabled(address validator);
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
+    event RelaySimulatorStateSet(bool state);
 
-    event RelayInitialized(uint24 initialStakeShare, uint256 minAmount, bool restrictEOA);
+    event RelayInitialized(uint24 initialStakeShare, uint256 minAmount);
 
     event RelayShareSet(uint24 amount);
     event RelayShareProposed(uint24 amount, uint256 deadline);
     event RelayMinAmountSet(uint256 minAmount);
 
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
+    event RelaySimulatedFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
 
     event RelayWithdrawDust(address indexed receiver, uint256 amount);
     event RelayWithdrawStuckERC20(
@@ -41,7 +43,9 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelaySearcherWrongParams();
 
     error RelaySearcherCallFailure(bytes retData);
+    error RelaySimulatedSearcherCallFailure(bytes retData);
     error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);
+    error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount);
 
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
     event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
@@ -104,13 +108,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
 
     bool public pendingStakeShareUpdate;
     bool public paused;
-    bool public RESTRICT_EOA = true;
+    bool public bid_simulator_enabled = true;
 
-    constructor(uint24 _initialStakeShare, uint256 _minRelayBidAmount, bool _restrictEOA) {
+    constructor(uint24 _initialStakeShare, uint256 _minRelayBidAmount) {
         flStakeShareRatio = _initialStakeShare;
         minRelayBidAmount = _minRelayBidAmount;
-        RESTRICT_EOA = _restrictEOA; // Cannot change after deploy
-        emit RelayInitialized(_initialStakeShare, _minRelayBidAmount, RESTRICT_EOA);
+        emit RelayInitialized(_initialStakeShare, _minRelayBidAmount);
     }
 
 
@@ -148,6 +151,50 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
             // Verify that the searcher paid the amount they bid & emit the event
             _handleBalances(_bidAmount, balanceBefore);
             emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
+    }
+
+
+    /// @notice Submits a SIMULATED flash bid. THE HTTP RELAY won't accept calls for this function.
+    /// @notice This is just a convenience function for you to test by simulating a call to simulateFlashBid 
+    /// @notice To ensure your calldata correctly works when relayed to `_searcherToAddress`.fastLaneCall(_searcherCallData)
+    /// @dev This does NOT check that current coinbase is participating in PFL.
+    /// @dev Only use for testing _searcherCallData
+    /// @dev You can submit any _bidAmount you like for testing
+    /// @param _bidAmount Amount committed to be repaid
+    /// @param _oppTxHash Target Transaction hash
+    /// @param _searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
+    /// @param _searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
+    function simulateFlashBid(
+        uint256 _bidAmount, // Value commited to be repaid at the end of execution, can be set very low in simulated
+        bytes32 _oppTxHash, // Target TX
+        address _searcherToAddress,
+        bytes calldata _searcherCallData 
+        ) external payable nonReentrant whenNotPaused onlyEOA {
+
+            // Relax check on min bid amount for simulated
+            if (_searcherToAddress == address(0) || bid_simulator_enabled == false /* || _bidAmount < minRelayBidAmount */) revert RelaySearcherWrongParams();
+            
+            // Make sure another searcher hasn't already won the opp
+            // _checkBid(_oppTxHash, _bidAmount);  // Won't check in simulator
+
+            // Store the current balance, excluding msg.value
+            uint256 balanceBefore = address(this).balance - msg.value;
+
+            // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
+            // And forward msg.value
+            (bool success, bytes memory retData) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
+                        msg.sender,
+                        _bidAmount,
+                        _searcherCallData
+            );
+
+            if (!success) revert RelaySimulatedSearcherCallFailure(retData);
+
+            // Verify that the searcher paid the amount they bid & emit the event
+            if (address(this).balance < balanceBefore + _bidAmount) {
+                revert RelaySimulatedNotRepaid(_bidAmount, address(this).balance - balanceBefore);
+            }
+            emit RelaySimulatedFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
     }
 
     /***********************************|
@@ -216,6 +263,14 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     function setPausedState(bool _state) external onlyOwner {
         paused = _state;
         emit RelayPausedStateSet(_state);
+    }
+
+    /// @notice Defines the paused state of the Simulator
+    /// @dev Only owner
+    /// @param _state New state
+    function setSimulatorState(bool _state) external onlyOwner {
+        bid_simulator_enabled = _state;
+        emit RelaySimulatorStateSet(_state);
     }
 
     /// @notice Defines the minimum bid
@@ -501,7 +556,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     }
 
     modifier onlyEOA() {
-        if (RESTRICT_EOA && msg.sender != tx.origin) revert RelayPermissionSenderNotOrigin();
+        if (msg.sender != tx.origin) revert RelayPermissionSenderNotOrigin();
         _;
     }
 
