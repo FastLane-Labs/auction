@@ -316,7 +316,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         if (_validator == address(0) || _payee == address(0)) revert RelayCannotBeZero();
         if (_payee == address(this)) revert RelayCannotBeSelf();
         validatorsStatusMap[_validator] = true;
-        validatorsDataMap[_validator] = ValidatorData(_payee, block.timestamp);
+        validatorsDataMap[_validator] = ValidatorData(_payee, block.timestamp - BLOCK_TIMELOCK);
         emit RelayValidatorEnabled(_validator, _payee);
     }
 
@@ -384,15 +384,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     /// @param _validator Validator address
     function payValidator(address _validator) external whenNotPaused nonReentrant onlyValidatorProxy(_validator) returns (uint256) {        
         uint256 payableBalance = validatorsBalanceMap[_validator];
-        if (payableBalance > 0) {
-            validatorsTotal -= validatorsBalanceMap[_validator];
-            validatorsBalanceMap[_validator] = 0;
-            SafeTransferLib.safeTransferETH(
-                _validatorPayee(_validator), 
+        if (payableBalance <= 0) revert RelayCannotBeZero();
+
+        validatorsTotal -= validatorsBalanceMap[_validator];
+        validatorsBalanceMap[_validator] = 0;
+        SafeTransferLib.safeTransferETH(
+                validatorPayee(_validator), 
                 payableBalance
-            );
-            emit RelayProcessingPaidValidator(_validator, payableBalance, msg.sender);
-        }
+        );
+        emit RelayProcessingPaidValidator(_validator, payableBalance, msg.sender);
         return payableBalance;
     }
 
@@ -409,18 +409,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);   
     }
 
-    function _isPayeeNotTimeLocked(address _validator) internal view returns (bool _valid) {
-        _valid = block.timestamp > validatorsDataMap[_validator].timeUpdated + BLOCK_TIMELOCK;
-    }
-
-    function _isValidPayee(address _validator, address _payee) internal view returns (bool _valid) {
-        _valid = _isPayeeNotTimeLocked(_validator) && _payee == validatorsDataMap[_validator].payee;
-    }
-
-    function _validatorPayee(address _validator) internal view returns (address _recipient) {
-        _recipient = _isPayeeNotTimeLocked(_validator) ? validatorsDataMap[_validator].payee : _validator;
-    }
-
     /***********************************|
     |             Public                |
     |__________________________________*/
@@ -432,6 +420,22 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         flStakeShareRatio = proposalStakeShareRatio;
         pendingStakeShareUpdate = false;
         emit RelayShareSet(proposalStakeShareRatio);
+    }
+
+    /***********************************|
+    |              Views                |
+    |__________________________________*/
+
+    function isPayeeTimeLocked(address _validator) public view returns (bool _isTimeLocked) {
+        _isTimeLocked = block.timestamp < validatorsDataMap[_validator].timeUpdated + BLOCK_TIMELOCK;
+    }
+
+    function isValidPayee(address _validator, address _payee) public view returns (bool _valid) {
+        _valid = !isPayeeTimeLocked(_validator) && _payee == validatorsDataMap[_validator].payee;
+    }
+
+    function validatorPayee(address _validator) internal view returns (address _recipient) {
+        _recipient = !isPayeeTimeLocked(_validator) ? validatorsDataMap[_validator].payee : _validator;
     }
 
     /// @notice Returns validator pending balance
@@ -448,7 +452,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     /// @dev Will return the Payee if blockTimeLock has passed, will return Validator if not.
     /// @param _validator Address
     function getValidatorRecipient(address _validator) public view returns (address _recipient) {
-        _recipient = _validatorPayee(_validator);
+        _recipient = validatorPayee(_validator);
     }
 
     function getCurrentStakeRatio() public view returns (uint24) {
@@ -566,7 +570,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     }
 
     modifier onlyValidatorProxy(address _validator) {
-        if (msg.sender != _validator && msg.sender != owner() && !_isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
+        // Address never seen before in validatorsDataMap -> impossible to have balance / proxy
+        if (validatorsDataMap[_validator].payee == address(0)) revert RelayPermissionUnauthorized();
+
+        // Validator or owner or valid payee
+        if (msg.sender != _validator && msg.sender != owner() && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
         _;
     }
 }

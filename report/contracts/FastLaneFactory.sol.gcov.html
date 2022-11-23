@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2022-11-15 17:07:48</td>
+            <td class="headerValue">2022-11-23 14:12:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">0</td>
@@ -72,7 +72,7 @@
 <a name="1"><span class="lineNum">       1 </span>                :            : //SPDX-License-Identifier: Unlicensed</a>
 <a name="2"><span class="lineNum">       2 </span>                :            : pragma solidity 0.8.16;</a>
 <a name="3"><span class="lineNum">       3 </span>                :            : </a>
-<a name="4"><span class="lineNum">       4 </span>                :            : import {FastLaneAuction} from &quot;./FastLaneAuction.sol&quot;;</a>
+<a name="4"><span class="lineNum">       4 </span>                :            : import {FastLaneLegacyAuction} from &quot;./legacy/FastLaneLegacyAuction.sol&quot;;</a>
 <a name="5"><span class="lineNum">       5 </span>                :            : </a>
 <a name="6"><span class="lineNum">       6 </span>                :            : </a>
 <a name="7"><span class="lineNum">       7 </span>                :            : contract FastLaneFactory {</a>
@@ -83,21 +83,21 @@
 <a name="12"><span class="lineNum">      12 </span>                :            :     mapping(uint256 =&gt; address) public wrappedNativeAddresses;</a>
 <a name="13"><span class="lineNum">      13 </span>                :            : </a>
 <a name="14"><span class="lineNum">      14 </span>                :            :     // Todo: Remove Unused</a>
-<a name="15"><span class="lineNum">      15 </span>                :            :     bytes32 private constant INIT_CODEHASH = keccak256(type(FastLaneAuction).creationCode);</a>
+<a name="15"><span class="lineNum">      15 </span>                :            :     bytes32 private constant INIT_CODEHASH = keccak256(type(FastLaneLegacyAuction).creationCode);</a>
 <a name="16"><span class="lineNum">      16 </span>                :            : </a>
 <a name="17"><span class="lineNum">      17 </span>                :            :     event FastLaneCreated(address fastlaneContract);</a>
 <a name="18"><span class="lineNum">      18 </span>                :            : </a>
 <a name="19"><span class="lineNum">      19 </span>                :            :     function _createFastLane(bytes32 _salt, address _initial_bid_token, address _ops) internal {</a>
 <a name="20"><span class="lineNum">      20 </span>                :            :         </a>
 <a name="21"><span class="lineNum">      21 </span>                :            :         // use CREATE2 so we can get a deterministic address based on the salt</a>
-<a name="22"><span class="lineNum">      22 </span>                :<span class="lineNoCov">          0 :         fastlane = address(new FastLaneAuction{salt: _salt}(msg.sender));</span></a>
+<a name="22"><span class="lineNum">      22 </span>                :<span class="lineNoCov">          0 :         fastlane = address(new FastLaneLegacyAuction{salt: _salt}(msg.sender));</span></a>
 <a name="23"><span class="lineNum">      23 </span>                :            : </a>
 <a name="24"><span class="lineNum">      24 </span>                :            :         // CREATE2 can return address(0), add a check to verify this isn't the case</a>
 <a name="25"><span class="lineNum">      25 </span>                :            :         // See: https://eips.ethereum.org/EIPS/eip-1014</a>
 <a name="26"><span class="lineNum">      26 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchNoExec" title="Branch 1 was not executed"> # </span>]:<span class="lineNoCov">          0 :         require(fastlane != address(0), &quot;Wrong init&quot;);</span></a>
 <a name="27"><span class="lineNum">      27 </span>                :<span class="lineNoCov">          0 :         emit FastLaneCreated(fastlane);</span></a>
 <a name="28"><span class="lineNum">      28 </span>                :            : </a>
-<a name="29"><span class="lineNum">      29 </span>                :<span class="lineNoCov">          0 :         FastLaneAuction(fastlane).initialSetupAuction(_initial_bid_token, _ops, msg.sender);</span></a>
+<a name="29"><span class="lineNum">      29 </span>                :<span class="lineNoCov">          0 :         FastLaneLegacyAuction(fastlane).initialSetupAuction(_initial_bid_token, _ops, msg.sender);</span></a>
 <a name="30"><span class="lineNum">      30 </span>                :            : </a>
 <a name="31"><span class="lineNum">      31 </span>                :            :     }</a>
 <a name="32"><span class="lineNum">      32 </span>                :            : </a>
@@ -137,7 +137,7 @@
 <a name="66"><span class="lineNum">      66 </span>                :            :             address(this),</a>
 <a name="67"><span class="lineNum">      67 </span>                :            :             _salt,</a>
 <a name="68"><span class="lineNum">      68 </span>                :            :             keccak256(abi.encodePacked(</a>
-<a name="69"><span class="lineNum">      69 </span>                :            :                 type(FastLaneAuction).creationCode</a>
+<a name="69"><span class="lineNum">      69 </span>                :            :                 type(FastLaneLegacyAuction).creationCode</a>
 <a name="70"><span class="lineNum">      70 </span>                :            :             )</a>
 <a name="71"><span class="lineNum">      71 </span>                :            :         ))))));</a>
 <a name="72"><span class="lineNum">      72 </span>                :<span class="lineNoCov">          0 :         isDeployed = predictedAddress.code.length != 0;</span></a>
