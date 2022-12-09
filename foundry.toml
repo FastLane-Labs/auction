@@ -15,7 +15,5 @@ bytecode_hash = "none"
 names = true
 sizes = true
 gas_price = 60000000000
-compiler_version = '0.8.16'
-
-
+solc_version = '0.8.16'
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

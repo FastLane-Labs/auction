@@ -30,34 +30,30 @@ abstract contract FastLaneAuctionHandlerEvents {
         uint256 amount
     );
     event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
-   
-
-    error RelayInequalityTooHigh();
-
-    error RelayPermissionPaused();
-    error RelayPermissionNotFastlaneValidator();
-    error RelayPermissionSenderNotOrigin();
-    error RelayPermissionUnauthorized();
-
-    error RelayWrongInit();
-    error RelaySearcherWrongParams();
-
-    error RelaySearcherCallFailure(bytes retData);
-    error RelaySimulatedSearcherCallFailure(bytes retData);
-    error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);
-    error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount);
-
+    
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
     event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
-    error RelayProcessingNoBalancePayable();
-    error RelayProcessingAmountExceedsBalance(uint256 amountRequested, uint256 balance);
-    
-    error RelayAuctionBidReceivedLate();
-    error RelayAuctionSearcherNotWinner(uint256 current, uint256 existing);
 
-    error RelayTimeUnsuitable();
-    error RelayCannotBeZero();
-    error RelayCannotBeSelf();
+    error RelayInequalityTooHigh();                                         // 0x13b934fe
+
+    error RelayPermissionPaused();                                          // 0x91a5cfe6
+    error RelayPermissionNotFastlaneValidator();                            // 0x55d32b6a
+    error RelayPermissionSenderNotOrigin();                                 // 0x5c8a268a
+    error RelayPermissionUnauthorized();                                    // 0xcbfa149f
+
+    error RelaySearcherWrongParams();                                       // 0x31ae2a9d
+
+    error RelaySearcherCallFailure(bytes retData);                          // 0x291bc14c
+    error RelaySimulatedSearcherCallFailure(bytes retData);                 // 0x5be08ca5
+    error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);
+    error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0xd47ae88a
+
+    error RelayAuctionBidReceivedLate();                                    // 0xb61e767e
+    error RelayAuctionSearcherNotWinner(uint256 current, uint256 existing); // 0x5db6f7d9
+
+    error RelayTimeUnsuitable();                                            // 0x1d9977d4
+    error RelayCannotBeZero();                                              // 0x3c9cfe50
+    error RelayCannotBeSelf();                                              // 0x6a64f641
 }
 
 /// @notice Validator Data Struct
@@ -118,7 +114,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
 
 
     /// @notice Submits a flash bid
-    /// @dev Will revert if:  minimum bid not respected, not from EOA, or current validator is not participating in PFL.
+    /// @dev Will revert if: already won, minimum bid not respected, not from EOA, or current validator is not participating in PFL.
     /// @param _bidAmount Amount committed to be repaid
     /// @param _oppTxHash Target Transaction hash
     /// @param _searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
@@ -128,13 +124,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         bytes32 _oppTxHash, // Target TX
         address _searcherToAddress,
         bytes calldata _searcherCallData 
-        ) external payable nonReentrant whenNotPaused onlyParticipatingValidators onlyEOA {
+        ) external payable checkBid(_oppTxHash, _bidAmount) onlyParticipatingValidators whenNotPaused onlyEOA nonReentrant {
 
             if (_searcherToAddress == address(0) || _bidAmount < minRelayBidAmount) revert RelaySearcherWrongParams();
             
-            // Make sure another searcher hasn't already won the opp
-            _checkBid(_oppTxHash, _bidAmount);
-
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
 
@@ -174,9 +167,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
             // Relax check on min bid amount for simulated
             if (_searcherToAddress == address(0) || bid_simulator_enabled == false /* || _bidAmount < minRelayBidAmount */) revert RelaySearcherWrongParams();
             
-            // Make sure another searcher hasn't already won the opp
-            // _checkBid(_oppTxHash, _bidAmount);  // Won't check in simulator
-
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
 
@@ -200,31 +190,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     /***********************************|
     |    Internal Bid Helper Functions  |
     |__________________________________*/
-
-    /// @notice Validates incoming bid
-    /// @dev 
-    /// @param _oppTxHash Target Transaction hash
-    /// @param _bidAmount Amount committed to be repaid
-    function _checkBid(bytes32 _oppTxHash, uint256 _bidAmount) internal {
-        // Use hash of the opportunity tx hash and the transaction's gasprice as key for bid tracking
-        // This is dependent on the PFL Relay verifying that the searcher's gasprice matches
-        // the opportunity's gasprice, and that the searcher used the correct opportunity tx hash
-
-        bytes32 auction_key = keccak256(abi.encode(_oppTxHash, tx.gasprice));
-        uint256 existing_bid = fulfilledAuctionsMap[auction_key];
-
-        if (existing_bid != 0) {
-            if (_bidAmount >= existing_bid) {
-                // This error message could also arise if the tx was sent via mempool
-                revert RelayAuctionBidReceivedLate();
-            } else {
-                revert RelayAuctionSearcherNotWinner(_bidAmount, existing_bid);
-            }
-        }
-
-        // Mark this auction as being complete to provide quicker reverts for subsequent searchers
-        fulfilledAuctionsMap[auction_key] = _bidAmount;
-    }
 
     function _handleBalances(uint256 _bidAmount, uint256 balanceBefore) internal {
         if (address(this).balance < balanceBefore + _bidAmount) {
@@ -320,7 +285,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         emit RelayValidatorEnabled(_validator, _payee);
     }
 
-    /// @notice Disabled an address as participating validator
+    /// @notice Disables an address as participating validator
     /// @dev Owner only
     /// @param _validator Validator address
     function disableRelayValidator(address _validator) external onlyOwner {
@@ -575,6 +540,32 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
 
         // Validator or owner or valid payee
         if (msg.sender != _validator && msg.sender != owner() && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
+        _;
+    }
+
+    /// @notice Validates incoming bid
+    /// @dev 
+    /// @param _oppTxHash Target Transaction hash
+    /// @param _bidAmount Amount committed to be repaid
+    modifier checkBid(bytes32 _oppTxHash, uint256 _bidAmount) {
+        // Use hash of the opportunity tx hash and the transaction's gasprice as key for bid tracking
+        // This is dependent on the PFL Relay verifying that the searcher's gasprice matches
+        // the opportunity's gasprice, and that the searcher used the correct opportunity tx hash
+
+        bytes32 auction_key = keccak256(abi.encode(_oppTxHash, tx.gasprice));
+        uint256 existing_bid = fulfilledAuctionsMap[auction_key];
+
+        if (existing_bid != 0) {
+            if (_bidAmount >= existing_bid) {
+                // This error message could also arise if the tx was sent via mempool
+                revert RelayAuctionBidReceivedLate();
+            } else {
+                revert RelayAuctionSearcherNotWinner(_bidAmount, existing_bid);
+            }
+        }
+
+        // Mark this auction as being complete to provide quicker reverts for subsequent searchers
+        fulfilledAuctionsMap[auction_key] = _bidAmount;
         _;
     }
 }
