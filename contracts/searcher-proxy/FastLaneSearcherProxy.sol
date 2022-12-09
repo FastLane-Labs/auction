@@ -35,19 +35,11 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
         // Make sure it's your own EOA that's calling your contract 
         checkFastLaneEOA(_sender);
 
-        // Track gasleft() to make sure you aren't hitting a fallback function
-        uint256 initialGasLeft = gasleft();
-
         // Execute the searcher's intended function
-        // /!\ Don't forget to restrict `searcherContract` called function
-        // to allow this contract, and that it's not callable publicly
+        // /!\ Don't forget to whitelist `searcherContract` called function
+        // to allow this contract.
         (bool success, bytes memory returnedData) = searcherContract.call(_searcherCallData);
         
-        // Verify you spent more gas than the max for a fallback function (Optional if you contract uses fallback as entrypoint)
-        if (initialGasLeft - gasleft() <= 5_000) {
-            return (false, returnedData);
-        }
-
         // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
         if (!success) {
             return (false, returnedData);
