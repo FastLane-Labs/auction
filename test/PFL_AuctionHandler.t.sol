@@ -498,26 +498,22 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.prank(OWNER);
         PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
-        
+
         vm.prank(PAYEE1);
         PFR.updateValidatorPayee(VALIDATOR1, PAYEE2);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
     }
 
     function testPFLCannotSetValidatorsPayee() public {
-
-        console.log("owner");
-        console.log(OWNER);
-        console.log("validator");
-        console.log(VALIDATOR1);
-        console.log("payee");
-        console.log(PFR.getValidatorPayee(VALIDATOR1));
+        // TODO - general setup - should be moved to setUp()
+        // or another helper to get system into testable state
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
         
         vm.prank(OWNER);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
         PFR.updateValidatorPayee(VALIDATOR1, OWNER); // attempt to change payee to owner
-
-        // revert();
     }
 }
 
