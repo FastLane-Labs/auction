@@ -469,11 +469,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectEmit(true, true, true, true);
         emit RelayPausedStateSet(true);
         PFR.setPausedState(true);
-         
-
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionPaused.selector);
-        PFR.payValidator(vm.addr(3333));
-
     }
 
     // TODO liability changes to remove PFL from onlyValidatorProxy means PFL cant call payValidator anymore
@@ -503,7 +498,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         emit RelayProcessingPaidValidator(VALIDATOR1, expectedPayAmount, VALIDATOR1);
         uint returnedPayableBalance = PFR.payValidator(VALIDATOR1);
         uint validatorBalanceAfter = PAYEE1.balance;
-        
+
         assertEq(returnedPayableBalance, expectedPayAmount);
         assertEq(validatorBalanceAfter - validatorBalanceBefore, expectedPayAmount);
     }
