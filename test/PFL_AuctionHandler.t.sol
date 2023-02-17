@@ -23,6 +23,11 @@ import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
+
+    // TODO consider moving addrs to PFLAuction or another helper
+    address constant PAYEE1 = address(0x8881);
+    address constant PAYEE2 = address(0x8882);
+
     FastLaneAuctionHandler PFR;
     BrokenUniswap brokenUniswap;
     address PFL_VAULT = OPS_ADDRESS;
@@ -476,7 +481,16 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     function testValidatorCanSetPayee() public {
-        revert();
+        // TODO - general setup - should be moved to setUp()
+        // or another helper to get system into testable state
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
+
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(VALIDATOR1, PAYEE2);
+
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
     }
 
     function testValidatorsPayeeCanSetPayee() public {
@@ -484,7 +498,19 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     function testPFLCannotSetValidatorsPayee() public {
-        revert();
+
+        console.log("owner");
+        console.log(OWNER);
+        console.log("validator");
+        console.log(VALIDATOR1);
+        console.log("payee");
+        console.log(PFR.getValidatorPayee(VALIDATOR1));
+        
+        vm.prank(OWNER);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
+        PFR.updateValidatorPayee(VALIDATOR1, OWNER); // attempt to change payee to owner
+
+        // revert();
     }
 }
 
