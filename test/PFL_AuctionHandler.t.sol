@@ -470,6 +470,22 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.payValidator(vm.addr(3333));
 
     }
+
+    function testWithdrawStillEnabledWhenPaused() public {
+        revert();
+    }
+
+    function testValidatorCanSetPayee() public {
+        revert();
+    }
+
+    function testValidatorsPayeeCanSetPayee() public {
+        revert();
+    }
+
+    function testPFLCannotSetValidatorsPayee() public {
+        revert();
+    }
 }
 
 // Fake opportunity to backrun
