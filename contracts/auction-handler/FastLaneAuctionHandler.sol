@@ -538,8 +538,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         // Address never seen before in validatorsDataMap -> impossible to have balance / proxy
         if (validatorsDataMap[_validator].payee == address(0)) revert RelayPermissionUnauthorized();
 
-        // Validator or owner or valid payee
-        if (msg.sender != _validator && msg.sender != owner() && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
+        // Validator or valid payee
+        if (msg.sender != _validator && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
         _;
     }
 
