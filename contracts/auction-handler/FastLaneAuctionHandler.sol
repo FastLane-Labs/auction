@@ -347,7 +347,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     /// @notice Pays the validator their outstanding balance
     /// @dev Callable by either validator address, their payee address (if not changed recently), or PFL.
     /// @param _validator Validator address
-    function payValidator(address _validator) external whenNotPaused nonReentrant onlyValidatorProxy(_validator) returns (uint256) {        
+    function payValidator(address _validator) external nonReentrant onlyValidatorProxy(_validator) returns (uint256) {        
         uint256 payableBalance = validatorsBalanceMap[_validator];
         if (payableBalance <= 0) revert RelayCannotBeZero();
 
@@ -538,8 +538,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         // Address never seen before in validatorsDataMap -> impossible to have balance / proxy
         if (validatorsDataMap[_validator].payee == address(0)) revert RelayPermissionUnauthorized();
 
-        // Validator or owner or valid payee
-        if (msg.sender != _validator && msg.sender != owner() && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
+        // Validator or valid payee
+        if (msg.sender != _validator && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
         _;
     }
 

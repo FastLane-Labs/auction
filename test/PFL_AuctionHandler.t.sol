@@ -23,6 +23,11 @@ import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
+
+    // TODO consider moving addrs to PFLAuction or another helper
+    address constant PAYEE1 = address(0x8881);
+    address constant PAYEE2 = address(0x8882);
+
     FastLaneAuctionHandler PFR;
     BrokenUniswap brokenUniswap;
     address PFL_VAULT = OPS_ADDRESS;
@@ -464,11 +469,80 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectEmit(true, true, true, true);
         emit RelayPausedStateSet(true);
         PFR.setPausedState(true);
-         
+    }
 
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionPaused.selector);
-        PFR.payValidator(vm.addr(3333));
+    // TODO liability changes to remove PFL from onlyValidatorProxy means PFL cant call payValidator anymore
+    // We might still want that ability - need new custom modifier or just inline checks
+    function testPayValidatorWorksWhenPaused() public {
+        // ======================
+        // TODO - general setup - should be moved to setUp()
+        // or another helper to get system into testable state
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
+        uint256 bidAmount = 2 ether;
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
+        SearcherRepayerEcho SRE = new SearcherRepayerEcho();
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+        // ======================
 
+        uint expectedPayAmount = 1.9 ether; //TODO how is this calculated? taken from testPayValidator
+        uint validatorBalanceBefore = PAYEE1.balance;
+
+        vm.prank(OWNER);
+        PFR.setPausedState(true);
+        assertEq(PFR.paused(), true); // Check contract is paused
+        vm.prank(VALIDATOR1);
+        vm.expectEmit(true, true, true, true);
+        emit RelayProcessingPaidValidator(VALIDATOR1, expectedPayAmount, VALIDATOR1);
+        uint returnedPayableBalance = PFR.payValidator(VALIDATOR1);
+        uint validatorBalanceAfter = PAYEE1.balance;
+
+        assertEq(returnedPayableBalance, expectedPayAmount);
+        assertEq(validatorBalanceAfter - validatorBalanceBefore, expectedPayAmount);
+    }
+
+    function testValidatorCanSetPayee() public {
+        // ======================
+        // TODO - general setup - should be moved to setUp()
+        // or another helper to get system into testable state
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        // ======================
+
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(VALIDATOR1, PAYEE2);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
+    }
+
+    function testValidatorsPayeeCanSetPayee() public {
+        // ======================
+        // TODO - general setup - should be moved to setUp()
+        // or another helper to get system into testable state
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        // ======================
+
+        vm.prank(PAYEE1);
+        PFR.updateValidatorPayee(VALIDATOR1, PAYEE2);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
+    }
+
+    function testPFLCannotSetValidatorsPayee() public {
+        // ======================
+        // TODO - general setup - should be moved to setUp()
+        // or another helper to get system into testable state
+        vm.prank(OWNER);
+        PFR.enableRelayValidator(VALIDATOR1, PAYEE1);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        // ======================
+        
+        vm.prank(OWNER);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
+        PFR.updateValidatorPayee(VALIDATOR1, OWNER); // attempt to change payee to owner
     }
 }
 
