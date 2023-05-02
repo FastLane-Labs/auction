@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: Unlicensed
 pragma solidity ^0.8.16;
 
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
@@ -33,6 +32,8 @@ abstract contract FastLaneAuctionHandlerEvents {
     
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
     event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
+
+    event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
     error RelayInequalityTooHigh();                                         // 0x13b934fe
 
@@ -69,22 +70,16 @@ interface ISearcherContract {
     function fastLaneCall(address, uint256, bytes calldata) external payable returns (bool, bytes memory);
 }
 
-contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, ReentrancyGuard {
+contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard {
 
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
 
-    /// @notice Constant base fee
-    uint24 internal constant FEE_BASE = 1_000_000;
-
-
-
-
-    /// @notice If a validator is active or not
-    mapping(address => bool) public validatorsStatusMap;
-
     /// @notice Mapping to Validator Data Struct
     mapping(address => ValidatorData) internal validatorsDataMap;
+
+    /// @notice Mapping payee address to validator address
+    mapping(address => address) internal payeeMap;
 
     /// @notice Map[validator] = balance
     mapping(address => uint256) public validatorsBalanceMap;
@@ -93,24 +88,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     mapping(bytes32 => uint256) public fulfilledAuctionsMap;
 
     uint256 public validatorsTotal;
-
-    uint256 public flStakeSharePayable;
-    uint24 public flStakeShareRatio;
-
-    uint24 public proposalStakeShareRatio;
-    uint256 public proposalDeadline;
-
-    uint256 public minRelayBidAmount = 1 ether; // 1 Matic
-
-    bool public pendingStakeShareUpdate;
-    bool public paused;
-    bool public bid_simulator_enabled = true;
-
-    constructor(uint24 _initialStakeShare, uint256 _minRelayBidAmount) {
-        flStakeShareRatio = _initialStakeShare;
-        minRelayBidAmount = _minRelayBidAmount;
-        emit RelayInitialized(_initialStakeShare, _minRelayBidAmount);
-    }
 
 
     /// @notice Submits a flash bid
@@ -124,9 +101,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         bytes32 _oppTxHash, // Target TX
         address _searcherToAddress,
         bytes calldata _searcherCallData 
-        ) external payable checkBid(_oppTxHash, _bidAmount) onlyParticipatingValidators whenNotPaused onlyEOA nonReentrant {
+        ) external payable checkBid(_oppTxHash, _bidAmount) onlyEOA nonReentrant {
 
-            if (_searcherToAddress == address(0) || _bidAmount < minRelayBidAmount) revert RelaySearcherWrongParams();
+            if (_searcherToAddress == address(0)) revert RelaySearcherWrongParams();
             
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
@@ -143,9 +120,21 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
 
             // Verify that the searcher paid the amount they bid & emit the event
             _handleBalances(_bidAmount, balanceBefore);
+
             emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
     }
 
+    /// @notice Pays the validator for fees / revenue sharing that is collected outside of submitFlashBid function
+    function payValidatorFee(address _payor) external payable nonReentrant {
+        _payValidatorFee(_payor);
+    }
+
+    function _payValidatorFee(address _payor) internal nonReentrant {
+        require(msg.value > 0, "msg.value = 0");
+        validatorsBalanceMap[block.coinbase] += msg.value;
+        validatorsTotal += msg.value;
+        emit RelayFeeCollected(_payor, block.coinbase, msg.value);
+    }
 
     /// @notice Submits a SIMULATED flash bid. THE HTTP RELAY won't accept calls for this function.
     /// @notice This is just a convenience function for you to test by simulating a call to simulateFlashBid 
@@ -162,10 +151,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         bytes32 _oppTxHash, // Target TX
         address _searcherToAddress,
         bytes calldata _searcherCallData 
-        ) external payable nonReentrant whenNotPaused onlyEOA {
+        ) external payable nonReentrant onlyEOA {
 
             // Relax check on min bid amount for simulated
-            if (_searcherToAddress == address(0) || bid_simulator_enabled == false /* || _bidAmount < minRelayBidAmount */) revert RelaySearcherWrongParams();
+            if (_searcherToAddress == address(0) /* || _bidAmount < minRelayBidAmount */) revert RelaySearcherWrongParams();
             
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
@@ -196,130 +185,43 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
             revert RelayNotRepaid(_bidAmount, address(this).balance - balanceBefore);
         }
 
-        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(_bidAmount, flStakeShareRatio);
+        if (address(this).balance - balanceBefore > _bidAmount) {
+            _bidAmount = address(this).balance - balanceBefore;
+        }
 
-        validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
-        validatorsTotal += amtPayableToValidator;
-        flStakeSharePayable += amtPayableToStakers;
+        validatorsBalanceMap[block.coinbase] += _bidAmount;
+        validatorsTotal += _bidAmount;
     }
 
-
-    /// @notice Internal, calculates shares
-    /// @param _amount Amount to calculates cuts from
-    /// @param _share Share bps
-    /// @return validatorCut Validator cut
-    /// @return stakeCut Stake cut
-    function _calculateStakeShare(uint256 _amount, uint24 _share) internal pure returns (uint256 validatorCut, uint256 stakeCut) {
-        validatorCut = (_amount * (FEE_BASE - _share)) / FEE_BASE;
-        stakeCut = _amount - validatorCut;
+    receive() external payable {
+        _payValidatorFee(msg.sender);
     }
 
-    receive() external payable {}
     fallback() external payable {}
 
 
     /***********************************|
-    |             Owner-only            |
+    |             Maintenance           |
     |__________________________________*/
 
-    /// @notice Defines the paused state of the Auction
-    /// @dev Only owner
-    /// @param _state New state
-    function setPausedState(bool _state) external onlyOwner {
-        paused = _state;
-        emit RelayPausedStateSet(_state);
-    }
-
-    /// @notice Defines the paused state of the Simulator
-    /// @dev Only owner
-    /// @param _state New state
-    function setSimulatorState(bool _state) external onlyOwner {
-        bid_simulator_enabled = _state;
-        emit RelaySimulatorStateSet(_state);
-    }
-
-    /// @notice Defines the minimum bid
-    /// @dev Only owner
-    /// @param _minAmount New minimum amount
-    function setMininumBidAmount(uint256 _minAmount) external onlyOwner {
-        minRelayBidAmount = _minAmount;
-        emit RelayMinAmountSet(_minAmount);
-    }
-
-    /// @notice Sets the stake revenue allocation (out of 1_000_000 (ie v2 fee decimals))
-    /// @dev Initially set to 50_000 (5%), and pending for 6 days before a change
-    /// @param _fastLaneStakeShare Protocol stake allocation on bids
-    function setFastLaneStakeShare(uint24 _fastLaneStakeShare) public onlyOwner {
-        if (pendingStakeShareUpdate) revert RelayTimeUnsuitable();
-        if (_fastLaneStakeShare > FEE_BASE) revert RelayInequalityTooHigh();
-        proposalStakeShareRatio = _fastLaneStakeShare;
-        proposalDeadline = block.timestamp + BLOCK_TIMELOCK;
-        pendingStakeShareUpdate = true;
-        emit RelayShareProposed(_fastLaneStakeShare, proposalDeadline);
-    }
-
-    /// @notice Withdraws fl stake share
-    /// @dev Owner only
-    /// @param _recipient Recipient
-    /// @param _amount Amount
-    function withdrawStakeShare(address _recipient, uint256 _amount) external onlyOwner nonReentrant {
-        if (_recipient == address(0) || _amount == 0) revert RelayCannotBeZero();
-        flStakeSharePayable -= _amount;
-        SafeTransferLib.safeTransferETH(
-            _recipient, 
-            _amount
-        );
-        emit RelayProcessingWithdrewStakeShare(_recipient, _amount);
-    }
-    
-
-    /// @notice Enables an address as participating validator, and defining a payee for it
-    /// @dev Owner only
-    /// @param _validator Validator address that will be the coinbase of bids
-    /// @param _payee Address that can withdraw for that validator
-    function enableRelayValidator(address _validator, address _payee) external onlyOwner {
-        if (_validator == address(0) || _payee == address(0)) revert RelayCannotBeZero();
-        if (_payee == address(this)) revert RelayCannotBeSelf();
-        validatorsStatusMap[_validator] = true;
-        validatorsDataMap[_validator] = ValidatorData(_payee, block.timestamp - BLOCK_TIMELOCK);
-        emit RelayValidatorEnabled(_validator, _payee);
-    }
-
-    /// @notice Disables an address as participating validator
-    /// @dev Owner only
-    /// @param _validator Validator address
-    function disableRelayValidator(address _validator) external onlyOwner {
-        if (_validator == address(0)) revert RelayCannotBeZero();
-        validatorsStatusMap[_validator] = false;
-        emit RelayValidatorDisabled(_validator);
-    }
-
-    /// @notice Recover bids repaid to the relay over bidAmount
-    /// @dev Owner only, can never tap into validator balances nor flStake.
-    /// @param _amount amount desired, capped to max
-    function recoverDust(uint256 _amount) 
-        external
-        onlyOwner
-        nonReentrant
-    {
-        uint256 maxDust = address(this).balance - validatorsTotal - flStakeSharePayable;
-        if (_amount > maxDust) _amount = maxDust;
-        SafeTransferLib.safeTransferETH(owner(), _amount);
-        emit RelayWithdrawDust(owner(), _amount);
-    }
-
-    /// @notice Withdraws stuck matic
+    /// @notice Syncs stuck matic to calling validator
     /// @dev In the event something went really wrong / vuln report
-    /// @dev When out of beta role will be moved to gnosis multisig for added safety
-    /// @param _amount Amount to send to owner
-    function withdrawStuckNativeToken(uint256 _amount)
+    function syncStuckNativeToken()
         external
-        onlyOwner
+        onlyActiveValidators
         nonReentrant
     {
-        if (address(this).balance >= _amount) {
-            SafeTransferLib.safeTransferETH(owner(), _amount);
-            emit RelayWithdrawStuckNativeToken(owner(), _amount);
+        uint256 _expectedBalance = validatorsTotal;
+        if (address(this).balance >= _expectedBalance) {
+
+            address _validator = getValidator();
+
+            uint256 _surplus = address(this).balance - _expectedBalance;
+
+            validatorsBalanceMap[_validator] += _surplus;
+            validatorsTotal += _surplus;
+
+            emit RelayWithdrawStuckNativeToken(_validator, _surplus);
         }
     }
 
@@ -328,15 +230,16 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     /// @param _tokenAddress Address of the stuck token
     function withdrawStuckERC20(address _tokenAddress)
         external
-        onlyOwner
+        onlyActiveValidators
         nonReentrant
     {
+        // TODO: handle wMATIC differently
         ERC20 oopsToken = ERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
         if (oopsTokenBalance > 0) {
-            SafeTransferLib.safeTransferFrom(oopsToken, address(this), owner(), oopsTokenBalance);
-            emit RelayWithdrawStuckERC20(address(this), owner(), oopsTokenBalance);
+            SafeTransferLib.safeTransferFrom(oopsToken, address(this), msg.sender, oopsTokenBalance);
+            emit RelayWithdrawStuckERC20(address(this), msg.sender, oopsTokenBalance);
         }
     }
 
@@ -346,13 +249,16 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
 
     /// @notice Pays the validator their outstanding balance
     /// @dev Callable by either validator address, their payee address (if not changed recently), or PFL.
-    /// @param _validator Validator address
-    function payValidator(address _validator) external nonReentrant onlyValidatorProxy(_validator) returns (uint256) {        
-        uint256 payableBalance = validatorsBalanceMap[_validator];
+    function collectFees() external nonReentrant validPayee returns (uint256) { 
+        // NOTE: Do not let validatorsBalanceMap[validator] balance go to 0, that will remove them from being an "active validator"       
+        
+        address _validator = getValidator();
+        
+        uint256 payableBalance = validatorsBalanceMap[_validator] - 1;  
         if (payableBalance <= 0) revert RelayCannotBeZero();
 
-        validatorsTotal -= validatorsBalanceMap[_validator];
-        validatorsBalanceMap[_validator] = 0;
+        validatorsTotal -= payableBalance;
+        validatorsBalanceMap[_validator] = 1;
         SafeTransferLib.safeTransferETH(
                 validatorPayee(_validator), 
                 payableBalance
@@ -363,28 +269,28 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
 
     /// @notice Updates a validator payee
     /// @dev Callable by either validator address, their payee address (if not changed recently), or PFL.
-    /// @param _validator Validator address
-    function updateValidatorPayee(address _validator, address _payee) external onlyValidatorProxy(_validator) nonReentrant {
+    function updateValidatorPayee(address _payee) external validPayee nonReentrant {
+        // NOTE: Payee cannot be updated until there is a valid balance in the fee vault
         if (_payee == address(0)) revert RelayCannotBeZero();
         if (_payee == address(this)) revert RelayCannotBeSelf();
-        if (!validatorsStatusMap[_validator]) revert RelayPermissionNotFastlaneValidator();
+        
+        address _validator = getValidator();
+
+        require(payeeMap[_validator] == address(0) && payeeMap[_payee] == address(0), "invalid payee");
+
+        address _formerPayee = validatorsDataMap[_validator].payee;
+
+        require(_formerPayee != _payee, "not a new payee");
+
+        if (_formerPayee != address(0)) {
+            payeeMap[_formerPayee] = address(0);
+        }
+
         validatorsDataMap[_validator].payee = _payee;
         validatorsDataMap[_validator].timeUpdated = block.timestamp;
+        payeeMap[_payee] = _validator;
 
         emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);   
-    }
-
-    /***********************************|
-    |             Public                |
-    |__________________________________*/
-
-    /// @notice Activates a pending stake share update
-    /// @dev Anyone can call it after a 6 days delay
-    function triggerPendingStakeShareUpdate() external nonReentrant {
-        if (!pendingStakeShareUpdate || block.timestamp < proposalDeadline) revert RelayTimeUnsuitable();
-        flStakeShareRatio = proposalStakeShareRatio;
-        pendingStakeShareUpdate = false;
-        emit RelayShareSet(proposalStakeShareRatio);
     }
 
     /***********************************|
@@ -420,24 +326,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
         _recipient = validatorPayee(_validator);
     }
 
-    function getCurrentStakeRatio() public view returns (uint24) {
-        return flStakeShareRatio;
-    }
-
-    function getCurrentStakeBalance() public view returns (uint256) {
-       return flStakeSharePayable;
-    }
-
-    function getPendingStakeRatio() public view returns (uint24 _fastLaneStakeShare) {
-        _fastLaneStakeShare = pendingStakeShareUpdate ? proposalStakeShareRatio : flStakeShareRatio;
-    }
-
-    function getPendingDeadline() public view returns (uint256 _timeDeadline) {
-        _timeDeadline = pendingStakeShareUpdate ? proposalDeadline : block.timestamp;
-    }
-
-    function getValidatorStatus(address _validator) public view returns (bool) {
-        return validatorsStatusMap[_validator];
+    function getValidator() internal view returns (address) {
+        if (validatorsBalanceMap[msg.sender] > 0) {
+            return msg.sender;
+        }
+        if (payeeMap[msg.sender] != address(0)) {
+            return payeeMap[msg.sender];
+        }
+        // throw if invalid
+        revert("Invalid validator");
     }
 
     function humanizeError(bytes memory _errorData) public pure returns (string memory decoded) {
@@ -519,18 +416,29 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, Ownable, Reentr
     |             Modifiers             |
     |__________________________________*/
 
-    modifier whenNotPaused() {
-        if (paused) revert RelayPermissionPaused();
+    modifier onlyCurrentValidator() {
+        require(msg.sender != address(0), "msg.sender = 0 address");
+        require(msg.sender == block.coinbase || msg.sender == validatorsDataMap[block.coinbase].payee, "only this block's validator");
+        _;
+    }
+
+    modifier onlyActiveValidators() {
+        require(msg.sender != address(0), "msg.sender = 0 address");
+        require(validatorsBalanceMap[msg.sender] > 0 || validatorsBalanceMap[payeeMap[msg.sender]] > 0, "only active validators");
+        _;
+    }
+
+    modifier validPayee() {
+        if (payeeMap[msg.sender] != address(0)) {
+            require(!isPayeeTimeLocked(payeeMap[msg.sender]), "payee is time locked");
+        } else {
+            require(validatorsBalanceMap[msg.sender] > 0, "invalid msg.sender");
+        }
         _;
     }
 
     modifier onlyEOA() {
         if (msg.sender != tx.origin) revert RelayPermissionSenderNotOrigin();
-        _;
-    }
-
-    modifier onlyParticipatingValidators() {
-        if (!validatorsStatusMap[block.coinbase]) revert RelayPermissionNotFastlaneValidator();
         _;
     }
 
