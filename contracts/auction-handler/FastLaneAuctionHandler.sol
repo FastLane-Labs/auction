@@ -91,7 +91,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
 
     /// @notice Submits a flash bid
-    /// @dev Will revert if: already won, minimum bid not respected, not from EOA, or current validator is not participating in PFL.
+    /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
     /// @param _bidAmount Amount committed to be repaid
     /// @param _oppTxHash Target Transaction hash
     /// @param _searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
