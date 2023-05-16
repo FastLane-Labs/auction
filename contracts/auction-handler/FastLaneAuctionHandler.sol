@@ -7,22 +7,11 @@ import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
 abstract contract FastLaneAuctionHandlerEvents {
 
-    event RelayPausedStateSet(bool state);
-    event RelayValidatorEnabled(address validator, address payee);
-    event RelayValidatorDisabled(address validator);
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
-    event RelaySimulatorStateSet(bool state);
-
-    event RelayInitialized(uint24 initialStakeShare, uint256 minAmount);
-
-    event RelayShareSet(uint24 amount);
-    event RelayShareProposed(uint24 amount, uint256 deadline);
-    event RelayMinAmountSet(uint256 minAmount);
 
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
     event RelaySimulatedFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
 
-    event RelayWithdrawDust(address indexed receiver, uint256 amount);
     event RelayWithdrawStuckERC20(
         address indexed receiver,
         address indexed token,
@@ -31,16 +20,10 @@ abstract contract FastLaneAuctionHandlerEvents {
     event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
     
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
-    event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
-    error RelayInequalityTooHigh();                                         // 0x13b934fe
-
-    error RelayPermissionPaused();                                          // 0x91a5cfe6
-    error RelayPermissionNotFastlaneValidator();                            // 0x55d32b6a
     error RelayPermissionSenderNotOrigin();                                 // 0x5c8a268a
-    error RelayPermissionUnauthorized();                                    // 0xcbfa149f
 
     error RelaySearcherWrongParams();                                       // 0x31ae2a9d
 
@@ -52,7 +35,6 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayAuctionBidReceivedLate();                                    // 0xb61e767e
     error RelayAuctionSearcherNotWinner(uint256 current, uint256 existing); // 0x5db6f7d9
 
-    error RelayTimeUnsuitable();                                            // 0x1d9977d4
     error RelayCannotBeZero();                                              // 0x3c9cfe50
     error RelayCannotBeSelf();                                              // 0x6a64f641
 }
