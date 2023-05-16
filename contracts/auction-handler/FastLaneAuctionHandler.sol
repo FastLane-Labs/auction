@@ -154,7 +154,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         ) external payable nonReentrant onlyEOA {
 
             // Relax check on min bid amount for simulated
-            if (_searcherToAddress == address(0) revert RelaySearcherWrongParams();
+            if (_searcherToAddress == address(0)) revert RelaySearcherWrongParams();
             
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
@@ -212,11 +212,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         nonReentrant
     {
         uint256 _expectedBalance = validatorsTotal;
-        if (address(this).balance >= _expectedBalance) {
+        uint256 _currentBalance = address(this).balance;
+        if (_currentBalance >= _expectedBalance) {
 
             address _validator = getValidator();
 
-            uint256 _surplus = address(this).balance - _expectedBalance;
+            uint256 _surplus = _currentBalance - _expectedBalance;
 
             validatorsBalanceMap[_validator] += _surplus;
             validatorsTotal += _surplus;
