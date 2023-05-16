@@ -306,16 +306,29 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     function testValidatorCanSetPayee() public {
-        assertTrue(PFR.getValidatorPayee(VALIDATOR1) != PAYEE2);
-        vm.prank(VALIDATOR1);
-        PFR.updateValidatorPayee(PAYEE2);
-        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
+        assertTrue(PFR.getValidatorPayee(VALIDATOR1) != PAYEE1);
+        vm.startPrank(VALIDATOR1);
+        // Prep validator balance in contract - must be positive to change payee
+        vm.coinbase(VALIDATOR1);
+        address(PFR).call{value: 1}("");
+
+        PFR.updateValidatorPayee(PAYEE1);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        vm.stopPrank();
     }
 
     function testValidatorsPayeeCanSetPayee() public {
-        vm.prank(VALIDATOR1);
+        vm.startPrank(VALIDATOR1);
+        // Prep validator balance in contract - must be positive to change payee
+        vm.coinbase(VALIDATOR1);
+        address(PFR).call{value: 1}("");
+
         PFR.updateValidatorPayee(PAYEE1);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        vm.stopPrank();
+
+        // avoid payee is time locked revert
+        vm.warp(block.timestamp + 6 days + 1);
 
         vm.prank(PAYEE1);
         PFR.updateValidatorPayee(PAYEE2);
@@ -326,6 +339,29 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.prank(USER);
         vm.expectRevert("invalid msg.sender"); // reverts in validPayee modifier
         PFR.updateValidatorPayee(USER);
+    }
+
+    function testValidatorCannotSetPayeeIfZeroBalance() public {
+        assertTrue(PFR.getValidatorBalance(VALIDATOR1) == 0);
+        vm.prank(VALIDATOR1);
+        vm.expectRevert("invalid msg.sender");
+        PFR.updateValidatorPayee(PAYEE1);
+    }
+
+    function testPayeeCannotSetPayeeIfBeforeTimelock() public {
+        vm.startPrank(VALIDATOR1);
+        // Prep validator balance in contract - must be positive to change payee
+        vm.coinbase(VALIDATOR1);
+        address(PFR).call{value: 1}("");
+
+        PFR.updateValidatorPayee(PAYEE1);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+        vm.stopPrank();
+
+        vm.prank(PAYEE1);
+        vm.expectRevert("payee is time locked");
+        PFR.updateValidatorPayee(PAYEE2);
+        assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
     }
 }
 
