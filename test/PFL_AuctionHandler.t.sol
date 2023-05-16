@@ -28,6 +28,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     address constant PAYEE1 = address(0x8881);
     address constant PAYEE2 = address(0x8882);
 
+    // USER replaces OWNER since Auction is no longer ownable
+    address constant USER = address(0x9090);
+
     FastLaneAuctionHandler PFR;
     BrokenUniswap brokenUniswap;
     address PFL_VAULT = OPS_ADDRESS;
@@ -43,7 +46,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
             vm.deal(currentBidder, soonWMaticBidder + 1);
             vm.deal(currentSearcher, soonWMaticSearcher + 1);
         }
-        vm.prank(OWNER);
 
         uint24 stakeShare = 50_000;
         // Use PFL_VAULT as vault for repay checks
@@ -51,10 +53,10 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         brokenUniswap = new BrokenUniswap();
 
         vm.deal(address(brokenUniswap), 100 ether);
-        vm.deal(OWNER, 100 ether);
+        vm.deal(USER, 100 ether);
         vm.coinbase(VALIDATOR1);
         vm.label(VALIDATOR1,"VALIDATOR1");
-        vm.label(OWNER,"OWNER");
+        vm.label(USER,"USER");
         console.log("Block Coinbase: %s",block.coinbase);
         vm.warp(1641070800);
     }
