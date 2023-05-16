@@ -326,7 +326,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testRandomUserCannotSetValidatorsPayee() public {        
         vm.prank(USER);
-        vm.expectRevert("Invalid validator");
+        vm.expectRevert("invalid msg.sender"); // reverts in validPayee modifier
         PFR.updateValidatorPayee(USER);
     }
 }
