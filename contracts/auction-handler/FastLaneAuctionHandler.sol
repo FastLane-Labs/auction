@@ -111,7 +111,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         _payValidatorFee(_payor);
     }
 
-    function _payValidatorFee(address _payor) internal nonReentrant {
+    function _payValidatorFee(address _payor) internal {
         require(msg.value > 0, "msg.value = 0");
         validatorsBalanceMap[block.coinbase] += msg.value;
         validatorsTotal += msg.value;
