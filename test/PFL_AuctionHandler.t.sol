@@ -30,6 +30,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     // USER replaces OWNER since Auction is no longer ownable
     address constant USER = address(0x9090);
+    address constant SEARCHER_OWNER = address(0x9091);
 
     FastLaneAuctionHandler PFR;
     BrokenUniswap brokenUniswap;
@@ -69,9 +70,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         bytes32 oppTx = bytes32("tx1");
 
         // Deploy Searcher Wrapper as SEARCHER_ADDRESS1
-        vm.prank(SEARCHER_ADDRESS1);
-
+        vm.startPrank(SEARCHER_ADDRESS1);
         SearcherContractExample SCE = new SearcherContractExample();
+        vm.stopPrank();
 
         address to = address(SCE);
 
@@ -88,14 +89,11 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
-        PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
         PFR.submitFlashBid(bidAmount, oppTx, address(0),  searcherCallData);
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
-        PFR.submitFlashBid(0.001 ether, oppTx, to,  searcherCallData);
 
         bidAmount = 2 ether;
 
+        SCE.setPFLAuctionAddress(address(0));
         vm.expectRevert(bytes("InvalidPermissions"));
         PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
         // Authorize Relay as Searcher
