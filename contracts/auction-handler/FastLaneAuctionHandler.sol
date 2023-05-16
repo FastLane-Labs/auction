@@ -417,7 +417,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     |__________________________________*/
 
     modifier onlyCurrentValidator() {
-        require(msg.sender != address(0), "msg.sender = 0 address");
         require(msg.sender == block.coinbase || msg.sender == validatorsDataMap[block.coinbase].payee, "only this block's validator");
         _;
     }
