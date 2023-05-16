@@ -214,94 +214,106 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     // TODO rewrite to test collectFees instead of payValidator
     function testCollectFees() public {
 
-        // vm.deal(SEARCHER_ADDRESS1, 100 ether);
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
 
-        // uint256 bidAmount = 2 ether;
-        // bytes32 oppTx = bytes32("tx1");
-        // bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+        uint256 bidAmount = 2 ether;
+        uint256 expectedValidatorBalance = bidAmount - 1;
+        bytes32 oppTx = bytes32("tx1");
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
 
-        // SearcherRepayerEcho SRE = new SearcherRepayerEcho();
+        SearcherRepayerEcho SRE = new SearcherRepayerEcho();
 
-        // vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
-        // PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+        console.log("balance", PFR.getValidatorBalance(VALIDATOR1));
 
-        // uint256 snap = vm.snapshot();
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
 
-        // // As V1 pay itself
-        // vm.prank(VALIDATOR1);
-        // vm.expectEmit(true, true, true, true);
-        // emit RelayProcessingPaidValidator(VALIDATOR1, 1.9 ether, VALIDATOR1);
+        uint256 snap = vm.snapshot();
 
-        // uint256 balanceBefore = VALIDATOR1.balance;
-        // PFR.payValidator(VALIDATOR1);
+        console.log("balance", PFR.getValidatorBalance(VALIDATOR1));
+        console.log("expected balance", expectedValidatorBalance); 
 
-        // // Validator actually got paid
-        // assertEq(VALIDATOR1.balance, balanceBefore + 1.9 ether);
+        // As V1 pay itself
+        vm.prank(VALIDATOR1);
+        vm.expectEmit(true, true, true, true);
+        emit RelayProcessingPaidValidator(VALIDATOR1, expectedValidatorBalance, VALIDATOR1);
+
+        uint256 balanceBefore = VALIDATOR1.balance;
+
+        console.log("contract balance", address(PFR).balance);
+        console.log("searcher baalnce", address(SRE).balance);
+
+        console.log("PFR address", address(PFR));
+
+        console.log("validator address", VALIDATOR1);
+        console.log("coinbase", block.coinbase);
+
+        PFR.collectFees();
+
+        console.log('here0');
+
+        // Validator actually got paid
+        assertEq(VALIDATOR1.balance, balanceBefore + 1.9 ether);
         
-        // assertEq(0, PFR.validatorsTotal());
+        assertEq(0, PFR.validatorsTotal());
 
-        // // Again
-        // vm.prank(VALIDATOR1);
-        // vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCannotBeZero.selector);
-        // PFR.payValidator(VALIDATOR1);
+        console.log('here1');
 
-        // // Back to pre-payment. VALIDATOR1 has 1.9 matic to withdraw.
-        // vm.revertTo(snap);
-        // snap = vm.snapshot();
-        // // As payee try to pay V1
-        // vm.startPrank(SEARCHER_ADDRESS4);
+        // Again
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCannotBeZero.selector);
+        PFR.collectFees();
 
-        // address payee = PFR.getValidatorPayee(VALIDATOR1);
-        // assertEq(payee,SEARCHER_ADDRESS4);
+        console.log('here2');
 
-        // bool valid = PFR.isValidPayee(VALIDATOR1, SEARCHER_ADDRESS4);
-        // assertEq(valid,true);
+        // Back to pre-payment. VALIDATOR1 has 1.9 matic to withdraw.
+        vm.revertTo(snap);
+        snap = vm.snapshot();
+        // As payee try to pay V1
+        vm.startPrank(SEARCHER_ADDRESS4);
 
-        // bool isTimelocked = PFR.isPayeeTimeLocked(VALIDATOR1);
-        // assertEq(isTimelocked,false);
+        address payee = PFR.getValidatorPayee(VALIDATOR1);
+        assertEq(payee,SEARCHER_ADDRESS4);
 
-        // vm.expectEmit(true, true, true, true);
-        // emit RelayProcessingPaidValidator(VALIDATOR1, 1.9 ether, SEARCHER_ADDRESS4);
-        // PFR.payValidator(VALIDATOR1);
+        bool valid = PFR.isValidPayee(VALIDATOR1, SEARCHER_ADDRESS4);
+        assertEq(valid,true);
 
-        // // Back to pre-payment. VALIDATOR1 has 1.9 matic to withdraw.
-        // vm.revertTo(snap);
-        // snap = vm.snapshot();
+        bool isTimelocked = PFR.isPayeeTimeLocked(VALIDATOR1);
+        assertEq(isTimelocked,false);
 
-        // // As SEARCHER_2 try to update VALIDATOR1 payee, no-no.
-        // vm.stopPrank();
-        // vm.prank(SEARCHER_ADDRESS2);
+        vm.expectEmit(true, true, true, true);
+        emit RelayProcessingPaidValidator(VALIDATOR1, 1.9 ether, SEARCHER_ADDRESS4);
+        PFR.collectFees();
 
+        // Back to pre-payment. VALIDATOR1 has 1.9 matic to withdraw.
+        vm.revertTo(snap);
+        snap = vm.snapshot();
+        vm.stopPrank();
 
-        // vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
-        // PFR.updateValidatorPayee(VALIDATOR1, SEARCHER_ADDRESS2);
+        // Legit update
+        vm.prank(VALIDATOR1);
+        vm.expectEmit(true, true, true, true);
+        emit RelayValidatorPayeeUpdated(VALIDATOR1, SEARCHER_ADDRESS2, VALIDATOR1);
+        PFR.updateValidatorPayee(SEARCHER_ADDRESS2);
 
-        // // Legit update
-        // vm.prank(VALIDATOR1);
+        // Now SEARCHER_2 must wait to be able to use his new payee status
+        // Old payee invalid
+        valid = PFR.isValidPayee(VALIDATOR1, SEARCHER_ADDRESS4);
+        assertEq(valid,false);
 
-        // vm.expectEmit(true, true, true, true);
-        // emit RelayValidatorPayeeUpdated(VALIDATOR1, SEARCHER_ADDRESS2, VALIDATOR1);
+        isTimelocked = PFR.isPayeeTimeLocked(VALIDATOR1);
+        assertEq(isTimelocked,true);
 
-        // PFR.updateValidatorPayee(VALIDATOR1, SEARCHER_ADDRESS2);
+        vm.startPrank(SEARCHER_ADDRESS2);
+        vm.expectRevert("asdfsdf");
+        PFR.collectFees();
 
-        // // Now SEARCHER_2 must wait to be able to use his new payee status
-        // // Old payee invalid
-        // valid = PFR.isValidPayee(VALIDATOR1, SEARCHER_ADDRESS4);
-        // assertEq(valid,false);
+        // Fast forward
+        vm.warp(block.timestamp + 7 days);
 
-        // isTimelocked = PFR.isPayeeTimeLocked(VALIDATOR1);
-        // assertEq(isTimelocked,true);
-
-        // vm.startPrank(SEARCHER_ADDRESS2);
-        // vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPermissionUnauthorized.selector);
-        // PFR.payValidator(VALIDATOR1);
-
-        // // Fast forward
-        // vm.warp(block.timestamp + 7 days);
-
-        // vm.expectEmit(true, true, true, true);
-        // emit RelayProcessingPaidValidator(VALIDATOR1, 1.9 ether, SEARCHER_ADDRESS2);
-        // PFR.payValidator(VALIDATOR1);
+        vm.expectEmit(true, true, true, true);
+        emit RelayProcessingPaidValidator(VALIDATOR1, 1.9 ether, SEARCHER_ADDRESS2);
+        PFR.collectFees();
 
     }
 
@@ -427,10 +439,14 @@ contract SearcherRepayerEcho {
     ) external payable returns (bool, bytes memory) {
         bool success;
         address to = msg.sender;
+        console.log("to",to);
+        console.log("bidAmount",_bidAmount);
         assembly {
             // Transfer the ETH and store if it succeeded or not.
             success := call(gas(), to, _bidAmount, 0, 0, 0, 0)
         }
+
+        console.log('success', success);
 
         require(success, "ETH_TRANSFER_FAILED");
         return (true,bytes("ok"));
