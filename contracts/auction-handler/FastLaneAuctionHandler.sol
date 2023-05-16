@@ -423,7 +423,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     modifier onlyActiveValidators() {
-        require(msg.sender != address(0), "msg.sender = 0 address");
         require(validatorsBalanceMap[msg.sender] > 0 || validatorsBalanceMap[payeeMap[msg.sender]] > 0, "only active validators");
         _;
     }
