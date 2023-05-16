@@ -46,7 +46,7 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     error RelaySearcherCallFailure(bytes retData);                          // 0x291bc14c
     error RelaySimulatedSearcherCallFailure(bytes retData);                 // 0x5be08ca5
-    error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);
+    error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);          // 0x53dc88d9
     error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0xd47ae88a
 
     error RelayAuctionBidReceivedLate();                                    // 0xb61e767e
