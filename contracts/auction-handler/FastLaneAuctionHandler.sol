@@ -4,9 +4,6 @@ pragma solidity ^0.8.16;
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
-import "forge-std/console.sol"; // TODO remove
-
-
 abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -173,16 +170,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             _bidAmount = address(this).balance - balanceBefore;
         }
 
-        console.log("bid amount", _bidAmount);
-        console.log("mapping bal before", validatorsBalanceMap[block.coinbase]);
-
         validatorsBalanceMap[block.coinbase] += _bidAmount;
         validatorsTotal += _bidAmount;
     }
 
-    receive() external payable {
-        _payValidatorFee(msg.sender);
-    }
+    receive() external payable {}
 
     fallback() external payable {}
 
