@@ -417,11 +417,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     |             Modifiers             |
     |__________________________________*/
 
-    modifier onlyCurrentValidator() {
-        require(msg.sender == block.coinbase || msg.sender == validatorsDataMap[block.coinbase].payee, "only this block's validator");
-        _;
-    }
-
     modifier onlyActiveValidators() {
         require(validatorsBalanceMap[msg.sender] > 0 || validatorsBalanceMap[payeeMap[msg.sender]] > 0, "only active validators");
         _;
@@ -438,15 +433,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     modifier onlyEOA() {
         if (msg.sender != tx.origin) revert RelayPermissionSenderNotOrigin();
-        _;
-    }
-
-    modifier onlyValidatorProxy(address _validator) {
-        // Address never seen before in validatorsDataMap -> impossible to have balance / proxy
-        if (validatorsDataMap[_validator].payee == address(0)) revert RelayPermissionUnauthorized();
-
-        // Validator or valid payee
-        if (msg.sender != _validator && !isValidPayee(_validator, msg.sender)) revert RelayPermissionUnauthorized();
         _;
     }
 
