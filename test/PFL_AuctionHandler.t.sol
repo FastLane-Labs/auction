@@ -310,24 +310,24 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     function testValidatorCanSetPayee() public {
         assertTrue(PFR.getValidatorPayee(VALIDATOR1) != PAYEE2);
         vm.prank(VALIDATOR1);
-        PFR.updateValidatorPayee(VALIDATOR1, PAYEE2);
+        PFR.updateValidatorPayee(PAYEE2);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
     }
 
     function testValidatorsPayeeCanSetPayee() public {
         vm.prank(VALIDATOR1);
-        PFR.updateValidatorPayee(VALIDATOR1, PAYEE1);
+        PFR.updateValidatorPayee(PAYEE1);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
 
         vm.prank(PAYEE1);
-        PFR.updateValidatorPayee(VALIDATOR1, PAYEE2);
+        PFR.updateValidatorPayee(PAYEE2);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
     }
 
     function testRandomUserCannotSetValidatorsPayee() public {        
         vm.prank(USER);
         vm.expectRevert("Invalid validator");
-        PFR.updateValidatorPayee(VALIDATOR1, USER);
+        PFR.updateValidatorPayee(USER);
     }
 }
 
