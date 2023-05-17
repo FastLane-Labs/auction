@@ -234,20 +234,17 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         console.log("expected balance", expectedValidatorBalance); 
 
         // As V1 pay itself
-        vm.prank(VALIDATOR1);
+        uint256 balanceBefore = VALIDATOR1.balance;
         vm.expectEmit(true, true, true, true);
         emit RelayProcessingPaidValidator(VALIDATOR1, expectedValidatorBalance, VALIDATOR1);
-
-        uint256 balanceBefore = VALIDATOR1.balance;
-
+        
         console.log("contract balance", address(PFR).balance);
         console.log("searcher baalnce", address(SRE).balance);
-
         console.log("PFR address", address(PFR));
-
         console.log("validator address", VALIDATOR1);
         console.log("coinbase", block.coinbase);
 
+        vm.prank(VALIDATOR1);
         PFR.collectFees();
 
         console.log('here0');
@@ -319,25 +316,21 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testValidatorCanSetPayee() public {
         assertTrue(PFR.getValidatorPayee(VALIDATOR1) != PAYEE1);
-        vm.startPrank(VALIDATOR1);
         // Prep validator balance in contract - must be positive to change payee
-        vm.coinbase(VALIDATOR1);
-        address(PFR).call{value: 1}("");
+        _donateOneWeiToValidatorBalance();
 
+        vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
-        vm.stopPrank();
     }
 
     function testValidatorsPayeeCanSetPayee() public {
-        vm.startPrank(VALIDATOR1);
         // Prep validator balance in contract - must be positive to change payee
-        vm.coinbase(VALIDATOR1);
-        address(PFR).call{value: 1}("");
+        _donateOneWeiToValidatorBalance();
 
+        vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
-        vm.stopPrank();
 
         // avoid payee is time locked revert
         vm.warp(block.timestamp + 6 days + 1);
@@ -361,19 +354,23 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     function testPayeeCannotSetPayeeIfBeforeTimelock() public {
-        vm.startPrank(VALIDATOR1);
         // Prep validator balance in contract - must be positive to change payee
-        vm.coinbase(VALIDATOR1);
-        address(PFR).call{value: 1}("");
+        _donateOneWeiToValidatorBalance();
 
+        vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
-        vm.stopPrank();
 
         vm.prank(PAYEE1);
         vm.expectRevert("payee is time locked");
         PFR.updateValidatorPayee(PAYEE2);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
+    }
+
+    // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
+    function _donateOneWeiToValidatorBalance() internal {
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1}(USER);
     }
 }
 
