@@ -310,6 +310,12 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.collectFees();
     }
 
+    function testPayValidatorFeeRevertsWithZeroValue() public {
+        vm.prank(USER);
+        vm.expectRevert("msg.value = 0");
+        PFR.payValidatorFee{value: 0}(SEARCHER_ADDRESS1);
+    }
+
     function testValidatorCanSetPayee() public {
         assertTrue(PFR.getValidatorPayee(VALIDATOR1) != PAYEE1);
         // Prep validator balance in contract - must be positive to change payee
@@ -362,6 +368,10 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.updateValidatorPayee(PAYEE2);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
     }
+
+    // TODO syncStuckNativeToken tests
+
+    // TODO withdrawStuckERC20 tests
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
