@@ -4,9 +4,6 @@ pragma solidity ^0.8.16;
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
-import "forge-std/console.sol";
-
-
 abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -234,13 +231,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @dev Callable by either validator address, their payee address (if not changed recently), or PFL.
     function collectFees() external nonReentrant validPayee returns (uint256) { 
         // NOTE: Do not let validatorsBalanceMap[validator] balance go to 0, that will remove them from being an "active validator"       
-        
         address _validator = getValidator();
 
-        console.log("validator addr in contract", _validator);
-        console.log("addr sending to", validatorPayee(_validator));
-        console.log("validatorsDataMap[_validator].timeUpdated", validatorsDataMap[_validator].timeUpdated);
-        
         uint256 payableBalance = validatorsBalanceMap[_validator] - 1;  
         if (payableBalance <= 0) revert RelayCannotBeZero();
 
