@@ -369,7 +369,31 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
     }
 
-    // TODO syncStuckNativeToken tests
+    function testSyncNativeTokenCanOnlyBeCalledByValidators() public {
+        _donateOneWeiToValidatorBalance();
+        uint256 stuckNativeAmount = 1 ether;
+        vm.prank(USER);
+        address(PFR).call{value: stuckNativeAmount}("");
+
+        vm.prank(USER);
+        vm.expectRevert("only active validators");
+        PFR.syncStuckNativeToken();
+
+        uint256 validatorBalanceBefore = PFR.getValidatorBalance(VALIDATOR1);
+        vm.prank(VALIDATOR1);
+        PFR.syncStuckNativeToken();
+        uint256 validatorBalanceAfter = PFR.getValidatorBalance(VALIDATOR1);
+        assertEq(validatorBalanceAfter - validatorBalanceBefore, stuckNativeAmount);
+    }
+
+    function testSyncNativeTokenDoesNotIncreaseBalanceIfNoExcess() public {
+        _donateOneWeiToValidatorBalance();
+        uint256 validatorBalanceBefore = PFR.getValidatorBalance(VALIDATOR1);
+        vm.prank(VALIDATOR1);
+        PFR.syncStuckNativeToken();
+        uint256 validatorBalanceAfter = PFR.getValidatorBalance(VALIDATOR1);
+        assertEq(validatorBalanceBefore, validatorBalanceAfter);
+    }
 
     // TODO withdrawStuckERC20 tests
 
