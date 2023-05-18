@@ -388,14 +388,49 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testSyncNativeTokenDoesNotIncreaseBalanceIfNoExcess() public {
         _donateOneWeiToValidatorBalance();
+        uint256 auctionContractBalanceBefore = address(PFR).balance;
         uint256 validatorBalanceBefore = PFR.getValidatorBalance(VALIDATOR1);
         vm.prank(VALIDATOR1);
         PFR.syncStuckNativeToken();
+        uint256 auctionContractBalanceAfter = address(PFR).balance;
         uint256 validatorBalanceAfter = PFR.getValidatorBalance(VALIDATOR1);
         assertEq(validatorBalanceBefore, validatorBalanceAfter);
+        assertEq(auctionContractBalanceBefore, auctionContractBalanceAfter);
     }
 
-    // TODO withdrawStuckERC20 tests
+    function testWithdrawStuckERC20CanOnlyBeCalledByValidators() public {
+        _donateOneWeiToValidatorBalance();
+        uint256 stuckERC20Amount = 1 ether;
+        MockERC20 mockToken = new MockERC20("MockToken", "MT", 18);
+        mockToken.mint(USER, stuckERC20Amount);
+        vm.prank(USER);
+        mockToken.transfer(address(PFR), stuckERC20Amount);
+
+        vm.prank(USER);
+        vm.expectRevert("only active validators");
+        PFR.withdrawStuckERC20(address(mockToken));
+
+        uint256 validatorBalanceBefore = mockToken.balanceOf(address(VALIDATOR1));
+        vm.prank(VALIDATOR1);
+        PFR.withdrawStuckERC20(address(mockToken));
+        uint256 validatorBalanceAfter = mockToken.balanceOf(address(VALIDATOR1));
+        assertEq(validatorBalanceAfter - validatorBalanceBefore, stuckERC20Amount);
+    }
+
+    function testWithdrawStuckERC20DoesNotIncreaseBalanceIfNoExcess() public {
+        _donateOneWeiToValidatorBalance();
+        uint256 stuckERC20Amount = 1 ether;
+        MockERC20 mockToken = new MockERC20("MockToken", "MT", 18);
+        mockToken.mint(USER, stuckERC20Amount);
+        uint256 auctionContractBalanceBefore = mockToken.balanceOf(address(PFR));
+        uint256 validatorBalanceBefore = mockToken.balanceOf(address(VALIDATOR1));
+        vm.prank(VALIDATOR1);
+        PFR.withdrawStuckERC20(address(mockToken));
+        uint256 auctionContractBalanceAfter = mockToken.balanceOf(address(PFR));
+        uint256 validatorBalanceAfter = mockToken.balanceOf(address(VALIDATOR1));
+        assertEq(validatorBalanceBefore, validatorBalanceAfter);
+        assertEq(auctionContractBalanceBefore, auctionContractBalanceAfter);
+    }
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
