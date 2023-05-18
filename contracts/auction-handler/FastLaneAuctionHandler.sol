@@ -218,7 +218,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
         if (oopsTokenBalance > 0) {
-            SafeTransferLib.safeTransferFrom(oopsToken, address(this), msg.sender, oopsTokenBalance);
+            SafeTransferLib.safeTransfer(oopsToken, msg.sender, oopsTokenBalance);
             emit RelayWithdrawStuckERC20(address(this), msg.sender, oopsTokenBalance);
         }
     }
