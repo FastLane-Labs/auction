@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-05-18 13:13:03</td>
+            <td class="headerValue">2023-05-18 13:25:21</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">4</td>
@@ -503,104 +503,116 @@
 <a name="432"><span class="lineNum">     432 </span>                :            :         assertEq(auctionContractBalanceBefore, auctionContractBalanceAfter);</a>
 <a name="433"><span class="lineNum">     433 </span>                :            :     }</a>
 <a name="434"><span class="lineNum">     434 </span>                :            : </a>
-<a name="435"><span class="lineNum">     435 </span>                :            :     // Useful to get past the &quot;validatorsBalanceMap[validator] &gt; 0&quot; checks</a>
-<a name="436"><span class="lineNum">     436 </span>                :            :     function _donateOneWeiToValidatorBalance() internal {</a>
-<a name="437"><span class="lineNum">     437 </span>                :            :         vm.prank(USER);</a>
-<a name="438"><span class="lineNum">     438 </span>                :            :         PFR.payValidatorFee{value: 1}(USER);</a>
-<a name="439"><span class="lineNum">     439 </span>                :            :     }</a>
-<a name="440"><span class="lineNum">     440 </span>                :            : }</a>
-<a name="441"><span class="lineNum">     441 </span>                :            : </a>
-<a name="442"><span class="lineNum">     442 </span>                :            : // Fake opportunity to backrun</a>
-<a name="443"><span class="lineNum">     443 </span>                :            : contract BrokenUniswap {</a>
-<a name="444"><span class="lineNum">     444 </span>                :            :     function sickTrade(uint256 unused) external {</a>
-<a name="445"><span class="lineNum">     445 </span>                :<span class="lineNoCov">          0 :         payable(msg.sender).transfer(address(this).balance / 2);</span></a>
-<a name="446"><span class="lineNum">     446 </span>                :            :     }</a>
-<a name="447"><span class="lineNum">     447 </span>                :            : }</a>
-<a name="448"><span class="lineNum">     448 </span>                :            : </a>
-<a name="449"><span class="lineNum">     449 </span>                :            : // Purpose is to do nothing, hence not repaying the relay</a>
-<a name="450"><span class="lineNum">     450 </span>                :            : contract BrokenSearcherForgotFastLaneCallFn {</a>
-<a name="451"><span class="lineNum">     451 </span>                :            :     fallback() external payable {} </a>
+<a name="435"><span class="lineNum">     435 </span>                :            :     function testGetValidatorRecipient() public {</a>
+<a name="436"><span class="lineNum">     436 </span>                :            :         _donateOneWeiToValidatorBalance();</a>
+<a name="437"><span class="lineNum">     437 </span>                :            :         // Returns validator if valid and no payee set</a>
+<a name="438"><span class="lineNum">     438 </span>                :            :         assertEq(PFR.getValidatorRecipient(VALIDATOR1), VALIDATOR1);</a>
+<a name="439"><span class="lineNum">     439 </span>                :            : </a>
+<a name="440"><span class="lineNum">     440 </span>                :            :         // Returns payee if valid and payee set</a>
+<a name="441"><span class="lineNum">     441 </span>                :            :         vm.prank(VALIDATOR1);</a>
+<a name="442"><span class="lineNum">     442 </span>                :            :         PFR.updateValidatorPayee(PAYEE1);</a>
+<a name="443"><span class="lineNum">     443 </span>                :            :         vm.warp(block.timestamp + 7 days);</a>
+<a name="444"><span class="lineNum">     444 </span>                :            :         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);</a>
+<a name="445"><span class="lineNum">     445 </span>                :            :     }</a>
+<a name="446"><span class="lineNum">     446 </span>                :            : </a>
+<a name="447"><span class="lineNum">     447 </span>                :            :     // Useful to get past the &quot;validatorsBalanceMap[validator] &gt; 0&quot; checks</a>
+<a name="448"><span class="lineNum">     448 </span>                :            :     function _donateOneWeiToValidatorBalance() internal {</a>
+<a name="449"><span class="lineNum">     449 </span>                :            :         vm.prank(USER);</a>
+<a name="450"><span class="lineNum">     450 </span>                :            :         PFR.payValidatorFee{value: 1}(USER);</a>
+<a name="451"><span class="lineNum">     451 </span>                :            :     }</a>
 <a name="452"><span class="lineNum">     452 </span>                :            : }</a>
 <a name="453"><span class="lineNum">     453 </span>                :            : </a>
-<a name="454"><span class="lineNum">     454 </span>                :            : contract BrokenSearcherForgotReturnBoolBytes {</a>
-<a name="455"><span class="lineNum">     455 </span>                :            :     function fastLaneCall(</a>
-<a name="456"><span class="lineNum">     456 </span>                :            :             address _sender,</a>
-<a name="457"><span class="lineNum">     457 </span>                :            :             uint256 _bidAmount,</a>
-<a name="458"><span class="lineNum">     458 </span>                :            :             bytes calldata _searcherCallData</a>
-<a name="459"><span class="lineNum">     459 </span>                :            :     ) external payable /* returns (bool, bytes memory) &lt;- FORGOTTEN */ {</a>
-<a name="460"><span class="lineNum">     460 </span>                :            :     }</a>
-<a name="461"><span class="lineNum">     461 </span>                :            : }</a>
-<a name="462"><span class="lineNum">     462 </span>                :            : </a>
-<a name="463"><span class="lineNum">     463 </span>                :            : </a>
-<a name="464"><span class="lineNum">     464 </span>                :            : // Purpose is to do nothing, hence not repaying the relay</a>
-<a name="465"><span class="lineNum">     465 </span>                :            : contract BrokenSearcherRepayer {</a>
-<a name="466"><span class="lineNum">     466 </span>                :            :     function fastLaneCall(</a>
-<a name="467"><span class="lineNum">     467 </span>                :            :             address _sender,</a>
-<a name="468"><span class="lineNum">     468 </span>                :            :             uint256 _bidAmount,</a>
-<a name="469"><span class="lineNum">     469 </span>                :            :             bytes calldata _searcherCallData</a>
-<a name="470"><span class="lineNum">     470 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
-<a name="471"><span class="lineNum">     471 </span>                :<span class="lineCov">          1 :         return (true,bytes(&quot;ok&quot;));</span></a>
+<a name="454"><span class="lineNum">     454 </span>                :            : // Fake opportunity to backrun</a>
+<a name="455"><span class="lineNum">     455 </span>                :            : contract BrokenUniswap {</a>
+<a name="456"><span class="lineNum">     456 </span>                :            :     function sickTrade(uint256 unused) external {</a>
+<a name="457"><span class="lineNum">     457 </span>                :<span class="lineNoCov">          0 :         payable(msg.sender).transfer(address(this).balance / 2);</span></a>
+<a name="458"><span class="lineNum">     458 </span>                :            :     }</a>
+<a name="459"><span class="lineNum">     459 </span>                :            : }</a>
+<a name="460"><span class="lineNum">     460 </span>                :            : </a>
+<a name="461"><span class="lineNum">     461 </span>                :            : // Purpose is to do nothing, hence not repaying the relay</a>
+<a name="462"><span class="lineNum">     462 </span>                :            : contract BrokenSearcherForgotFastLaneCallFn {</a>
+<a name="463"><span class="lineNum">     463 </span>                :            :     fallback() external payable {} </a>
+<a name="464"><span class="lineNum">     464 </span>                :            : }</a>
+<a name="465"><span class="lineNum">     465 </span>                :            : </a>
+<a name="466"><span class="lineNum">     466 </span>                :            : contract BrokenSearcherForgotReturnBoolBytes {</a>
+<a name="467"><span class="lineNum">     467 </span>                :            :     function fastLaneCall(</a>
+<a name="468"><span class="lineNum">     468 </span>                :            :             address _sender,</a>
+<a name="469"><span class="lineNum">     469 </span>                :            :             uint256 _bidAmount,</a>
+<a name="470"><span class="lineNum">     470 </span>                :            :             bytes calldata _searcherCallData</a>
+<a name="471"><span class="lineNum">     471 </span>                :            :     ) external payable /* returns (bool, bytes memory) &lt;- FORGOTTEN */ {</a>
 <a name="472"><span class="lineNum">     472 </span>                :            :     }</a>
 <a name="473"><span class="lineNum">     473 </span>                :            : }</a>
 <a name="474"><span class="lineNum">     474 </span>                :            : </a>
-<a name="475"><span class="lineNum">     475 </span>                :            : // Purpose is only repay partially the relay</a>
-<a name="476"><span class="lineNum">     476 </span>                :            : contract BrokenSearcherRepayerPartial {</a>
-<a name="477"><span class="lineNum">     477 </span>                :            :     function fastLaneCall(</a>
-<a name="478"><span class="lineNum">     478 </span>                :            :             address _sender,</a>
-<a name="479"><span class="lineNum">     479 </span>                :            :             uint256 _bidAmount,</a>
-<a name="480"><span class="lineNum">     480 </span>                :            :             bytes calldata _searcherCallData</a>
-<a name="481"><span class="lineNum">     481 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
-<a name="482"><span class="lineNum">     482 </span>                :<span class="lineCov">          1 :         bool success;</span></a>
-<a name="483"><span class="lineNum">     483 </span>                :<span class="lineCov">          1 :         uint256 amount = 1 ether;</span></a>
-<a name="484"><span class="lineNum">     484 </span>                :<span class="lineCov">          1 :         address to = msg.sender;</span></a>
-<a name="485"><span class="lineNum">     485 </span>                :            :         assembly {</a>
-<a name="486"><span class="lineNum">     486 </span>                :            :             // Transfer the ETH and store if it succeeded or not.</a>
-<a name="487"><span class="lineNum">     487 </span>                :<span class="lineCov">          1 :             success := call(gas(), to, amount, 0, 0, 0, 0)</span></a>
-<a name="488"><span class="lineNum">     488 </span>                :            :         }</a>
-<a name="489"><span class="lineNum">     489 </span>                :            : </a>
-<a name="490"><span class="lineNum">     490 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchCov" title="Branch 1 was taken 1 time"> + </span>]:<span class="lineCov">          1 :         require(success, &quot;ETH_TRANSFER_FAILED&quot;);</span></a>
-<a name="491"><span class="lineNum">     491 </span>                :<span class="lineCov">          1 :         return (true,bytes(&quot;ok&quot;));</span></a>
-<a name="492"><span class="lineNum">     492 </span>                :            :     }</a>
-<a name="493"><span class="lineNum">     493 </span>                :            : }</a>
-<a name="494"><span class="lineNum">     494 </span>                :            : </a>
-<a name="495"><span class="lineNum">     495 </span>                :            : </a>
-<a name="496"><span class="lineNum">     496 </span>                :            : contract SearcherRepayerEcho {</a>
-<a name="497"><span class="lineNum">     497 </span>                :            :     function fastLaneCall(</a>
-<a name="498"><span class="lineNum">     498 </span>                :            :             address _sender,</a>
-<a name="499"><span class="lineNum">     499 </span>                :            :             uint256 _bidAmount,</a>
-<a name="500"><span class="lineNum">     500 </span>                :            :             bytes calldata _searcherCallData</a>
-<a name="501"><span class="lineNum">     501 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
-<a name="502"><span class="lineNum">     502 </span>                :<span class="lineCov">          2 :         bool success;</span></a>
-<a name="503"><span class="lineNum">     503 </span>                :<span class="lineCov">          2 :         address to = msg.sender;</span></a>
-<a name="504"><span class="lineNum">     504 </span>                :            : </a>
-<a name="505"><span class="lineNum">     505 </span>                :            :         assembly {</a>
-<a name="506"><span class="lineNum">     506 </span>                :            :             // Transfer the ETH and store if it succeeded or not.</a>
-<a name="507"><span class="lineNum">     507 </span>                :<span class="lineCov">          2 :             success := call(gas(), to, _bidAmount, 0, 0, 0, 0)</span></a>
-<a name="508"><span class="lineNum">     508 </span>                :            :         }</a>
-<a name="509"><span class="lineNum">     509 </span>                :            : </a>
-<a name="510"><span class="lineNum">     510 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchCov" title="Branch 1 was taken 2 times"> + </span>]:<span class="lineCov">          2 :         require(success, &quot;ETH_TRANSFER_FAILED&quot;);</span></a>
-<a name="511"><span class="lineNum">     511 </span>                :<span class="lineCov">          2 :         return (true,bytes(&quot;ok&quot;));</span></a>
-<a name="512"><span class="lineNum">     512 </span>                :            :     }</a>
-<a name="513"><span class="lineNum">     513 </span>                :            : }</a>
-<a name="514"><span class="lineNum">     514 </span>                :            : </a>
-<a name="515"><span class="lineNum">     515 </span>                :            : contract SearcherRepayerOverpayerDouble {</a>
-<a name="516"><span class="lineNum">     516 </span>                :            :     function fastLaneCall(</a>
-<a name="517"><span class="lineNum">     517 </span>                :            :             address _sender,</a>
-<a name="518"><span class="lineNum">     518 </span>                :            :             uint256 _bidAmount,</a>
-<a name="519"><span class="lineNum">     519 </span>                :            :             bytes calldata _searcherCallData</a>
-<a name="520"><span class="lineNum">     520 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
-<a name="521"><span class="lineNum">     521 </span>                :<span class="lineNoCov">          0 :         bool success;</span></a>
-<a name="522"><span class="lineNum">     522 </span>                :<span class="lineNoCov">          0 :         uint256 amount = _bidAmount * 2;</span></a>
-<a name="523"><span class="lineNum">     523 </span>                :<span class="lineNoCov">          0 :         address to = msg.sender;</span></a>
-<a name="524"><span class="lineNum">     524 </span>                :            :         assembly {</a>
-<a name="525"><span class="lineNum">     525 </span>                :            :             // Transfer the ETH and store if it succeeded or not.</a>
-<a name="526"><span class="lineNum">     526 </span>                :<span class="lineNoCov">          0 :             success := call(gas(), to, amount, 0, 0, 0, 0)</span></a>
-<a name="527"><span class="lineNum">     527 </span>                :            :         }</a>
-<a name="528"><span class="lineNum">     528 </span>                :            : </a>
-<a name="529"><span class="lineNum">     529 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchNoExec" title="Branch 1 was not executed"> # </span>]:<span class="lineNoCov">          0 :         require(success, &quot;ETH_TRANSFER_FAILED&quot;);</span></a>
-<a name="530"><span class="lineNum">     530 </span>                :<span class="lineNoCov">          0 :         return (true,bytes(&quot;ok&quot;));</span></a>
-<a name="531"><span class="lineNum">     531 </span>                :            :     }</a>
-<a name="532"><span class="lineNum">     532 </span>                :            : }</a>
+<a name="475"><span class="lineNum">     475 </span>                :            : </a>
+<a name="476"><span class="lineNum">     476 </span>                :            : // Purpose is to do nothing, hence not repaying the relay</a>
+<a name="477"><span class="lineNum">     477 </span>                :            : contract BrokenSearcherRepayer {</a>
+<a name="478"><span class="lineNum">     478 </span>                :            :     function fastLaneCall(</a>
+<a name="479"><span class="lineNum">     479 </span>                :            :             address _sender,</a>
+<a name="480"><span class="lineNum">     480 </span>                :            :             uint256 _bidAmount,</a>
+<a name="481"><span class="lineNum">     481 </span>                :            :             bytes calldata _searcherCallData</a>
+<a name="482"><span class="lineNum">     482 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
+<a name="483"><span class="lineNum">     483 </span>                :<span class="lineCov">          1 :         return (true,bytes(&quot;ok&quot;));</span></a>
+<a name="484"><span class="lineNum">     484 </span>                :            :     }</a>
+<a name="485"><span class="lineNum">     485 </span>                :            : }</a>
+<a name="486"><span class="lineNum">     486 </span>                :            : </a>
+<a name="487"><span class="lineNum">     487 </span>                :            : // Purpose is only repay partially the relay</a>
+<a name="488"><span class="lineNum">     488 </span>                :            : contract BrokenSearcherRepayerPartial {</a>
+<a name="489"><span class="lineNum">     489 </span>                :            :     function fastLaneCall(</a>
+<a name="490"><span class="lineNum">     490 </span>                :            :             address _sender,</a>
+<a name="491"><span class="lineNum">     491 </span>                :            :             uint256 _bidAmount,</a>
+<a name="492"><span class="lineNum">     492 </span>                :            :             bytes calldata _searcherCallData</a>
+<a name="493"><span class="lineNum">     493 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
+<a name="494"><span class="lineNum">     494 </span>                :<span class="lineCov">          1 :         bool success;</span></a>
+<a name="495"><span class="lineNum">     495 </span>                :<span class="lineCov">          1 :         uint256 amount = 1 ether;</span></a>
+<a name="496"><span class="lineNum">     496 </span>                :<span class="lineCov">          1 :         address to = msg.sender;</span></a>
+<a name="497"><span class="lineNum">     497 </span>                :            :         assembly {</a>
+<a name="498"><span class="lineNum">     498 </span>                :            :             // Transfer the ETH and store if it succeeded or not.</a>
+<a name="499"><span class="lineNum">     499 </span>                :<span class="lineCov">          1 :             success := call(gas(), to, amount, 0, 0, 0, 0)</span></a>
+<a name="500"><span class="lineNum">     500 </span>                :            :         }</a>
+<a name="501"><span class="lineNum">     501 </span>                :            : </a>
+<a name="502"><span class="lineNum">     502 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchCov" title="Branch 1 was taken 1 time"> + </span>]:<span class="lineCov">          1 :         require(success, &quot;ETH_TRANSFER_FAILED&quot;);</span></a>
+<a name="503"><span class="lineNum">     503 </span>                :<span class="lineCov">          1 :         return (true,bytes(&quot;ok&quot;));</span></a>
+<a name="504"><span class="lineNum">     504 </span>                :            :     }</a>
+<a name="505"><span class="lineNum">     505 </span>                :            : }</a>
+<a name="506"><span class="lineNum">     506 </span>                :            : </a>
+<a name="507"><span class="lineNum">     507 </span>                :            : </a>
+<a name="508"><span class="lineNum">     508 </span>                :            : contract SearcherRepayerEcho {</a>
+<a name="509"><span class="lineNum">     509 </span>                :            :     function fastLaneCall(</a>
+<a name="510"><span class="lineNum">     510 </span>                :            :             address _sender,</a>
+<a name="511"><span class="lineNum">     511 </span>                :            :             uint256 _bidAmount,</a>
+<a name="512"><span class="lineNum">     512 </span>                :            :             bytes calldata _searcherCallData</a>
+<a name="513"><span class="lineNum">     513 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
+<a name="514"><span class="lineNum">     514 </span>                :<span class="lineCov">          2 :         bool success;</span></a>
+<a name="515"><span class="lineNum">     515 </span>                :<span class="lineCov">          2 :         address to = msg.sender;</span></a>
+<a name="516"><span class="lineNum">     516 </span>                :            : </a>
+<a name="517"><span class="lineNum">     517 </span>                :            :         assembly {</a>
+<a name="518"><span class="lineNum">     518 </span>                :            :             // Transfer the ETH and store if it succeeded or not.</a>
+<a name="519"><span class="lineNum">     519 </span>                :<span class="lineCov">          2 :             success := call(gas(), to, _bidAmount, 0, 0, 0, 0)</span></a>
+<a name="520"><span class="lineNum">     520 </span>                :            :         }</a>
+<a name="521"><span class="lineNum">     521 </span>                :            : </a>
+<a name="522"><span class="lineNum">     522 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchCov" title="Branch 1 was taken 2 times"> + </span>]:<span class="lineCov">          2 :         require(success, &quot;ETH_TRANSFER_FAILED&quot;);</span></a>
+<a name="523"><span class="lineNum">     523 </span>                :<span class="lineCov">          2 :         return (true,bytes(&quot;ok&quot;));</span></a>
+<a name="524"><span class="lineNum">     524 </span>                :            :     }</a>
+<a name="525"><span class="lineNum">     525 </span>                :            : }</a>
+<a name="526"><span class="lineNum">     526 </span>                :            : </a>
+<a name="527"><span class="lineNum">     527 </span>                :            : contract SearcherRepayerOverpayerDouble {</a>
+<a name="528"><span class="lineNum">     528 </span>                :            :     function fastLaneCall(</a>
+<a name="529"><span class="lineNum">     529 </span>                :            :             address _sender,</a>
+<a name="530"><span class="lineNum">     530 </span>                :            :             uint256 _bidAmount,</a>
+<a name="531"><span class="lineNum">     531 </span>                :            :             bytes calldata _searcherCallData</a>
+<a name="532"><span class="lineNum">     532 </span>                :            :     ) external payable returns (bool, bytes memory) {</a>
+<a name="533"><span class="lineNum">     533 </span>                :<span class="lineNoCov">          0 :         bool success;</span></a>
+<a name="534"><span class="lineNum">     534 </span>                :<span class="lineNoCov">          0 :         uint256 amount = _bidAmount * 2;</span></a>
+<a name="535"><span class="lineNum">     535 </span>                :<span class="lineNoCov">          0 :         address to = msg.sender;</span></a>
+<a name="536"><span class="lineNum">     536 </span>                :            :         assembly {</a>
+<a name="537"><span class="lineNum">     537 </span>                :            :             // Transfer the ETH and store if it succeeded or not.</a>
+<a name="538"><span class="lineNum">     538 </span>                :<span class="lineNoCov">          0 :             success := call(gas(), to, amount, 0, 0, 0, 0)</span></a>
+<a name="539"><span class="lineNum">     539 </span>                :            :         }</a>
+<a name="540"><span class="lineNum">     540 </span>                :            : </a>
+<a name="541"><span class="lineNum">     541 </span>        [<span class="branchNoExec" title="Branch 0 was not executed"> # </span><span class="branchNoExec" title="Branch 1 was not executed"> # </span>]:<span class="lineNoCov">          0 :         require(success, &quot;ETH_TRANSFER_FAILED&quot;);</span></a>
+<a name="542"><span class="lineNum">     542 </span>                :<span class="lineNoCov">          0 :         return (true,bytes(&quot;ok&quot;));</span></a>
+<a name="543"><span class="lineNum">     543 </span>                :            :     }</a>
+<a name="544"><span class="lineNum">     544 </span>                :            : }</a>
 </pre>
       </td>
     </tr>

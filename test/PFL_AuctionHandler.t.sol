@@ -432,6 +432,18 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(auctionContractBalanceBefore, auctionContractBalanceAfter);
     }
 
+    function testGetValidatorRecipient() public {
+        _donateOneWeiToValidatorBalance();
+        // Returns validator if valid and no payee set
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), VALIDATOR1);
+
+        // Returns payee if valid and payee set
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
+    }
+
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
         vm.prank(USER);
