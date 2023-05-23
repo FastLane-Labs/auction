@@ -143,9 +143,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCEOverpay));
         PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
 
-        // TODO handle the MADE IT case here
-        // TODO handle the revert above that here
-
         vm.revertTo(snap2);
         to = address(SCE);
 
