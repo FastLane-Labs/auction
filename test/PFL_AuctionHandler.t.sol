@@ -211,6 +211,21 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(0),  searcherUnusedData);
     }
 
+    function testCollectReentrantFail() public {
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
+
+        uint256 bidAmount = 2 ether;
+        uint256 expectedValidatorPayout = bidAmount - 1;
+        bytes32 oppTx = bytes32("tx1");
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+
+        SearcherRepayerEvilEcho SRE = new SearcherRepayerEvilEcho();
+
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
+        vm.expectRevert();
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+    }
+
     function testCollectFees() public {
         vm.deal(SEARCHER_ADDRESS1, 100 ether);
 
@@ -520,6 +535,31 @@ contract SearcherRepayerEcho {
         }
 
         require(success, "ETH_TRANSFER_FAILED");
+        return (true,bytes("ok"));
+    }
+}
+
+
+contract SearcherRepayerEvilEcho {
+    function fastLaneCall(
+            address _sender,
+            uint256 _bidAmount,
+            bytes calldata _searcherCallData
+    ) external payable returns (bool, bytes memory) {
+        bool success;
+        address payable to = payable(msg.sender);
+
+        FastLaneAuctionHandler(to).collectFees();
+        assembly {
+            // Transfer the ETH and store if it succeeded or not.
+            success := call(gas(), to, _bidAmount, 0, 0, 0, 0)
+        }
+
+  
+
+        require(success, "ETH_TRANSFER_FAILED");
+
+        
         return (true,bytes("ok"));
     }
 }
