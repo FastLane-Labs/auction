@@ -1,128 +1,38 @@
 {
-    "_owner": {
-        "type_string": "address",
-        "slot": 0,
-        "size": 160,
-        "offset": 0
-    },
-    "name": {
-        "type_string": "string",
-        "slot": 0,
-        "size": 256,
-        "offset": 0
-    },
-    "symbol": {
-        "type_string": "string",
-        "slot": 1,
-        "size": 256,
-        "offset": 0
-    },
-    "totalSupply": {
-        "type_string": "uint256",
-        "slot": 2,
-        "size": 256,
-        "offset": 0
-    },
-    "balanceOf": {
-        "type_string": "mapping(address => uint256)",
-        "slot": 3,
-        "size": 256,
-        "offset": 0
-    },
-    "allowance": {
-        "type_string": "mapping(address => mapping(address => uint256))",
-        "slot": 4,
-        "size": 256,
-        "offset": 0
-    },
-    "nonces": {
-        "type_string": "mapping(address => uint256)",
-        "slot": 5,
-        "size": 256,
-        "offset": 0
-    },
     "locked": {
         "type_string": "uint256",
-        "slot": 1,
-        "size": 256,
-        "offset": 0
-    },
-    "validatorsStatusMap": {
-        "type_string": "mapping(address => bool)",
-        "slot": 2,
+        "slot": 0,
         "size": 256,
         "offset": 0
     },
     "validatorsDataMap": {
         "type_string": "mapping(address => ValidatorData)",
-        "slot": 3,
+        "slot": 1,
+        "size": 256,
+        "offset": 0
+    },
+    "payeeMap": {
+        "type_string": "mapping(address => address)",
+        "slot": 2,
         "size": 256,
         "offset": 0
     },
     "validatorsBalanceMap": {
         "type_string": "mapping(address => uint256)",
-        "slot": 4,
+        "slot": 3,
         "size": 256,
         "offset": 0
     },
     "fulfilledAuctionsMap": {
         "type_string": "mapping(bytes32 => uint256)",
-        "slot": 5,
+        "slot": 4,
         "size": 256,
         "offset": 0
     },
     "validatorsTotal": {
         "type_string": "uint256",
-        "slot": 6,
+        "slot": 5,
         "size": 256,
         "offset": 0
-    },
-    "flStakeSharePayable": {
-        "type_string": "uint256",
-        "slot": 7,
-        "size": 256,
-        "offset": 0
-    },
-    "flStakeShareRatio": {
-        "type_string": "uint24",
-        "slot": 8,
-        "size": 24,
-        "offset": 0
-    },
-    "proposalStakeShareRatio": {
-        "type_string": "uint24",
-        "slot": 8,
-        "size": 24,
-        "offset": 24
-    },
-    "proposalDeadline": {
-        "type_string": "uint256",
-        "slot": 9,
-        "size": 256,
-        "offset": 0
-    },
-    "minRelayBidAmount": {
-        "type_string": "uint256",
-        "slot": 10,
-        "size": 256,
-        "offset": 0
-    },
-    "pendingStakeShareUpdate": {
-        "type_string": "bool",
-        "slot": 11,
-        "size": 8,
-        "offset": 0
-    },
-    "paused": {
-        "type_string": "bool",
-        "slot": 11,
-        "size": 8,
-        "offset": 8
-    },
-    "RESTRICT_EOA": {
-        "type_string": "bool",
-        "slot": 11,
-        "size": 8,
-        "offset": 16
     }
 }
