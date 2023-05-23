@@ -370,8 +370,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         //```require(_formerPayee != _payee, "not a new payee");```
         // Should be triggered by the test case just above,
         // but that causes the auction to revert with "invalid payee" instead.
-
-        vm.stopPrank();
     }
 
     // NOTE: This is unreachable because getValidator is internal and 
