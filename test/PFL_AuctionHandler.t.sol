@@ -339,6 +339,34 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.updateValidatorPayee(address(PFR));
     }
 
+    function testUpdateValidatorPayeeRevertsIfValidatorOrNewPayeeInPayeeMap() public {
+        _donateOneWeiToValidatorBalance();
+
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
+
+        vm.prank(PAYEE1);
+        vm.expectRevert("invalid payee");
+        PFR.updateValidatorPayee(PAYEE1);
+        
+        // The other require statement in updateValidatorPayee is unreachable:
+        //```require(_formerPayee != _payee, "not a new payee");```
+        // Should be triggered by the test case just above,
+        // but that causes the auction to revert with "invalid payee" instead.
+
+        vm.stopPrank();
+    }
+
+    // NOTE: This is unreachable because getValidator is internal and 
+    //          only called when checks blocking this revert case have been passed
+    // function testGetValidatorRevertsIfInvalidCaller() public {
+    //     vm.startPrank(address(this));
+    //     vm.expectRevert("Invalid validator");
+    //     PFR.getValidator();
+    // }
+
     function testPayValidatorFeeRevertsWithZeroValue() public {
         vm.prank(USER);
         vm.expectRevert("msg.value = 0");
