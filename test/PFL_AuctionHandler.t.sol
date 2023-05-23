@@ -325,6 +325,20 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.collectFees();
     }
 
+    function testUpdateValidatorPayeeRevertsIfAddressZero() public {
+        _donateOneWeiToValidatorBalance();
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCannotBeZero.selector);
+        PFR.updateValidatorPayee(address(0));
+    }
+
+    function testUpdateValidatorPayeeRevertsIfAuctionAddress() public {
+        _donateOneWeiToValidatorBalance();
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCannotBeSelf.selector);
+        PFR.updateValidatorPayee(address(PFR));
+    }
+
     function testPayValidatorFeeRevertsWithZeroValue() public {
         vm.prank(USER);
         vm.expectRevert("msg.value = 0");
