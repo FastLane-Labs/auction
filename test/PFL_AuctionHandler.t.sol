@@ -72,6 +72,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Deploy Searcher Wrapper as SEARCHER_ADDRESS1
         vm.startPrank(SEARCHER_ADDRESS1);
         SearcherContractExample SCE = new SearcherContractExample();
+        SearcherRepayerOverpayerDouble SCEOverpay = new SearcherRepayerOverpayerDouble();
         vm.stopPrank();
 
         address to = address(SCE);
@@ -110,6 +111,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         console.log("Balance SCE: %s", to.balance);
         PFR.submitFlashBid{value: 1 ether}(bidAmount, oppTx, to,  searcherCallData);
 
+        uint256 snap = vm.snapshot();
 
         vm.expectEmit(true, true, true, true);
         emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCE));
@@ -130,6 +132,22 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Not winner
         vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount));
         PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, oppTx, to,  searcherCallData);
+
+        uint256 snap2 = vm.snapshot();
+
+        vm.revertTo(snap);
+        to = address(SCEOverpay);
+
+        // Searcher overpays
+        vm.expectEmit(true, true, true, true);
+        emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCEOverpay));
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
+
+        // TODO handle the MADE IT case here
+        // TODO handle the revert above that here
+
+        vm.revertTo(snap2);
+        to = address(SCE);
 
         // Failed searcher call inside their contract
         bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()");
@@ -597,11 +615,7 @@ contract SearcherRepayerEvilEcho {
             success := call(gas(), to, _bidAmount, 0, 0, 0, 0)
         }
 
-  
-
         require(success, "ETH_TRANSFER_FAILED");
-
-        
         return (true,bytes("ok"));
     }
 }

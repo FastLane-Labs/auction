@@ -4,6 +4,8 @@ pragma solidity ^0.8.16;
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
+import "forge-std/console.sol";
+
 abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -152,6 +154,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
             // Verify that the searcher paid the amount they bid & emit the event
             if (address(this).balance < balanceBefore + _bidAmount) {
+                console.log('made it');
                 revert RelaySimulatedNotRepaid(_bidAmount, address(this).balance - balanceBefore);
             }
             emit RelaySimulatedFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
