@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntry">0</td>
-            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">16</td>
             <td class="headerCovTableEntryLo">0.0 %</td>
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2022-11-15 17:07:48</td>
+            <td class="headerValue">2023-05-23 21:44:48</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">0</td>
@@ -75,7 +75,7 @@
 <a name="4"><span class="lineNum">       4 </span>                :            : import &quot;forge-std/Test.sol&quot;;</a>
 <a name="5"><span class="lineNum">       5 </span>                :            : import &quot;forge-std/Script.sol&quot;;</a>
 <a name="6"><span class="lineNum">       6 </span>                :            : </a>
-<a name="7"><span class="lineNum">       7 </span>                :            : import {FastLaneAuction} from &quot;../contracts/legacy/FastLaneLegacyAuction.sol&quot;;</a>
+<a name="7"><span class="lineNum">       7 </span>                :            : import {FastLaneAuctionHandler} from &quot;../../contracts/auction-handler/FastLaneAuctionHandler.sol&quot;;</a>
 <a name="8"><span class="lineNum">       8 </span>                :            : </a>
 <a name="9"><span class="lineNum">       9 </span>                :            : contract Deploy is Script {</a>
 <a name="10"><span class="lineNum">      10 </span>                :            : </a>
@@ -115,14 +115,12 @@
 <a name="44"><span class="lineNum">      44 </span>                :            :         // vm.startBroadcast(vm.addr(deployerPrivateKey));</a>
 <a name="45"><span class="lineNum">      45 </span>                :            : </a>
 <a name="46"><span class="lineNum">      46 </span>                :<span class="lineNoCov">          0 :         vm.startBroadcast();</span></a>
-<a name="47"><span class="lineNum">      47 </span>                :<span class="lineNoCov">          0 :         fastlane = address(new FastLaneAuction(msg.sender));</span></a>
-<a name="48"><span class="lineNum">      48 </span>                :            :         </a>
-<a name="49"><span class="lineNum">      49 </span>                :<span class="lineNoCov">          0 :         FastLaneAuction(fastlane).initialSetupAuction(initial_bid_token, ops, msg.sender);</span></a>
-<a name="50"><span class="lineNum">      50 </span>                :            : </a>
-<a name="51"><span class="lineNum">      51 </span>                :<span class="lineNoCov">          0 :         console2.log(fastlane);</span></a>
-<a name="52"><span class="lineNum">      52 </span>                :            :     }</a>
-<a name="53"><span class="lineNum">      53 </span>                :            : </a>
-<a name="54"><span class="lineNum">      54 </span>                :            : }</a>
+<a name="47"><span class="lineNum">      47 </span>                :<span class="lineNoCov">          0 :         fastlane = address(new FastLaneAuctionHandler());</span></a>
+<a name="48"><span class="lineNum">      48 </span>                :            : </a>
+<a name="49"><span class="lineNum">      49 </span>                :<span class="lineNoCov">          0 :         console2.log(fastlane);</span></a>
+<a name="50"><span class="lineNum">      50 </span>                :            :     }</a>
+<a name="51"><span class="lineNum">      51 </span>                :            : </a>
+<a name="52"><span class="lineNum">      52 </span>                :            : }</a>
 </pre>
       </td>
     </tr>

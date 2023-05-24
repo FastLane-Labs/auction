@@ -1,0 +1,57 @@
+INFO:Slither-read-storage:
+Contract ReentrancyGuard not found in storage layout. It is possibly a parent contract
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuctionHandler'
+ReentrancyGuard.locked with type uint256 is located at slot: 0
+
+INFO:Slither-read-storage:
+Name: locked
+Type: uint256
+Slot: 0
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuctionHandler'
+FastLaneAuctionHandler.validatorsDataMap with type mapping(address => ValidatorData) is located at slot: 1
+
+INFO:Slither-read-storage:
+Name: validatorsDataMap
+Type: mapping(address => ValidatorData)
+Slot: 1
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuctionHandler'
+FastLaneAuctionHandler.payeeMap with type mapping(address => address) is located at slot: 2
+
+INFO:Slither-read-storage:
+Name: payeeMap
+Type: mapping(address => address)
+Slot: 2
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuctionHandler'
+FastLaneAuctionHandler.validatorsBalanceMap with type mapping(address => uint256) is located at slot: 3
+
+INFO:Slither-read-storage:
+Name: validatorsBalanceMap
+Type: mapping(address => uint256)
+Slot: 3
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuctionHandler'
+FastLaneAuctionHandler.fulfilledAuctionsMap with type mapping(bytes32 => uint256) is located at slot: 4
+
+INFO:Slither-read-storage:
+Name: fulfilledAuctionsMap
+Type: mapping(bytes32 => uint256)
+Slot: 4
+
+INFO:Slither-read-storage:
+Contract 'FastLaneAuctionHandler'
+FastLaneAuctionHandler.validatorsTotal with type uint256 is located at slot: 5
+
+INFO:Slither-read-storage:
+Name: validatorsTotal
+Type: uint256
+Slot: 5
+

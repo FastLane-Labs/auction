@@ -21,7 +21,7 @@
     "hardhat_gas": "REPORT_GAS=true hardhat test",
     "gas": "forge test -vv --gas-report",
     "ftest": "source .env && forge test -vvv --gas-report",
-    "ftest-ci": "forge test -vvvv",
+    "ftest-ci": "forge test -vvvv --no-match-path '*legacy*'",
     "ftest-fork": "source .env && forge test -vvv --fork-url ${ALCHEMY_APIKEY_MUMBAI} --fork-block-number 26702726 --gas-report",
     "ftrpc": "forge test -vv --ffi",
     "start": "hardhat node --port 8545",
@@ -51,7 +51,7 @@
     "auction-legacy-Test": "forge test -vvv --match-contract PFLAuctionTest",
     "solc": "solc-select install 0.8.16 && solc-select use 0.8.16",
     "layout": "slither-read-storage contracts/legacy/FastLaneLegacyAuction.sol 0xc71cf7eb2839d864f356da13ebe22883fcbc9b0f --layout --solc-remaps 'ds-test/=./lib/forge-std/lib/ds-test/src/ eth-gas-reporter/=./node_modules/eth-gas-reporter/ forge-std/=./lib/forge-std/src/ hardhat/=./node_modules/hardhat/ openzeppelin-contracts/=./lib/openzeppelin-contracts/  openzeppelin-contracts-upgradeable/=./lib/openzeppelin-contracts-upgradeable/  solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-layout",
-    "layout-relay": "slither-read-storage contracts/auction-handler/FastLaneAuctionHandler.sol 0xf0E388C7DFfE14a61280a4E5b84d77be3d2875e3 --layout --solc-remaps 'openzeppelin-contracts/=./lib/openzeppelin-contracts/ solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-relay-layout",
+    "layout-relay": "slither-read-storage contracts/auction-handler/FastLaneAuctionHandler.sol 0x7D8Ade77A347Ba6ee34eac0f825Fc37B0A66B268 --layout --solc-remaps 'openzeppelin-contracts/=./lib/openzeppelin-contracts/ solmate/=./lib/solmate/src/' --rpc-url http://localhost:8545 2> .storage-relay-layout",
     
     "deploy-anvil-factory": "source .env && forge script script/PreProxyDeploy.s.sol:Deploy --fork-url http://localhost:8545 --private-key $TESTNET_KEY --broadcast",
     "deploy-anvil-eoa": "source .env && forge script script/EOADeploy.s.sol:Deploy --fork-url http://localhost:8545  --private-key $TESTNET_KEY --broadcast",
