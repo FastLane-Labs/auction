@@ -9,6 +9,7 @@ abstract contract FastLaneAuctionHandlerEvents {
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
 
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
+    event RelayFlashBidWithRefund(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress, uint256 refundedAmount, address refundAddress);
     event RelaySimulatedFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
 
     event RelayWithdrawStuckERC20(
@@ -36,6 +37,8 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     error RelayCannotBeZero();                                              // 0x3c9cfe50
     error RelayCannotBeSelf();                                              // 0x6a64f641
+
+    error RelayValidatorNotAcceptingRefundBids();
 }
 
 /// @notice Validator Data Struct
@@ -68,6 +71,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Map key is keccak hash of opp tx's gasprice and tx hash
     mapping(bytes32 => uint256) public fulfilledAuctionsMap;
 
+    /// @notice Map[validator] = % payment to validator in a bid with refund
+    mapping(address => uint256) public validatorsRefundShareMap;
+
     uint256 public validatorsTotal;
 
 
@@ -82,7 +88,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         bytes32 _oppTxHash, // Target TX
         address _searcherToAddress,
         bytes calldata _searcherCallData 
-        ) external payable checkBid(_oppTxHash, _bidAmount) onlyEOA nonReentrant {
+    ) external payable checkBid(_oppTxHash, _bidAmount) onlyEOA nonReentrant {
 
             if (_searcherToAddress == address(0)) revert RelaySearcherWrongParams();
             
@@ -103,6 +109,43 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             _handleBalances(_bidAmount, balanceBefore);
 
             emit RelayFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
+    }
+
+    /// @notice Submits a flash bid which refunds a portion of payment to `refundAddress`
+    /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
+    /// @param bidAmount Amount committed to be repaid
+    /// @param oppTxHash Target Transaction hash
+    /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
+    /// @param searcherCallData callData to be passed to `searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
+    /// @param refundAddress The address that will receive the refund
+    function submitFlashBidWithRefund(
+        uint256 bidAmount, // Value commited to be repaid at the end of execution
+        bytes32 oppTxHash, // Target TX
+        address searcherToAddress,
+        bytes calldata searcherCallData,
+        address refundAddress
+    ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
+
+            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
+            if (validatorsRefundShareMap[block.coinbase] > 100) revert RelayValidatorNotAcceptingRefundBids();
+            
+            // Store the current balance, excluding msg.value
+            uint256 balanceBefore = address(this).balance - msg.value;
+
+            // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
+            // And forward msg.value
+            (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
+                        msg.sender,
+                        bidAmount,
+                        searcherCallData
+            );
+
+            if (!success) revert RelaySearcherCallFailure(retData);
+
+            // Verify that the searcher paid the amount they bid & emit the event
+            uint256 refundAmount = _handleBalancesWithRefund(bidAmount, balanceBefore, refundAddress);
+
+            emit RelayFlashBidWithRefund(msg.sender, bidAmount, oppTxHash, block.coinbase, searcherToAddress, refundAmount, refundAddress);
     }
 
     /// @notice Pays the validator for fees / revenue sharing that is collected outside of submitFlashBid function
@@ -172,6 +215,31 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         validatorsBalanceMap[block.coinbase] += _bidAmount;
         validatorsTotal += _bidAmount;
+    }
+
+    /// Verifies the searcher paid for the bid and handles a refund to specified address
+    function _handleBalancesWithRefund(
+        uint256 bidAmount,
+        uint256 balanceBefore,
+        address refundAddress
+    ) internal returns (uint256 refundShare) {
+        if (address(this).balance < balanceBefore + bidAmount) {
+            revert RelayNotRepaid(bidAmount, address(this).balance - balanceBefore);
+        }
+
+        if (address(this).balance - balanceBefore > bidAmount) {
+            bidAmount = address(this).balance - balanceBefore;
+        }
+
+        // Calculate the split of payment
+        uint256 validatorShare = (validatorsRefundShareMap[block.coinbase] * bidAmount) / 100;
+        refundShare = bidAmount - validatorShare;
+
+        // Update balance and make payment
+        validatorsBalanceMap[block.coinbase] += validatorShare;
+        validatorsTotal += validatorShare;
+        payable(refundAddress).transfer(refundShare);
+
     }
 
     receive() external payable {}
@@ -270,6 +338,13 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         payeeMap[_payee] = _validator;
 
         emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);   
+    }
+
+    /// @notice Updates a validator's share
+    /// @param refundShare the share in % that should be paid to the validator
+    function updateValidatorRefundShare(uint256 refundShare) public validPayee nonReentrant {
+        address validator = getValidator();
+        validatorsRefundShareMap[validator] = refundShare;
     }
 
     /***********************************|
