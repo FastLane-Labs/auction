@@ -122,7 +122,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         uint256 bidAmount, // Value commited to be repaid at the end of execution
         bytes32 oppTxHash, // Target TX
         address searcherToAddress,
-        bytes calldata searcherCallData,
+        bytes memory searcherCallData,
         address refundAddress
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
 
@@ -134,13 +134,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
-            (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
-                        msg.sender,
-                        bidAmount,
-                        searcherCallData
-            );
+            {
+                (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
+                            msg.sender,
+                            bidAmount,
+                            searcherCallData
+                );
 
-            if (!success) revert RelaySearcherCallFailure(retData);
+                if (!success) revert RelaySearcherCallFailure(retData);
+            }
 
             // Verify that the searcher paid the amount they bid & emit the event
             uint256 refundAmount = _handleBalancesWithRefund(bidAmount, balanceBefore, refundAddress);
