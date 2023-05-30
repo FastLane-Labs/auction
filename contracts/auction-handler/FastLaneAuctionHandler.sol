@@ -121,9 +121,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     function submitFlashBidWithRefund(
         uint256 bidAmount, // Value commited to be repaid at the end of execution
         bytes32 oppTxHash, // Target TX
+        address refundAddress,
         address searcherToAddress,
-        bytes memory searcherCallData,
-        address refundAddress
+        bytes memory searcherCallData
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
 
             if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
