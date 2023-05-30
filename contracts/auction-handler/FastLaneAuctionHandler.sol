@@ -346,6 +346,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @param refundShare the share in % that should be paid to the validator
     function updateValidatorRefundShare(uint256 refundShare) public validPayee nonReentrant {
         address validator = getValidator();
+
+        // ensure that validators can't insert txs to boost their refund rates during their own blocks
+        require(validator != block.coinbase, "block author's rate is immutable");
+
         validatorsRefundShareMap[validator] = refundShare;
     }
 
