@@ -10,6 +10,10 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
     event RelayFlashBidWithRefund(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress, uint256 refundedAmount, address refundAddress);
+    
+    event RelayFlashBidRefundChildFail(address indexed sender, uint256 amount, bytes32 indexed parentTxHash, bytes32 indexed childTxHash, address validator, address searcherContractAddress, uint256 refundedAmount, address refundAddress);
+    event RelayFlashBidRefundParentFail(address indexed sender, uint256 amount, bytes32 indexed parentTxHash, bytes32 indexed childTxHash, address validator, address searcherContractAddress, uint256 refundedAmount, address refundAddress);
+    
     event RelaySimulatedFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
 
     event RelayWithdrawStuckERC20(
@@ -39,6 +43,8 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayCannotBeSelf();                                              // 0x6a64f641
 
     error RelayValidatorNotAcceptingRefundBids();
+
+    error RelayParentFailure();
 }
 
 /// @notice Validator Data Struct
@@ -70,6 +76,14 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Map key is keccak hash of opp tx's gasprice and tx hash
     mapping(bytes32 => uint256) public fulfilledAuctionsMap;
+
+    /// @notice Map key is keccak hash of searcher tx's gasprice and tx hash
+    // map value points to parent tx's hash of gasprice and tx hash
+    mapping(bytes32 => bytes32) public fulfilledRefundsMap;
+
+    // @notice TOP_LEVEL_HASH is the fulfilledRefundsMap value when the key is 
+    // an oppTx that isn't also a call to FastLaneAuctionHandler 
+    bytes32 constant internal TOP_LEVEL_HASH = bytes32("FastLane.TopLevelHash");
 
     /// @notice Map[validator] = % payment to validator in a bid with refund
     mapping(address => uint256) public validatorsRefundShareMap;
@@ -114,21 +128,52 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Submits a flash bid which refunds a portion of payment to `refundAddress`
     /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
     /// @param bidAmount Amount committed to be repaid
-    /// @param oppTxHash Target Transaction hash
+    /// @param parentTxHash Target Transaction hash
     /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
     /// @param searcherCallData callData to be passed to `searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
     /// @param refundAddress The address that will receive the refund
     function submitFlashBidWithRefund(
         uint256 bidAmount, // Value commited to be repaid at the end of execution
-        bytes32 oppTxHash, // Target TX
+        bytes32 parentTxHash, // Target TX
+        address refundAddress,
+        bytes32 childTxHash, // searcher TX
+        address searcherToAddress,
+        bytes memory searcherCallData
+    ) external payable onlyEOA nonReentrant {
+
+        if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
+        if (validatorsRefundShareMap[block.coinbase] > 100) revert RelayValidatorNotAcceptingRefundBids();
+        
+        bool isValidChildTx = validateNesting(parentTxHash, childTxHash);
+        
+        if (isValidChildTx) {
+            try this.flashBidCatcher(bidAmount, refundAddress, searcherToAddress, searcherCallData) returns (uint256 refundAmount) {
+
+                logSuccessfulRefund(parentTxHash, childTxHash, bidAmount);
+
+                emit RelayFlashBidWithRefund(msg.sender, bidAmount, parentTxHash, block.coinbase, searcherToAddress, refundAmount, refundAddress);
+            
+            } catch {
+                // TODO: bubble up & wrap parent tx err?
+                emit RelayFlashBidRefundChildFail(msg.sender, bidAmount, parentTxHash, childTxHash, block.coinbase, searcherToAddress, 0, refundAddress);
+            } 
+
+        } else {
+            emit RelayFlashBidRefundParentFail(msg.sender, bidAmount, parentTxHash, childTxHash, block.coinbase, searcherToAddress, 0, refundAddress);
+        }
+    }
+
+    function flashBidCatcher(
+        uint256 bidAmount, // Value commited to be repaid at the end of execution
         address refundAddress,
         address searcherToAddress,
         bytes memory searcherCallData
-    ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
+    ) external payable returns (uint256 refundAmount) {
 
-            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            if (validatorsRefundShareMap[block.coinbase] > 100) revert RelayValidatorNotAcceptingRefundBids();
-            
+            // TODO: verify a this.funcName on external func will change the msg.sender 
+            // otherwise, switch to low level call in submitFlashBidWithRefund
+            require(msg.sender == address(this), "try catch wrapper");
+ 
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
 
@@ -145,9 +190,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             }
 
             // Verify that the searcher paid the amount they bid & emit the event
-            uint256 refundAmount = _handleBalancesWithRefund(bidAmount, balanceBefore, refundAddress);
-
-            emit RelayFlashBidWithRefund(msg.sender, bidAmount, oppTxHash, block.coinbase, searcherToAddress, refundAmount, refundAddress);
+            refundAmount = _handleBalancesWithRefund(bidAmount, balanceBefore, refundAddress);
     }
 
     /// @notice Pays the validator for fees / revenue sharing that is collected outside of submitFlashBid function
@@ -520,5 +563,104 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         // Mark this auction as being complete to provide quicker reverts for subsequent searchers
         fulfilledAuctionsMap[auction_key] = _bidAmount;
         _;
+    }
+
+
+    /***********************************|
+    |       Nested OFA Tx funcs         |
+    |__________________________________*/
+
+    function logSuccessfulRefund(bytes32 _parentTxHash, bytes32, uint256 _bidAmount) internal {
+        bytes32 parent_key = keccak256(abi.encode(_parentTxHash, tx.gasprice));
+        //bytes32 child_key = keccak256(abi.encode(_childTxHash, tx.gasprice));
+
+        // Mark this auction as being complete to provide quicker reverts for subsequent searchers
+        fulfilledAuctionsMap[parent_key] = _bidAmount;
+        // fulfilledAuctionsMap[child_key] = _bidAmount; TODO: use parentBid == childBid to reduce storage reads in validateNesting
+    }
+
+    /// @notice Validates incoming bid
+    /// @dev 
+    /// @param _parentTxHash Target Transaction hash
+    /// @param _childTxHash Searcher Transaction hash
+    function validateNesting(bytes32 _parentTxHash, bytes32 _childTxHash) internal returns (bool shouldExecute) {
+        // Use hash of the parent tx and the transaction's gasprice as key for bid tracking
+        // This is dependent on the PFL Relay verifying that the child tx's gasprice matches
+        // the parent's gasprice, and that the searcher used the correct parent tx hash
+        // and correctly labeled their own childTxHash
+
+        /*
+
+        Transaction Execution Sequence, set at p2p level by FastLane relay:
+            0. Original Opp/Mempool Tx
+            1. ParentA
+            2. ParentB
+            3. ParentC
+            4. ChildA-1
+            5. ChildA-2
+            6. ChildB-1
+            7. ChildB-2
+            8. ChildC-1
+            9. NestedChildB-1-a
+            10. NestedChildB-2-a
+            11. NestedChildB-2-b
+            12. NestedChildC-1-A
+            
+        First ordering is by nesting level
+        Second ordering is by ordering of parent tx (if it exists)
+        Third ordering is by bid amount of tx
+
+        Example: 
+        since ParentA has a higher bid amount than ParentB, 
+        All child txs of ParentA will be executed in front of all child txs of ParentB,
+        even if the child txs of ParentB have higher bid amounts
+
+        ALL CHILD TXS WILL REVERT IF THEIR PARENT TX IS NOT SUCCESSFULLY EXECUTED
+        This prevents a low-bidding child from "cheating" by tailgating a spoofed-bid parent
+        and overriding the subsequent, higher-bidding parent
+
+        If all parents revert, a child is treated as parent. 
+
+        */
+
+        bytes32 auction_key = keccak256(abi.encode(_parentTxHash, tx.gasprice)); // validated as actual parent tx hash by relay
+
+        // get parent_key (if it exists) and compute child_key
+        bytes32 parent_key = fulfilledRefundsMap[auction_key];
+        bytes32 child_key = keccak256(abi.encode(_childTxHash, tx.gasprice)); // validated as actual child tx hash by relay
+
+        // make sure that either the parent executed successfully or the child isn't nested, 
+
+        // this is a new tree / top level parent tx
+        if (parent_key == bytes32(0)) {
+            
+            // log parent/child keys 
+            fulfilledRefundsMap[auction_key] = TOP_LEVEL_HASH;
+            fulfilledRefundsMap[child_key] = auction_key;
+
+            // make sure all top-level parents w/ higher bids were reverted
+            uint256 existing_bid = fulfilledAuctionsMap[auction_key];
+            shouldExecute = existing_bid == 0;
+
+        // not a new tree / top level parent tx
+        } else {
+            
+            // log all parent/child keys 
+            fulfilledRefundsMap[child_key] = auction_key;
+            // NOTE: parent_key already logged
+
+            uint256 existing_bid = fulfilledAuctionsMap[auction_key];
+
+            if (parent_key == TOP_LEVEL_HASH) { 
+                // means a higher bidding tx (of same depth) reverted or didn't pay in full
+                shouldExecute = existing_bid == 0;
+            
+            } else {
+                // means this is nested tx, so make sure both the parent tx
+                // was successful and that a sibling child tx hasnt already succeeded
+                uint256 parent_bid = fulfilledAuctionsMap[parent_key];
+                shouldExecute = parent_bid != 0 && existing_bid == 0; 
+            }
+        }
     }
 }
