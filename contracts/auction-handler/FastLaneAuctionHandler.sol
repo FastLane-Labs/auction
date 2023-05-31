@@ -59,6 +59,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
 
+    /// @notice The scale for validator refund share
+    uint256 internal constant VALIDATOR_REFUND_SCALE = 10_000; // 1 = 0.01%
+
     /// @notice Mapping to Validator Data Struct
     mapping(address => ValidatorData) internal validatorsDataMap;
 
@@ -127,7 +130,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
 
             if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            if (validatorsRefundShareMap[block.coinbase] > 100) revert RelayValidatorNotAcceptingRefundBids();
+            if (validatorsRefundShareMap[block.coinbase] > VALIDATOR_REFUND_SCALE) revert RelayValidatorNotAcceptingRefundBids();
             
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
@@ -234,8 +237,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         }
 
         // Calculate the split of payment
-        uint256 validatorShare = (validatorsRefundShareMap[block.coinbase] * bidAmount) / 100;
-        refundShare = bidAmount - validatorShare;
+        uint256 validatorShare = (validatorsRefundShareMap[block.coinbase] * bidAmount) / VALIDATOR_REFUND_SCALE;
+        refundShare = bidAmount - validatorShare; // subtract to ensure no overflow
 
         // Update balance and make payment
         validatorsBalanceMap[block.coinbase] += validatorShare;
@@ -298,7 +301,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     |__________________________________*/
 
     /// @notice Pays the validator their outstanding balance
-    /// @dev Callable by either validator address, their payee address (if not changed recently), or PFL.
+    /// @dev Callable by either validator address or their payee address (if not changed recently).
     function collectFees() external nonReentrant validPayee returns (uint256) { 
         // NOTE: Do not let validatorsBalanceMap[validator] balance go to 0, that will remove them from being an "active validator"       
         address _validator = getValidator();
@@ -317,7 +320,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     /// @notice Updates a validator payee
-    /// @dev Callable by either validator address, their payee address (if not changed recently), or PFL.
+    /// @dev Callable by either validator address or their payee address (if not changed recently).
     function updateValidatorPayee(address _payee) external validPayee nonReentrant {
         // NOTE: Payee cannot be updated until there is a valid balance in the fee vault
         if (_payee == address(0)) revert RelayCannotBeZero();
