@@ -176,6 +176,133 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         }
     }
 
+    function testSubmitFlashBidWithRefund() public {
+
+        vm.deal(SEARCHER_ADDRESS1, 150 ether);
+
+        uint256 bidAmount = 0.001 ether;
+        bytes32 oppTx = bytes32("tx1");
+
+        // Deploy Searcher Wrapper as SEARCHER_ADDRESS1 and enable the validator
+        vm.startPrank(SEARCHER_ADDRESS1);
+        SearcherContractExample SCE = new SearcherContractExample();
+        SearcherRepayerOverpayerDouble SCEOverpay = new SearcherRepayerOverpayerDouble();
+        PFR.payValidatorFee{value: 1}(SEARCHER_ADDRESS1);
+        vm.stopPrank();
+
+        // Set the refund up
+        vm.startPrank(VALIDATOR1); // should fail if validator is changing their own block
+        vm.expectRevert(bytes("block author's rate is immutable"));
+        PFR.updateValidatorRefundShare(0);
+        vm.coinbase(address(0));
+        PFR.updateValidatorRefundShare(5000); // 50%
+        vm.coinbase(VALIDATOR1);
+        vm.stopPrank();
+
+        address to = address(SCE);
+
+        address expectedAnAddress = vm.addr(12);
+        uint256 expectedAnAmount = 1337;
+
+        // Simply abi encode the args we want to forward to the searcher contract so it can execute them 
+        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", expectedAnAddress, expectedAnAmount);
+
+        console.log("Tx origin: %s", tx.origin);
+        console.log("Address this: %s", address(this));
+        console.log("Address PFR: %s", address(PFR));
+        console.log("Owner SCE: %s", SCE.owner());
+
+        vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
+        PFR.submitFlashBidWithRefund(bidAmount, oppTx, REFUND_RECIPIENT, address(0), searcherCallData);
+
+        bidAmount = 2 ether;
+
+        SCE.setPFLAuctionAddress(address(0));
+        vm.expectRevert(bytes("InvalidPermissions"));
+        PFR.submitFlashBidWithRefund(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+        // Authorize Relay as Searcher
+        SCE.setPFLAuctionAddress(address(PFR));
+
+        // Authorize test address as EOA
+        SCE.approveFastLaneEOA(address(this));
+
+        vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 0"));
+        PFR.submitFlashBidWithRefund(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+
+        // Can oddly revert with "EvmError: OutOfFund".
+        vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 1000000000000000000"));
+        console.log("Balance SCE: %s", to.balance);
+        PFR.submitFlashBidWithRefund{value: 1 ether}(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+        
+        uint256 snap = vm.snapshot();
+
+        vm.expectEmit(true, true, true, true);
+        emit RelayFlashBidWithRefund(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCE), bidAmount / 2, REFUND_RECIPIENT);
+        PFR.submitFlashBidWithRefund{value: 5 ether}(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+
+        // Check Balances
+        console.log("Balance PFR: %s", address(PFR).balance);
+        assertEq(bidAmount / 2, address(PFR).balance);
+
+        console.log("Balance refund recipient: %s", REFUND_RECIPIENT.balance);
+        assertEq(bidAmount / 2, REFUND_RECIPIENT.balance);
+
+        // Verify `doStuff` got hit
+        assertEq(expectedAnAddress, SCE.anAddress());
+        assertEq(expectedAnAmount, SCE.anAmount());
+
+        // Replay attempt
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayAuctionBidReceivedLate.selector);
+        PFR.submitFlashBidWithRefund{value: 5 ether}(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+
+        // Not winner
+        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount));
+        PFR.submitFlashBidWithRefund{value: 5 ether}(bidAmount - 1, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+
+        uint256 snap2 = vm.snapshot();
+
+        vm.revertTo(snap);
+        to = address(SCEOverpay);
+
+        // Searcher overpays
+        vm.expectEmit(true, true, true, true);
+        emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCEOverpay));
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
+
+        vm.revertTo(snap2);
+        to = address(SCE);
+
+        // Failed searcher call inside their contract
+        bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()");
+        // Will fail as Error(string), thereafter encoded through the custom error RelaySearcherCallFailure
+        // 0x291bc14c0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006408c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f5345000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+        // To recover:
+        // Remove selector 0x291bc14c
+        // bytes memory z = hex"0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006408c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f5345000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        // abi.decode(z,(bytes)); // 0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000
+        // Remove selector 0x08c379a
+        // bytes memory d = hex"00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000"
+        // abi.decode(d,(string)) -> FAIL_ON_PURPOSE
+
+        // Helper: PFR.humanizeError()
+ 
+        {
+        bytes memory encoded = abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE"));
+        
+        console.logBytes(encoded);
+        console.log(PFR.humanizeError(encoded));
+
+        // Decode error
+        assertEq(PFR.humanizeError(encoded), "FAIL_ON_PURPOSE");
+
+        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE")));
+        PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to,  searcherFailCallData);
+
+        }
+    }
+
     function testWrongSearcherRepay() public {
 
         uint256 bidAmount = 2 ether;
