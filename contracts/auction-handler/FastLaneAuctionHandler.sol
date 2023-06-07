@@ -98,6 +98,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
 
+            {
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
             (bool success, bytes memory retData) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
@@ -107,6 +108,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             );
 
             if (!success) revert RelaySearcherCallFailure(retData);
+            }
 
             // Verify that the searcher paid the amount they bid & emit the event
             uint256 amountPaid = _handleBalances(_bidAmount, balanceBefore);
@@ -149,7 +151,19 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             // Verify that the searcher paid the amount they bid & emit the event
             (uint256 amountPaid, uint256 amountRefunded) = _handleBalancesWithRefund(bidAmount, balanceBefore, refundAddress);
 
-            emit RelayFlashBidWithRefund(msg.sender, oppTxHash, block.coinbase, bidAmount, amountPaid, searcherToAddress, amountRefunded, refundAddress);
+            bytes memory eventData = abi.encode(bidAmount, amountPaid, searcherToAddress, amountRefunded, refundAddress);
+            bytes32 selector = RelayFlashBidWithRefund.selector;
+
+            assembly {
+                log4(
+                    add(eventData, 32),
+                    mload(eventData),
+                    selector,
+                    caller(),
+                    oppTxHash,
+                    coinbase()
+                )
+            }
     }
 
     /// @notice Pays the validator for fees / revenue sharing that is collected outside of submitFlashBid function
