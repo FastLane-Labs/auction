@@ -149,21 +149,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             }
 
             // Verify that the searcher paid the amount they bid & emit the event
-            (uint256 amountPaid, uint256 amountRefunded) = _handleBalancesWithRefund(bidAmount, balanceBefore, refundAddress);
-
-            bytes memory eventData = abi.encode(bidAmount, amountPaid, searcherToAddress, amountRefunded, refundAddress);
-            bytes32 selector = RelayFlashBidWithRefund.selector;
-
-            assembly {
-                log4(
-                    add(eventData, 32),
-                    mload(eventData),
-                    selector,
-                    caller(),
-                    oppTxHash,
-                    coinbase()
-                )
-            }
+            _handleBalancesWithRefundAndEmit(bidAmount, balanceBefore, refundAddress, oppTxHash, searcherToAddress);
     }
 
     /// @notice Pays the validator for fees / revenue sharing that is collected outside of submitFlashBid function
@@ -238,11 +224,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     /// Verifies the searcher paid for the bid and handles a refund to specified address
-    function _handleBalancesWithRefund(
+    function _handleBalancesWithRefundAndEmit(
         uint256 bidAmount,
         uint256 balanceBefore,
-        address refundAddress
-    ) internal returns (uint256, uint256) { // (bidAmount, refundAmount)
+        address refundAddress,
+        bytes32 oppTxHash,
+        address searcherContract
+    ) internal {
+        uint256 originalBidAmount = bidAmount;
+
         if (address(this).balance < balanceBefore + bidAmount) {
             revert RelayNotRepaid(bidAmount, address(this).balance - balanceBefore);
         }
@@ -260,7 +250,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         validatorsTotal += validatorShare;
         payable(refundAddress).transfer(refundAmount);
 
-        return (bidAmount, refundAmount);
+        emit RelayFlashBidWithRefund(msg.sender, oppTxHash, block.coinbase, originalBidAmount, bidAmount, searcherContract, refundAmount, refundAddress);
     }
 
     receive() external payable {}

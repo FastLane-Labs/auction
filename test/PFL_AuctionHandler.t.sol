@@ -114,8 +114,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         uint256 snap = vm.snapshot();
 
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCE));
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
+        emit RelayFlashBid(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, bidAmount, bidAmount, address(SCE));
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, oppTx, to, searcherCallData);
 
         // Check Balances
         console.log("Balance PFR: %s", address(PFR).balance);
@@ -140,8 +140,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Searcher overpays
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCEOverpay));
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
+        emit RelayFlashBid(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2.5 ether, 5 ether, address(SCEOverpay));
+        PFR.submitFlashBid{value: 5 ether}(2.5 ether, oppTx, to,  searcherCallData);
 
         vm.revertTo(snap2);
         to = address(SCE);
@@ -205,7 +205,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         uint256 expectedAnAmount = 1337;
 
         // Simply abi encode the args we want to forward to the searcher contract so it can execute them 
-        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", expectedAnAddress, expectedAnAmount);
+        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", vm.addr(12), 1337);
 
         console.log("Tx origin: %s", tx.origin);
         console.log("Address this: %s", address(this));
@@ -238,8 +238,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         uint256 snap = vm.snapshot();
 
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBidWithRefund(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCE), bidAmount / 2, REFUND_RECIPIENT);
-        PFR.submitFlashBidWithRefund{value: 5 ether}(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
+        emit RelayFlashBidWithRefund(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2 ether, 2 ether, address(SCE), 1 ether, REFUND_RECIPIENT);
+        PFR.submitFlashBidWithRefund{value: 5 ether}(2 ether, oppTx, REFUND_RECIPIENT, to, searcherCallData);
 
         // Check Balances
         console.log("Balance PFR: %s", address(PFR).balance);
@@ -267,8 +267,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Searcher overpays
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, VALIDATOR1, address(SCEOverpay));
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
+        emit RelayFlashBidWithRefund(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2.5 ether, 5 ether, address(SCEOverpay), 2.5 ether, REFUND_RECIPIENT);
+        PFR.submitFlashBidWithRefund{value: 5 ether}(2.5 ether, oppTx, REFUND_RECIPIENT, to, searcherCallData);
 
         vm.revertTo(snap2);
         to = address(SCE);
