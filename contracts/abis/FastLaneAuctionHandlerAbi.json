@@ -95,6 +95,11 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "RelayValidatorNotAcceptingRefundBids",
+    "type": "error"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -129,10 +134,47 @@
         "type": "address"
       },
       {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "oppTxHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "validator",
+        "type": "address"
+      },
+      {
         "indexed": false,
         "internalType": "uint256",
-        "name": "amount",
+        "name": "bidAmount",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountPaid",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "searcherContractAddress",
+        "type": "address"
+      }
+    ],
+    "name": "RelayFlashBid",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
       },
       {
         "indexed": true,
@@ -148,12 +190,36 @@
       },
       {
         "indexed": false,
+        "internalType": "uint256",
+        "name": "bidAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amountPaid",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
         "internalType": "address",
         "name": "searcherContractAddress",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "refundedAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "refundAddress",
+        "type": "address"
       }
     ],
-    "name": "RelayFlashBid",
+    "name": "RelayFlashBidWithRefund",
     "type": "event"
   },
   {
@@ -512,6 +578,39 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "bidAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "oppTxHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "refundAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "searcherToAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "searcherCallData",
+        "type": "bytes"
+      }
+    ],
+    "name": "submitFlashBidWithRefund",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "syncStuckNativeToken",
     "outputs": [],
@@ -534,12 +633,44 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "refundShare",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateValidatorRefundShare",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "",
         "type": "address"
       }
     ],
     "name": "validatorsBalanceMap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "validatorsRefundShareMap",
     "outputs": [
       {
         "internalType": "uint256",
