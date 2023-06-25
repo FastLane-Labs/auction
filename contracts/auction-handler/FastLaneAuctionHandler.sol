@@ -32,6 +32,7 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);          // 0x53dc88d9
     error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0xd47ae88a
 
+    error RelayAuctionInvalidBid();
     error RelayAuctionBidReceivedLate();                                    // 0xb61e767e
     error RelayAuctionSearcherNotWinner(uint256 current, uint256 existing); // 0x5db6f7d9
 
@@ -510,6 +511,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @param _oppTxHash Target Transaction hash
     /// @param _bidAmount Amount committed to be repaid
     modifier checkBid(bytes32 _oppTxHash, uint256 _bidAmount) {
+        if (_bidAmount == 0) {
+            revert RelayAuctionInvalidBid();
+        }
+
         // Use hash of the opportunity tx hash and the transaction's gasprice as key for bid tracking
         // This is dependent on the PFL Relay verifying that the searcher's gasprice matches
         // the opportunity's gasprice, and that the searcher used the correct opportunity tx hash
