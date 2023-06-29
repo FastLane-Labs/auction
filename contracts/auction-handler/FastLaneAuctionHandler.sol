@@ -22,6 +22,8 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
+    event CustomPaymentProcessorPaid(address indexed payor, address indexed paymentProcessor, uint256 totalAmount, uint256 customAllocation, uint256 startBlock, uint256 endBlock);
+
     error RelayPermissionSenderNotOrigin();                                 // 0x5c8a268a
 
     error RelaySearcherWrongParams();                                       // 0x31ae2a9d
@@ -115,6 +117,32 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         validatorsBalanceMap[block.coinbase] += msg.value;
         validatorsTotal += msg.value;
         emit RelayFeeCollected(_payor, block.coinbase, msg.value);
+    }
+
+    // TODO - check if should be payable
+    function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
+        require(paymentProcessor != address(0), "Payment processor cant be addr 0");
+        
+        uint256 blockOfLastWithdrawal; // TODO get
+        // TODO should value be 0?
+        // TODO function name and sig to call?
+        (bool success, ) = paymentProcessor.call{value: 0}({
+            startBlock: blockOfLastWithdrawal,
+            endBlock: block.number,
+            totalAmount: 0, // TODO - MEV payment
+            customAllocation: customAllocation,
+            data: data
+        });
+        require(success, "Payment processor call failed");
+
+        emit CustomPaymentProcessorPaid({
+            payor: msg.sender,
+            paymentProcessor: paymentProcessor,
+            totalAmount: 0, // TODO - total MEV payment
+            customAllocation: customAllocation, 
+            startBlock: blockOfLastWithdrawal,
+            endBlock: block.number
+        });
     }
 
     /// @notice Submits a SIMULATED flash bid. THE HTTP RELAY won't accept calls for this function.
