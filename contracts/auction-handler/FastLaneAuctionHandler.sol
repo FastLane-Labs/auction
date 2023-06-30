@@ -4,6 +4,8 @@ pragma solidity ^0.8.16;
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
+import { IPaymentProcessor } from "../interfaces/IPaymentProcessor.sol";
+
 abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -122,16 +124,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
         require(paymentProcessor != address(0), "Payment processor cant be addr 0");
         
-        uint256 blockOfLastWithdrawal; // TODO get
-        // TODO function name and sig to call?
-        (bool success, ) = paymentProcessor.call{value: msg.value}({
+        uint256 blockOfLastWithdrawal; // TODO add some storage for this
+
+        IPaymentProcessor(paymentProcessor).payValidator{value: msg.value}({
             startBlock: blockOfLastWithdrawal,
             endBlock: block.number,
             totalAmount: msg.value,
             customAllocation: customAllocation,
             data: data
         });
-        require(success, "Payment processor call failed");
 
         emit CustomPaymentProcessorPaid({
             payor: msg.sender,
