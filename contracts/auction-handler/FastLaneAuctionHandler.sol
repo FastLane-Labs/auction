@@ -119,17 +119,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         emit RelayFeeCollected(_payor, block.coinbase, msg.value);
     }
 
-    // TODO - check if should be payable
     function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
         require(paymentProcessor != address(0), "Payment processor cant be addr 0");
         
         uint256 blockOfLastWithdrawal; // TODO get
-        // TODO should value be 0?
         // TODO function name and sig to call?
-        (bool success, ) = paymentProcessor.call{value: 0}({
+        (bool success, ) = paymentProcessor.call{value: msg.value}({
             startBlock: blockOfLastWithdrawal,
             endBlock: block.number,
-            totalAmount: 0, // TODO - MEV payment
+            totalAmount: msg.value,
             customAllocation: customAllocation,
             data: data
         });
@@ -138,7 +136,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         emit CustomPaymentProcessorPaid({
             payor: msg.sender,
             paymentProcessor: paymentProcessor,
-            totalAmount: 0, // TODO - total MEV payment
+            totalAmount: msg.value,
             customAllocation: customAllocation, 
             startBlock: blockOfLastWithdrawal,
             endBlock: block.number
