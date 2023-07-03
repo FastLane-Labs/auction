@@ -5,6 +5,11 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "RelayAuctionInvalidBid",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
