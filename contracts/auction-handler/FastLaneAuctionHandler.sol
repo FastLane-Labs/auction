@@ -153,12 +153,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             _handleBalancesWithRefundAndEmit(bidAmount, balanceBefore, refundAddress, oppTxHash, searcherToAddress);
     }
 
-    /// @notice Pays the validator for fees / revenue sharing that is collected outside of submitFlashBid function
     function payValidatorFee(address _payor) external payable nonReentrant {
-        _payValidatorFee(_payor);
-    }
-
-    function _payValidatorFee(address _payor) internal {
         require(msg.value > 0, "msg.value = 0");
         validatorsBalanceMap[block.coinbase] += msg.value;
         validatorsTotal += msg.value;
