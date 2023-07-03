@@ -530,22 +530,22 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_bidAmount",
+        "name": "bidAmount",
         "type": "uint256"
       },
       {
         "internalType": "bytes32",
-        "name": "_oppTxHash",
+        "name": "oppTxHash",
         "type": "bytes32"
       },
       {
         "internalType": "address",
-        "name": "_searcherToAddress",
+        "name": "searcherToAddress",
         "type": "address"
       },
       {
         "internalType": "bytes",
-        "name": "_searcherCallData",
+        "name": "searcherCallData",
         "type": "bytes"
       }
     ],
@@ -558,22 +558,22 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_bidAmount",
+        "name": "bidAmount",
         "type": "uint256"
       },
       {
         "internalType": "bytes32",
-        "name": "_oppTxHash",
+        "name": "oppTxHash",
         "type": "bytes32"
       },
       {
         "internalType": "address",
-        "name": "_searcherToAddress",
+        "name": "searcherToAddress",
         "type": "address"
       },
       {
         "internalType": "bytes",
-        "name": "_searcherCallData",
+        "name": "searcherCallData",
         "type": "bytes"
       }
     ],
