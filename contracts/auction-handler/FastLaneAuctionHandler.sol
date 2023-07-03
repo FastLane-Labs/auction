@@ -83,18 +83,18 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Submits a flash bid
     /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
-    /// @param _bidAmount Amount committed to be repaid
-    /// @param _oppTxHash Target Transaction hash
-    /// @param _searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
-    /// @param _searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
+    /// @param bidAmount Amount committed to be repaid
+    /// @param oppTxHash Target Transaction hash
+    /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
+    /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
     function submitFlashBid(
-        uint256 _bidAmount, // Value commited to be repaid at the end of execution
-        bytes32 _oppTxHash, // Target TX
-        address _searcherToAddress,
-        bytes calldata _searcherCallData 
-    ) external payable checkBid(_oppTxHash, _bidAmount) onlyEOA nonReentrant {
+        uint256 bidAmount, // Value commited to be repaid at the end of execution
+        bytes32 oppTxHash, // Target TX
+        address searcherToAddress,
+        bytes calldata searcherCallData 
+    ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
 
-            if (_searcherToAddress == address(0)) revert RelaySearcherWrongParams();
+            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
             
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
@@ -102,19 +102,19 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             {
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
-            (bool success, bytes memory retData) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
+            (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
                         msg.sender,
-                        _bidAmount,
-                        _searcherCallData
+                        bidAmount,
+                        searcherCallData
             );
 
             if (!success) revert RelaySearcherCallFailure(retData);
             }
 
             // Verify that the searcher paid the amount they bid & emit the event
-            uint256 amountPaid = _handleBalances(_bidAmount, balanceBefore);
+            uint256 amountPaid = _handleBalances(bidAmount, balanceBefore);
 
-            emit RelayFlashBid(msg.sender, _oppTxHash, block.coinbase, _bidAmount, amountPaid, _searcherToAddress);
+            emit RelayFlashBid(msg.sender, oppTxHash, block.coinbase, bidAmount, amountPaid, searcherToAddress);
     }
 
     /// @notice Submits a flash bid which refunds a portion of payment to `refundAddress`
@@ -171,38 +171,38 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @dev This does NOT check that current coinbase is participating in PFL.
     /// @dev Only use for testing _searcherCallData
     /// @dev You can submit any _bidAmount you like for testing
-    /// @param _bidAmount Amount committed to be repaid
-    /// @param _oppTxHash Target Transaction hash
-    /// @param _searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
-    /// @param _searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
+    /// @param bidAmount Amount committed to be repaid
+    /// @param oppTxHash Target Transaction hash
+    /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
+    /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
     function simulateFlashBid(
-        uint256 _bidAmount, // Value commited to be repaid at the end of execution, can be set very low in simulated
-        bytes32 _oppTxHash, // Target TX
-        address _searcherToAddress,
-        bytes calldata _searcherCallData 
+        uint256 bidAmount, // Value commited to be repaid at the end of execution, can be set very low in simulated
+        bytes32 oppTxHash, // Target TX
+        address searcherToAddress,
+        bytes calldata searcherCallData 
         ) external payable nonReentrant onlyEOA {
 
             // Relax check on min bid amount for simulated
-            if (_searcherToAddress == address(0)) revert RelaySearcherWrongParams();
+            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
             
             // Store the current balance, excluding msg.value
             uint256 balanceBefore = address(this).balance - msg.value;
 
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
-            (bool success, bytes memory retData) = ISearcherContract(_searcherToAddress).fastLaneCall{value: msg.value}(
+            (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
                         msg.sender,
-                        _bidAmount,
-                        _searcherCallData
+                        bidAmount,
+                        searcherCallData
             );
 
             if (!success) revert RelaySimulatedSearcherCallFailure(retData);
 
             // Verify that the searcher paid the amount they bid & emit the event
-            if (address(this).balance < balanceBefore + _bidAmount) {
-                revert RelaySimulatedNotRepaid(_bidAmount, address(this).balance - balanceBefore);
+            if (address(this).balance < balanceBefore + bidAmount) {
+                revert RelaySimulatedNotRepaid(bidAmount, address(this).balance - balanceBefore);
             }
-            emit RelaySimulatedFlashBid(msg.sender, _bidAmount, _oppTxHash, block.coinbase, _searcherToAddress);
+            emit RelaySimulatedFlashBid(msg.sender, bidAmount, oppTxHash, block.coinbase, searcherToAddress);
     }
 
     /***********************************|
