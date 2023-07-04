@@ -266,6 +266,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         validatorsTotal -= payableBalance;
         validatorsBalanceMap[_validator] = 1;
+        validatorsDataMap[_validator].blockOfLastWithdraw = block.number;
+        
         SafeTransferLib.safeTransferETH(
                 validatorPayee(_validator), 
                 payableBalance
