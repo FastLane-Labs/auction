@@ -534,6 +534,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), block.number);
     }
 
+    // TODO test payValidatorCustom once function is finalised - see mocks for payment processor
+
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
         vm.prank(USER);
