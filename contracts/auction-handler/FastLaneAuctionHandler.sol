@@ -125,7 +125,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
         require(paymentProcessor != address(0), "Payment processor cant be addr 0");
         
-        uint256 blockOfLastWithdrawal; // TODO add some storage for this
+        uint256 blockOfLastWithdrawal = validatorsDataMap[getValidator()].blockOfLastWithdraw;
 
         IPaymentProcessor(paymentProcessor).payValidator{value: msg.value}({
             startBlock: blockOfLastWithdrawal,
@@ -267,7 +267,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         validatorsTotal -= payableBalance;
         validatorsBalanceMap[_validator] = 1;
         validatorsDataMap[_validator].blockOfLastWithdraw = block.number;
-        
+
         SafeTransferLib.safeTransferETH(
                 validatorPayee(_validator), 
                 payableBalance
