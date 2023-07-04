@@ -49,6 +49,7 @@ abstract contract FastLaneAuctionHandlerEvents {
 struct ValidatorData {
     address payee;
     uint256 timeUpdated;
+    uint256 blockOfLastWithdraw;
 }
 
 interface ISearcherContract {
@@ -324,6 +325,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Returns the listed payee address regardless of whether or not it has passed the time lock.
     function getValidatorPayee(address _validator) public view returns (address _payee) {
         _payee = validatorsDataMap[_validator].payee;
+    }
+
+    /// @notice Returns the last block in which a validator withdrew their fees
+    function getValidatorBlockOfLastWithdraw(address _validator) public view returns (uint256 _blockNumber) {
+        _blockNumber = validatorsDataMap[_validator].blockOfLastWithdraw;
     }
 
     /// @notice For validators to determine where their payments will go
