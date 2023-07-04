@@ -514,6 +514,26 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
     }
 
+    function testGetValidatorBlockOfLastWithdraw() public {
+        // Setup for collectFees testing
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
+        uint256 bidAmount = 2 ether;
+        uint256 expectedValidatorPayout = bidAmount - 1;
+        bytes32 oppTx = bytes32("tx1");
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+        SearcherRepayerEcho SRE = new SearcherRepayerEcho();
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+
+        // Returns 0 if no withdraws
+        assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), 0);
+
+        // Returns block number of last withdraw
+        vm.prank(VALIDATOR1);
+        PFR.collectFees();
+        assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), block.number);
+    }
+
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
         vm.prank(USER);
