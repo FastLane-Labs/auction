@@ -15,6 +15,7 @@ import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "contracts/interfaces/IWMatic.sol";
 
 import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
+import { MockPaymentProcessor } from "./mocks/MockPaymentProcessor.sol";
 
 import { PFLHelper } from "./legacy-test/PFLAuction.t.sol";
 
@@ -534,18 +535,36 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), block.number);
     }
 
+    // TODO handle uninitiatied validators not with startBlock == 0
     function testPayValidatorCustom() public {
-        MockPaymentProcessor MPP = new MockPaymentProcessor();
-        bytes addressData = abi.encode(VALIDATOR1);
+        // Seed validator with ETH and in auction contract
+        vm.deal(VALIDATOR1, 1 ether);
+        _donateOneWeiToValidatorBalance();
 
-        console.log(addressData);
+        MockPaymentProcessor MPP = new MockPaymentProcessor();
+        uint256 msgValue = 1 ether;
+        uint256 customAllocation = 1e16; // 1% of 1e18
+        bytes memory addressData = abi.encode(VALIDATOR1);
 
         // Reverts if payment processor address is zero address
         vm.prank(VALIDATOR1);
-        vm.expectRevert("payment processor address is zero address");
-        PFR.payValidatorCustom{value: 1 ether}(address(0), VALIDATOR1, 1 ether);
+        vm.expectRevert("Payment processor cant be addr 0");
+        PFR.payValidatorCustom{value: msgValue}(address(0), customAllocation, addressData);
 
         // Test sucess + emits evnt
+        vm.prank(VALIDATOR1);
+        vm.expectEmit(true, true, false, true, address(PFR));
+        emit CustomPaymentProcessorPaid({
+            payor: VALIDATOR1,
+            paymentProcessor: address(MPP),
+            totalAmount: msgValue,
+            customAllocation: customAllocation, 
+            startBlock: 0,
+            endBlock: block.number
+        });
+        PFR.payValidatorCustom{value: msgValue}(address(MPP), customAllocation, addressData);
+
+        // TODO check vars in mock
     }
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
