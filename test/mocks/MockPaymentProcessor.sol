@@ -12,18 +12,18 @@ contract MockPaymentProcessor is IPaymentProcessor {
     address public validator;
 
     function payValidator(
-        uint256 startBlock,
-        uint256 endBlock,
-        uint256 totalAmount,
-        uint256 customAllocation,
-        bytes calldata data
+        uint256 _startBlock,
+        uint256 _endBlock,
+        uint256 _totalAmount,
+        uint256 _customAllocation,
+        bytes calldata _data
     ) external payable {
         // Checking all data passed correctly to PaymentProcessor,
         // Including the validator address decoded from data
-        validator = abi.decode(data, (address));
-        totalAmount = totalAmount;
-        customAllocation = customAllocation;
-        startBlock = startBlock;
-        endBlock = endBlock;
+        validator = abi.decode(_data, (address));
+        totalAmount = _totalAmount;
+        customAllocation = _customAllocation;
+        startBlock = _startBlock;
+        endBlock = _endBlock;
     }
 }

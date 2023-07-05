@@ -551,7 +551,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectRevert("Payment processor cant be addr 0");
         PFR.payValidatorCustom{value: msgValue}(address(0), customAllocation, addressData);
 
-        // Test sucess + emits evnt
+        assertEq(address(MPP).balance, 0); // No ETH in PaymentProcessor before
+
         vm.prank(VALIDATOR1);
         vm.expectEmit(true, true, false, true, address(PFR));
         emit CustomPaymentProcessorPaid({
@@ -564,7 +565,12 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         });
         PFR.payValidatorCustom{value: msgValue}(address(MPP), customAllocation, addressData);
 
-        // TODO check vars in mock
+        assertEq(MPP.validator(), VALIDATOR1);
+        assertEq(MPP.totalAmount(), msgValue);
+        assertEq(MPP.customAllocation(), customAllocation);
+        assertEq(MPP.startBlock(), 0);
+        assertEq(MPP.endBlock(), block.number);
+        assertEq(address(MPP).balance, msgValue); // ETH in PaymentProcessor after
     }
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
