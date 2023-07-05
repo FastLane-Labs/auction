@@ -122,10 +122,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         emit RelayFeeCollected(_payor, block.coinbase, msg.value);
     }
 
+    /// @notice Pays a validator their fee via a custom payment processor
     function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
         require(paymentProcessor != address(0), "Payment processor cant be addr 0");
+        // TODO should we enforce the customAllocation scale? 1e18?
         
-        // TODO should this use getValidator or block.coinbase ?
         uint256 blockOfLastWithdrawal = validatorsDataMap[getValidator()].blockOfLastWithdraw;
 
         IPaymentProcessor(paymentProcessor).payValidator{value: msg.value}({
