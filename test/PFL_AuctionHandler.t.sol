@@ -534,7 +534,19 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), block.number);
     }
 
-    // TODO test payValidatorCustom once function is finalised - see mocks for payment processor
+    function testPayValidatorCustom() public {
+        MockPaymentProcessor MPP = new MockPaymentProcessor();
+        bytes addressData = abi.encode(VALIDATOR1);
+
+        console.log(addressData);
+
+        // Reverts if payment processor address is zero address
+        vm.prank(VALIDATOR1);
+        vm.expectRevert("payment processor address is zero address");
+        PFR.payValidatorCustom{value: 1 ether}(address(0), VALIDATOR1, 1 ether);
+
+        // Test sucess + emits evnt
+    }
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
