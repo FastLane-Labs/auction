@@ -1,5 +1,4 @@
 {
     "solidity.packageDefaultDependenciesContractsDirectory": "src",
-    "solidity.packageDefaultDependenciesDirectory": "lib",
-    "solidity.validationDelay": 1000,
+    "solidity.packageDefaultDependenciesDirectory": "lib"
 }

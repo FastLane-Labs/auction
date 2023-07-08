@@ -53,6 +53,7 @@ abstract contract PFLHelper is Test, FastLaneEvents {
     address public SEARCHER_ADDRESS3 =  0x791e001586B75B8880bC6D02f2Ee19D42ec23E18;
     address public SEARCHER_ADDRESS4 =  0x4BF8fC74846da2dc54cCfd1f4fFac595939399e4;
 
+    address public REFUND_RECIPIENT = 0xFdE9601264EBB3B664B7E37E9D3487D8fabB9001;
 
     address[] public BIDDERS = [BIDDER1, BIDDER2, BIDDER3, BIDDER4];
 
