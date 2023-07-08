@@ -32,14 +32,14 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);          // 0x53dc88d9
     error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0xd47ae88a
 
-    error RelayAuctionInvalidBid();
+    error RelayAuctionInvalidBid();                                         // 0xa51c0e05
     error RelayAuctionBidReceivedLate();                                    // 0xb61e767e
     error RelayAuctionSearcherNotWinner(uint256 current, uint256 existing); // 0x5db6f7d9
 
     error RelayCannotBeZero();                                              // 0x3c9cfe50
     error RelayCannotBeSelf();                                              // 0x6a64f641
 
-    error RelayValidatorNotAcceptingRefundBids();
+    error RelayValidatorNotAcceptingRefundBids();                           // 0x8b2dbdac
 }
 
 /// @notice Validator Data Struct
