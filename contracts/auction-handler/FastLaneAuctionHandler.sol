@@ -58,7 +58,8 @@ struct ValidatorData {
 
 struct PGAData {
     uint64 lowestGasPrice;
-    uint128 lowestBid;
+    uint64 lowestFastPrice;
+    uint64 lowestTotalPrice;
 }
 
 interface ISearcherContract {
@@ -69,6 +70,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
+
+    uint256 internal constant MIN_GAS_SPENT_PGA = 100_000;
 
     /// @notice The scale for validator refund share
     uint256 internal constant VALIDATOR_REFUND_SCALE = 10_000; // 1 = 0.01%
@@ -174,10 +177,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
     function submitFastBid(
         uint256 bidAmount, // Value commited to be paid at the end of execution
-        bool executeUnconditionally, // 
+        bool executeUnconditionally, 
         address searcherToAddress,
+        address[] calldata approvedValidators,
         bytes calldata searcherCallData 
-    ) external payable checkPGA(executeUnconditionally, bidAmount) onlyEOA nonReentrant {
+    ) external payable validatedValidator(approvedValidators) checkPGA(executeUnconditionally, bidAmount) onlyEOA nonReentrant {
 
             // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
             // proper transaction ordering is being followed. 
@@ -208,6 +212,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         // Store the current balance, excluding msg.value
         uint256 balanceBefore = address(this).balance - msg.value;
 
+        uint256 gasSpent = gasleft();
+
         {
         // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
         // And forward msg.value
@@ -219,6 +225,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         if (!success) revert RelaySearcherCallFailure(retData);
         }
+
+        gasSpent -= gasleft();
+
+        // Multiply the fastBidAmount (a rate) by the gas spent to get the total amount
+        bidAmount *= (gasSpent < MIN_GAS_SPENT_PGA ? MIN_GAS_SPENT_PGA : gasSpent);
 
         // Verify that the searcher paid the amount they bid & emit the event
         _handleBalances(bidAmount, balanceBefore);
@@ -603,28 +614,52 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         fulfilledAuctionsMap[auction_key] = _bidAmount;
     }
 
+    modifier validatedValidator(address[] calldata approvedVals) {
+        if (approvedVals.length == 0 || _validateValidator(approvedVals)) {
+            _;
+        }
+    }
+
+    function _validateValidator(address[] calldata approvedVals) 
+        internal 
+        view 
+        returns (bool validValidator) 
+    {
+        uint256 valsLength = approvedVals.length;
+        uint256 i;
+        for(;i<valsLength;) {
+            if (block.coinbase == approvedVals[i]) {
+                return true;
+            }
+            unchecked { ++i; }
+        } 
+        return false;
+    }
+
     /// @notice Validates incoming PGA bid
     /// @dev 
     /// @param _bidAmount Amount committed to be repaid
     modifier checkPGA(bool _executeUnconditionally, uint256 _bidAmount) {
-        if (_bidAmount == 0) {
+        if (_bidAmount == 0 || _bidAmount > tx.gasprice) {
             revert RelayAuctionInvalidBid();
         }
 
         PGAData memory existing_bid = fulfilledPGAMap[block.number];
-        uint256 lowestBid = uint256(existing_bid.lowestBid);
+        uint256 lowestFastPrice = uint256(existing_bid.lowestFastPrice);
         uint256 lowestGasPrice = uint256(existing_bid.lowestGasPrice);
+        uint256 lowestTotalPrice = uint256(existing_bid.lowestTotalPrice);
 
-        // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block.  
+        // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block. 
+        // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management 
         if (lowestGasPrice != 0 && lowestGasPrice <= tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestBid, _bidAmount, lowestGasPrice, tx.gasprice);
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _bidAmount, lowestGasPrice, tx.gasprice);
         
         // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.  
-        } else if (lowestBid != 0 && lowestBid <= _bidAmount) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestBid, _bidAmount, lowestGasPrice, tx.gasprice);
+        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= _bidAmount + tx.gasprice) {
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _bidAmount, lowestGasPrice, tx.gasprice);
         
         // Execute the tx if there are no issues w/ ordering. 
-        } else if (lowestBid == 0 || _executeUnconditionally) {
+        } else if (lowestFastPrice == 0 || _executeUnconditionally) {
             _;
         
         // Do not execute if execution is conditional and auction already won
@@ -634,8 +669,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         // Mark this auction as being complete to provide quicker reverts for subsequent searchers
         fulfilledPGAMap[block.number] = PGAData({
-            lowestGasPrice: tx.gasprice < lowestGasPrice? uint64(tx.gasprice) : existing_bid.lowestGasPrice, 
-            lowestBid: _bidAmount < lowestBid ? uint128(_bidAmount) : existing_bid.lowestBid
+            lowestGasPrice: tx.gasprice < lowestGasPrice ? uint64(tx.gasprice) : existing_bid.lowestGasPrice, 
+            lowestFastPrice: tx.gasprice < lowestGasPrice ? uint64(_bidAmount) : existing_bid.lowestFastPrice,
+            lowestTotalPrice: tx.gasprice < lowestGasPrice ? uint64(_bidAmount + tx.gasprice) : existing_bid.lowestTotalPrice
         });
     }
 }
