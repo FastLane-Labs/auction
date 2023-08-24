@@ -72,6 +72,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
 
     uint256 internal constant MIN_GAS_SPENT_PGA = 100_000;
+    uint256 internal constant REFUND_GAS_SPENT = 2_500; // TODO: This is wrong - add in call cost & verify. 
 
     /// @notice The scale for validator refund share
     uint256 internal constant VALIDATOR_REFUND_SCALE = 10_000; // 1 = 0.01%
@@ -171,47 +172,42 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Submits a fast bid
     /// @dev Will not revert
-    /// @param bidAmount Amount committed to be paid
-    /// @param executeUnconditionally Allows tx to be executed even if another searcher has already succeeded in the same block
+    /// @param fastPrice Bonus gasPrice rate that Searcher commits to pay to validator for gas used by searcher's call
     /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
-    /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
+    /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(fastPrice,msg.sender,callData)`
     function submitFastBid(
-        uint256 bidAmount, // Value commited to be paid at the end of execution
-        bool executeUnconditionally, 
+        uint256 fastPrice, // Value commited to be paid at the end of execution
         address searcherToAddress,
         address[] calldata approvedValidators,
         bytes calldata searcherCallData 
-    ) external payable validatedValidator(approvedValidators) checkPGA(executeUnconditionally, bidAmount) onlyEOA nonReentrant {
+    ) external payable validatedValidator(approvedValidators) checkPGA(fastPrice) onlyEOA nonReentrant {
 
-            // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
-            // proper transaction ordering is being followed. 
-            try this.fastBidWrapper{value: msg.value}(msg.sender, bidAmount, searcherToAddress, searcherCallData) {
-                emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
-            } catch {
-                // TODO: Catch specific errors - remove custom errors first before coding. 
-                emit RelayFastBid(msg.sender, block.coinbase, false, bidAmount, searcherToAddress);
-            }
+        if (searcherToAddress == address(this) || searcherToAddress == msg.sender) revert RelaySearcherWrongParams();
+
+        // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
+        // proper transaction ordering is being followed. 
+        try this.fastBidWrapper{value: msg.value}(
+            msg.sender, fastPrice, searcherToAddress, searcherCallData
+        ) returns (uint256 bidAmount) {
+            emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
+        } catch {
+            // TODO: Catch specific errors - remove custom errors first before coding. 
+            emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
+        }
     }
 
-    /// @notice Called by submitFastBid function inside of a try/catch
-    /// @dev Will revert if: searcher contract execution unsuccessful or bid unpaid
-    /// @param msgSender Address of the msg.sender for the submitFastBid call
-    /// @param bidAmount Amount committed to be paid
-    /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
-    /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(_bidAmount,msg.sender,callData)`
     function fastBidWrapper(
         address msgSender,
-        uint256 bidAmount, // Value commited to be paid at the end of execution
+        uint256 fastPrice, // Value commited to be paid at the end of execution
         address searcherToAddress,
         bytes calldata searcherCallData 
-    ) external payable {
+    ) external payable returns (uint256) {
 
         // This is meant to be called inside of a try/catch by address(this)
         require(msg.sender == address(this), "ERR-001 OnlySelfCanCall");
 
-        // Store the current balance, excluding msg.value
+        // Store the current balance, excluding msg.value, and store the gas left
         uint256 balanceBefore = address(this).balance - msg.value;
-
         uint256 gasSpent = gasleft();
 
         {
@@ -219,20 +215,20 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         // And forward msg.value
         (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
                     msgSender,
-                    bidAmount,
+                    fastPrice,
                     searcherCallData
         );
 
         if (!success) revert RelaySearcherCallFailure(retData);
         }
 
+        // Calculate how much gas was spent by searcher
         gasSpent -= gasleft();
 
         // Multiply the fastBidAmount (a rate) by the gas spent to get the total amount
-        bidAmount *= (gasSpent < MIN_GAS_SPENT_PGA ? MIN_GAS_SPENT_PGA : gasSpent);
-
-        // Verify that the searcher paid the amount they bid & emit the event
-        _handleBalances(bidAmount, balanceBefore);
+        uint256 bidAmount = fastPrice * (gasSpent < MIN_GAS_SPENT_PGA ? MIN_GAS_SPENT_PGA : gasSpent);
+        
+        return _handleBalancesFast(bidAmount, balanceBefore);
     }
 
     function payValidatorFee(address _payor) external payable nonReentrant {
@@ -299,6 +295,46 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         validatorsTotal += _bidAmount;
 
         return _bidAmount;
+    }
+
+    function _handleBalancesFast(uint256 _bidAmount, uint256 balanceBefore) internal returns (uint256) {
+        // Verify that the searcher paid the amount they bid & emit the event
+        if (address(this).balance - balanceBefore < bidAmount) {
+            revert RelayNotRepaid(bidAmount, address(this).balance - balanceBefore);
+        }
+
+        // Check if searcher overpaid and, if so, initiate a refund
+        uint256 surplus = (address(this).balance - balanceBefore) - bidAmount;
+        if (surplus > 0) {
+
+            // Only refund the searcher if the refund value exceeds its gas cost
+            if (surplus > REFUND_GAS_SPENT * tx.gasprice) {
+                
+                // If value came from the EOA, refund to EOA
+                if (msg.value > bidAmount) {
+                    SafeTransferLib.safeTransferETH(
+                        tx.origin, 
+                        surplus
+                    );
+                
+                // Otherwise refund the searcher contract
+                } else {
+                    SafeTransferLib.safeTransferETH(
+                        searcherToAddress, 
+                        surplus
+                    );
+                }
+            
+            // If refunding is to expensive, add it to bidAmount
+            } else {
+                bidAmount += surplus;
+            }
+        }
+
+        validatorsBalanceMap[block.coinbase] += bidAmount;
+        validatorsTotal += bidAmount;
+        
+        return bidAmount;
     }
 
     /// Verifies the searcher paid for the bid and handles a refund to specified address
@@ -639,8 +675,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Validates incoming PGA bid
     /// @dev 
     /// @param _bidAmount Amount committed to be repaid
-    modifier checkPGA(bool _executeUnconditionally, uint256 _bidAmount) {
-        if (_bidAmount == 0 || _bidAmount > tx.gasprice) {
+    modifier checkPGA(uint256 _fastBidAmount) {
+        if (_fastBidAmount == 0 || _fastBidAmount > tx.gasprice) {
             revert RelayAuctionInvalidBid();
         }
 
@@ -649,29 +685,27 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         uint256 lowestGasPrice = uint256(existing_bid.lowestGasPrice);
         uint256 lowestTotalPrice = uint256(existing_bid.lowestTotalPrice);
 
+        // NOTE: These checks help mitigate the damage to searchers caused by relay error and adversarial validators by reverting
+        // early if the transactions are not sequenced pursuant to auction rules. 
+
         // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block. 
         // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management 
-        if (lowestGasPrice != 0 && lowestGasPrice <= tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _bidAmount, lowestGasPrice, tx.gasprice);
+        if (lowestGasPrice != 0 && lowestGasPrice < tx.gasprice) {
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _fastBidAmount, lowestGasPrice, tx.gasprice);
         
         // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.  
-        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= _bidAmount + tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _bidAmount, lowestGasPrice, tx.gasprice);
+        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= _fastBidAmount + tx.gasprice) {
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _fastBidAmount, lowestGasPrice, tx.gasprice);
         
         // Execute the tx if there are no issues w/ ordering. 
-        } else if (lowestFastPrice == 0 || _executeUnconditionally) {
-            _;
-        
-        // Do not execute if execution is conditional and auction already won
         } else {
-            return;
+            _;
+            // Mark this auction as being complete to provide quicker reverts for subsequent searchers
+            fulfilledPGAMap[block.number] = PGAData({
+                lowestGasPrice: uint64(tx.gasprice), 
+                lowestFastPrice: uint64(_bidAmount),
+                lowestTotalPrice: uint64(_bidAmount + tx.gasprice)
+            });
         }
-
-        // Mark this auction as being complete to provide quicker reverts for subsequent searchers
-        fulfilledPGAMap[block.number] = PGAData({
-            lowestGasPrice: tx.gasprice < lowestGasPrice ? uint64(tx.gasprice) : existing_bid.lowestGasPrice, 
-            lowestFastPrice: tx.gasprice < lowestGasPrice ? uint64(_bidAmount) : existing_bid.lowestFastPrice,
-            lowestTotalPrice: tx.gasprice < lowestGasPrice ? uint64(_bidAmount + tx.gasprice) : existing_bid.lowestTotalPrice
-        });
     }
 }
