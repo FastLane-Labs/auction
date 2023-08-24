@@ -178,9 +178,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     function submitFastBid(
         uint256 fastPrice, // Value commited to be paid at the end of execution
         address searcherToAddress,
-        address[] calldata approvedValidators,
         bytes calldata searcherCallData 
-    ) external payable validatedValidator(approvedValidators) checkPGA(fastPrice) onlyEOA nonReentrant {
+    ) external payable checkPGA(fastPrice) onlyEOA nonReentrant {
 
         if (searcherToAddress == address(this) || searcherToAddress == msg.sender) revert RelaySearcherWrongParams();
 
