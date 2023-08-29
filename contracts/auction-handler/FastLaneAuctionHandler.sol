@@ -447,7 +447,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         
         address _validator = getValidator();
 
-        require(payeeMap[_validator] == address(0) && payeeMap[_payee] == address(0), "invalid payee");
+        // Can't override with another validator
+        // Can't override with own validator
+        // Can't override an already assigned payee
+        require(_payee != _validator && validatorsBalanceMap[_payee] == 0 && payeeMap[_validator] == address(0) && payeeMap[_payee] == address(0), "invalid payee");
 
         address _formerPayee = validatorsDataMap[_validator].payee;
 

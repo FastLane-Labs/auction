@@ -483,6 +483,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testUpdateValidatorPayeeRevertsIfValidatorOrNewPayeeInPayeeMap() public {
         _donateOneWeiToValidatorBalance();
+        vm.coinbase(VALIDATOR2);
+        _donateOneWeiToValidatorBalance();
+        vm.coinbase(VALIDATOR1);
 
         vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
@@ -497,7 +500,40 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         //```require(_formerPayee != _payee, "not a new payee");```
         // Should be triggered by the test case just above,
         // but that causes the auction to revert with "invalid payee" instead.
+
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE2);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE2);
+
+        vm.prank(PAYEE2);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
+
+        // Cant relinquish back to validator
+        vm.prank(PAYEE1);
+        vm.expectRevert();
+        PFR.updateValidatorPayee(VALIDATOR1);
+
+        // Cant relinquish back to any validator
+        vm.prank(PAYEE1);
+        vm.expectRevert();
+        PFR.updateValidatorPayee(VALIDATOR2);
+   
+
+        // Ensure it's not stuck
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE2);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE2);
+
+        vm.prank(PAYEE2);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
     }
+
 
     // NOTE: This is unreachable because getValidator is internal and 
     //          only called when checks blocking this revert case have been passed
