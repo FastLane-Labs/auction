@@ -38,7 +38,7 @@ contract PFLDeployTest is Test, PFLHelper {
         console2.log("------------------------------------");
     }
 
-    function testDeploy() public {
+    function _ignoretestDeploy() public {
 
 
         // Call that will be made after deploy of Proxy

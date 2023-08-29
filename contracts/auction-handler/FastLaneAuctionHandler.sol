@@ -227,7 +227,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         // Multiply the fastBidAmount (a rate) by the gas spent to get the total amount
         uint256 bidAmount = fastPrice * (gasSpent < MIN_GAS_SPENT_PGA ? MIN_GAS_SPENT_PGA : gasSpent);
         
-        return _handleBalancesFast(bidAmount, balanceBefore);
+        return _handleBalancesFast(bidAmount, balanceBefore, searcherToAddress);
     }
 
     function payValidatorFee(address _payor) external payable nonReentrant {
@@ -296,21 +296,21 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         return _bidAmount;
     }
 
-    function _handleBalancesFast(uint256 _bidAmount, uint256 balanceBefore) internal returns (uint256) {
+    function _handleBalancesFast(uint256 _bidAmount, uint256 balanceBefore, address _searcherToAddress) internal returns (uint256) {
         // Verify that the searcher paid the amount they bid & emit the event
-        if (address(this).balance - balanceBefore < bidAmount) {
-            revert RelayNotRepaid(bidAmount, address(this).balance - balanceBefore);
+        if (address(this).balance - balanceBefore < _bidAmount) {
+            revert RelayNotRepaid(_bidAmount, address(this).balance - balanceBefore);
         }
 
         // Check if searcher overpaid and, if so, initiate a refund
-        uint256 surplus = (address(this).balance - balanceBefore) - bidAmount;
+        uint256 surplus = (address(this).balance - balanceBefore) - _bidAmount;
         if (surplus > 0) {
 
             // Only refund the searcher if the refund value exceeds its gas cost
             if (surplus > REFUND_GAS_SPENT * tx.gasprice) {
                 
                 // If value came from the EOA, refund to EOA
-                if (msg.value > bidAmount) {
+                if (msg.value > _bidAmount) {
                     SafeTransferLib.safeTransferETH(
                         tx.origin, 
                         surplus
@@ -319,21 +319,21 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
                 // Otherwise refund the searcher contract
                 } else {
                     SafeTransferLib.safeTransferETH(
-                        searcherToAddress, 
+                        _searcherToAddress, 
                         surplus
                     );
                 }
             
-            // If refunding is to expensive, add it to bidAmount
+            // If refunding is too expensive, add it to _bidAmount
             } else {
-                bidAmount += surplus;
+                _bidAmount += surplus;
             }
         }
 
-        validatorsBalanceMap[block.coinbase] += bidAmount;
-        validatorsTotal += bidAmount;
+        validatorsBalanceMap[block.coinbase] += _bidAmount;
+        validatorsTotal += _bidAmount;
         
-        return bidAmount;
+        return _bidAmount;
     }
 
     /// Verifies the searcher paid for the bid and handles a refund to specified address
@@ -673,7 +673,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Validates incoming PGA bid
     /// @dev 
-    /// @param _bidAmount Amount committed to be repaid
+    /// @param _fastBidAmount Amount committed to be repaid
     modifier checkPGA(uint256 _fastBidAmount) {
         if (_fastBidAmount == 0 || _fastBidAmount > tx.gasprice) {
             revert RelayAuctionInvalidBid();
@@ -702,8 +702,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             // Mark this auction as being complete to provide quicker reverts for subsequent searchers
             fulfilledPGAMap[block.number] = PGAData({
                 lowestGasPrice: uint64(tx.gasprice), 
-                lowestFastPrice: uint64(_bidAmount),
-                lowestTotalPrice: uint64(_bidAmount + tx.gasprice)
+                lowestFastPrice: uint64(_fastBidAmount),
+                lowestTotalPrice: uint64(_fastBidAmount + tx.gasprice)
             });
         }
     }
