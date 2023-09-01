@@ -172,21 +172,21 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Submits a fast bid
     /// @dev Will not revert
-    /// @param fastPrice Bonus gasPrice rate that Searcher commits to pay to validator for gas used by searcher's call
+    /// @param fastGasPrice Bonus gasPrice rate that Searcher commits to pay to validator for gas used by searcher's call
     /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
     /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(fastPrice,msg.sender,callData)`
     function submitFastBid(
-        uint256 fastPrice, // Value commited to be paid at the end of execution
+        uint256 fastGasPrice, // Value commited to be paid at the end of execution
         address searcherToAddress,
         bytes calldata searcherCallData 
-    ) external payable checkPGA(fastPrice) onlyEOA nonReentrant {
+    ) external payable checkPGA(fastGasPrice) onlyEOA nonReentrant {
 
         if (searcherToAddress == address(this) || searcherToAddress == msg.sender) revert RelaySearcherWrongParams();
 
         // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
         // proper transaction ordering is being followed. 
         try this.fastBidWrapper{value: msg.value}(
-            msg.sender, fastPrice, searcherToAddress, searcherCallData
+            msg.sender, fastGasPrice, searcherToAddress, searcherCallData
         ) returns (uint256 bidAmount) {
             emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
         } catch {
@@ -683,9 +683,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     /// @notice Validates incoming PGA bid
     /// @dev 
-    /// @param _fastBidAmount Amount committed to be repaid
-    modifier checkPGA(uint256 _fastBidAmount) {
-        if (_fastBidAmount == 0 || _fastBidAmount > tx.gasprice) {
+    /// @param fastGasPrice Amount committed to be repaid
+    modifier checkPGA(uint256 fastGasPrice) {
+        if (fastGasPrice == 0 || fastGasPrice > tx.gasprice) {
             revert RelayAuctionInvalidBid();
         }
 
@@ -700,11 +700,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block. 
         // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management 
         if (lowestGasPrice != 0 && lowestGasPrice < tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _fastBidAmount, lowestGasPrice, tx.gasprice);
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
         
         // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.  
-        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= _fastBidAmount + tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, _fastBidAmount, lowestGasPrice, tx.gasprice);
+        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= fastGasPrice + tx.gasprice) {
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
         
         // Execute the tx if there are no issues w/ ordering. 
         } else {
@@ -712,8 +712,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             // Mark this auction as being complete to provide quicker reverts for subsequent searchers
             fulfilledPGAMap[block.number] = PGAData({
                 lowestGasPrice: uint64(tx.gasprice), 
-                lowestFastPrice: uint64(_fastBidAmount),
-                lowestTotalPrice: uint64(_fastBidAmount + tx.gasprice)
+                lowestFastPrice: uint64(fastGasPrice),
+                lowestTotalPrice: uint64(fastGasPrice + tx.gasprice)
             });
         }
     }

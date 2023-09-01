@@ -303,6 +303,19 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         }
     }
 
+    function testSubmitFastBid() public {
+        vm.deal(SEARCHER_ADDRESS1, 150 ether);
+        vm.startPrank(SEARCHER_ADDRESS1);
+
+        // Test all rejection cases first
+
+        // Then make a successful bid with medium payment
+
+        // Make sure higher bids are rejected
+
+        // And check if lower bids are accepted
+    }
+
     function testWrongSearcherRepay() public {
 
         uint256 bidAmount = 2 ether;
