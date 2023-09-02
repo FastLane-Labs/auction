@@ -313,6 +313,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Test all rejection cases first
         vm.txGasPrice(10 gwei);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayAuctionInvalidBid.selector);
         PFR.submitFastBid(20 gwei, address(SCE), searcherCallData);
 
         // Then make a successful bid with medium payment
