@@ -307,7 +307,13 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.deal(SEARCHER_ADDRESS1, 150 ether);
         vm.startPrank(SEARCHER_ADDRESS1);
 
+        SearcherContractExample SCE = new SearcherContractExample();
+        SearcherRepayerOverpayerDouble SCEOverpay = new SearcherRepayerOverpayerDouble();
+        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", vm.addr(12), 1337);
+
         // Test all rejection cases first
+        vm.txGasPrice(10 gwei);
+        PFR.submitFastBid(20 gwei, address(SCE), searcherCallData);
 
         // Then make a successful bid with medium payment
 
