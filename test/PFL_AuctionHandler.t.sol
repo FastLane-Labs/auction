@@ -188,6 +188,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         SearcherContractExample SCE = new SearcherContractExample();
         SearcherRepayerOverpayerDouble SCEOverpay = new SearcherRepayerOverpayerDouble();
         PFR.payValidatorFee{value: 1}(SEARCHER_ADDRESS1);
+        vm.deal(address(PFR), 0); // fixes a test later down the line that checks auction contract balance
         vm.stopPrank();
 
         // Set the refund up
