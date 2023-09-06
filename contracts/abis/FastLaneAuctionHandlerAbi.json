@@ -36,6 +36,26 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "RelayImmutableBlockAuthorRate",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayInvalidSender",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayMustBeSelf",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayNotActiveValidator",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -53,18 +73,22 @@
   },
   {
     "inputs": [],
+    "name": "RelayPayeeIsTimelocked",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RelayPayeeUpdateInvalid",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "RelayPermissionSenderNotOrigin",
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes",
-        "name": "retData",
-        "type": "bytes"
-      }
-    ],
-    "name": "RelaySearcherCallFailure",
+    "inputs": [],
+    "name": "RelayProcessorCannotBeZero",
     "type": "error"
   },
   {
@@ -89,20 +113,94 @@
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes",
-        "name": "retData",
-        "type": "bytes"
-      }
-    ],
-    "name": "RelaySimulatedSearcherCallFailure",
+    "inputs": [],
+    "name": "RelayValidatorNotAcceptingRefundBids",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "RelayValidatorNotAcceptingRefundBids",
+    "name": "RelayValueIsZero",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "payor",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "paymentProcessor",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "totalAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "customAllocation",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "startBlock",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "endBlock",
+        "type": "uint256"
+      }
+    ],
+    "name": "CustomPaymentProcessorPaid",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "validator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "success",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "bidAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "searcherContractAddress",
+        "type": "address"
+      }
+    ],
+    "name": "RelayFastBid",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -225,6 +323,55 @@
       }
     ],
     "name": "RelayFlashBidWithRefund",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "validator",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "blockNumber",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "existingBidAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newBidAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "existingGasPrice",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newGasPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "RelayInvestigateOutcome",
     "type": "event"
   },
   {
@@ -364,6 +511,13 @@
   },
   {
     "inputs": [],
+    "name": "clearValidatorPayee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "collectFees",
     "outputs": [
       {
@@ -373,6 +527,40 @@
       }
     ],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "msgSender",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "fastPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "searcherToAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "searcherCallData",
+        "type": "bytes"
+      }
+    ],
+    "name": "fastBidWrapper",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -397,6 +585,35 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "fulfilledPGAMap",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "lowestGasPrice",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lowestFastPrice",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lowestTotalPrice",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "_validator",
         "type": "address"
@@ -407,6 +624,25 @@
       {
         "internalType": "uint256",
         "name": "_validatorBalance",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_validator",
+        "type": "address"
+      }
+    ],
+    "name": "getValidatorBlockOfLastWithdraw",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "_blockNumber",
         "type": "uint256"
       }
     ],
@@ -449,25 +685,6 @@
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes",
-        "name": "_errorData",
-        "type": "bytes"
-      }
-    ],
-    "name": "humanizeError",
-    "outputs": [
-      {
-        "internalType": "string",
-        "name": "decoded",
-        "type": "string"
-      }
-    ],
-    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -517,6 +734,29 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "paymentProcessor",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "customAllocation",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "payValidatorCustom",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "_payor",
         "type": "address"
       }
@@ -524,6 +764,25 @@
     "name": "payValidatorFee",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "payeeMap",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -550,6 +809,29 @@
       }
     ],
     "name": "simulateFlashBid",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "fastGasPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "searcherToAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "searcherCallData",
+        "type": "bytes"
+      }
+    ],
+    "name": "submitFastBid",
     "outputs": [],
     "stateMutability": "payable",
     "type": "function"

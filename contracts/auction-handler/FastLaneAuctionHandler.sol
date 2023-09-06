@@ -4,6 +4,9 @@ pragma solidity ^0.8.16;
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
+import { IPaymentProcessor } from "../interfaces/IPaymentProcessor.sol";
+
+
 abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -24,6 +27,8 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
+    event CustomPaymentProcessorPaid(address indexed payor, address indexed paymentProcessor, uint256 totalAmount, uint256 customAllocation, uint256 startBlock, uint256 endBlock);
+
     // NOTE: Investigated Validators should be presumed innocent.  This event can be triggered inadvertently by honest validators
     // while building a block due to transaction nonces taking precedence over gasPrice.
     event RelayInvestigateOutcome(address indexed validator, address indexed sender, uint256 blockNumber, uint256 existingBidAmount, uint256 newBidAmount, uint256 existingGasPrice, uint256 newGasPrice);
@@ -32,8 +37,9 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     error RelaySearcherWrongParams();                                       // 0x31ae2a9d
 
-    error RelaySearcherCallFailure(bytes retData);                          // 0x291bc14c
-    error RelaySimulatedSearcherCallFailure(bytes retData);                 // 0x5be08ca5
+    // error RelaySearcherCallFailure(bytes retData);                       // 0x291bc14c /!\ Deprecated in favor of bubbling up
+    error RelayValueIsZero();                                               // 0x7da21207
+    // error RelaySimulatedSearcherCallFailure(bytes retData);              // 0x5be08ca5 /!\ Deprecated in favor of bubbling up
     error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);          // 0x53dc88d9
     error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0xd47ae88a
 
@@ -43,17 +49,27 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     error RelayCannotBeZero();                                              // 0x3c9cfe50
     error RelayCannotBeSelf();                                              // 0x6a64f641
+    error RelayMustBeSelf();                                                // 0x3ee08eb4
 
     error RelayValidatorNotAcceptingRefundBids();                           // 0x8b2dbdac
+    error RelayProcessorCannotBeZero();                                     // 0x779f4778
+    error RelayNotActiveValidator();                                        // 0x68a251a0
+    error RelayPayeeIsTimelocked();                                         // 0x9ec568f3
+    error RelayInvalidSender();                                             // 0x3e82c9f4
+    error RelayImmutableBlockAuthorRate();                                  // 0xe9271574
+
+    error RelayPayeeUpdateInvalid();                                        // 0x561d7b2d
 }
 
 /// @notice Validator Data Struct
 /// @dev Subject to BLOCK_TIMELOCK for changes
 /// @param payee Who to pay for this validator
 /// @param timeUpdated Last time a change was requested for this validator payee
+/// @param blockOfLastWithdrawal Last time a withdrawal was initiated
 struct ValidatorData {
     address payee;
     uint256 timeUpdated;
+    uint256 blockOfLastWithdraw;
 }
 
 struct PGAData {
@@ -81,7 +97,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     mapping(address => ValidatorData) internal validatorsDataMap;
 
     /// @notice Mapping payee address to validator address
-    mapping(address => address) internal payeeMap;
+    mapping(address => address) public payeeMap;
 
     /// @notice Map[validator] = balance
     mapping(address => uint256) public validatorsBalanceMap;
@@ -125,7 +141,16 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
                         searcherCallData
             );
 
-            if (!success) revert RelaySearcherCallFailure(retData);
+            if (!success) {
+                    assembly {
+                        revert(
+                            // Start of revert data bytes. The 0x20 offset is always the same.
+                            add(retData, 0x20),
+                            // Length of revert data.
+                            mload(retData)
+                        )
+                    }
+                }
             }
 
             // Verify that the searcher paid the amount they bid & emit the event
@@ -163,7 +188,16 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
                         bidAmount,
                         searcherCallData
             );
-            if (!success) revert RelaySearcherCallFailure(retData);
+            if (!success) {
+                    assembly {
+                        revert(
+                            // Start of revert data bytes. The 0x20 offset is always the same.
+                            add(retData, 0x20),
+                            // Length of revert data.
+                            mload(retData)
+                        )
+                    }
+                }
             }
 
             // Verify that the searcher paid the amount they bid & emit the event
@@ -195,6 +229,31 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         }
     }
 
+    /// @notice Pays a validator their fee via a custom payment processor
+    function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
+        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
+        // TODO: Enforce the customAllocation scale? 1e18?
+        
+        uint256 blockOfLastWithdrawal = validatorsDataMap[getValidator()].blockOfLastWithdraw;
+
+        IPaymentProcessor(paymentProcessor).payValidator{value: msg.value}({
+            startBlock: blockOfLastWithdrawal,
+            endBlock: block.number,
+            totalAmount: msg.value,
+            customAllocation: customAllocation,
+            data: data
+        });
+
+        emit CustomPaymentProcessorPaid({
+            payor: msg.sender,
+            paymentProcessor: paymentProcessor,
+            totalAmount: msg.value,
+            customAllocation: customAllocation, 
+            startBlock: blockOfLastWithdrawal,
+            endBlock: block.number
+        });
+    }
+
     function fastBidWrapper(
         address msgSender,
         uint256 fastPrice, // Value commited to be paid at the end of execution
@@ -203,7 +262,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     ) external payable returns (uint256) {
 
         // This is meant to be called inside of a try/catch by address(this)
-        require(msg.sender == address(this), "ERR-001 OnlySelfCanCall");
+        if (msg.sender != address(this)) revert RelayMustBeSelf();
 
         // Store the current balance, excluding msg.value, and store the gas left
         uint256 balanceBefore = address(this).balance - msg.value;
@@ -218,7 +277,16 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
                     searcherCallData
         );
 
-        if (!success) revert RelaySearcherCallFailure(retData);
+        if (!success) {
+                    assembly {
+                        revert(
+                            // Start of revert data bytes. The 0x20 offset is always the same.
+                            add(retData, 0x20),
+                            // Length of revert data.
+                            mload(retData)
+                        )
+                    }
+                }
         }
 
         // Calculate how much gas was spent by searcher
@@ -231,7 +299,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     function payValidatorFee(address _payor) external payable nonReentrant {
-        require(msg.value > 0, "msg.value = 0");
+        if (msg.value == 0) revert RelayValueIsZero();
         validatorsBalanceMap[block.coinbase] += msg.value;
         validatorsTotal += msg.value;
         emit RelayFeeCollected(_payor, block.coinbase, msg.value);
@@ -268,7 +336,16 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
                         searcherCallData
             );
 
-            if (!success) revert RelaySimulatedSearcherCallFailure(retData);
+            if (!success) {
+                    assembly {
+                        revert(
+                            // Start of revert data bytes. The 0x20 offset is always the same.
+                            add(retData, 0x20),
+                            // Length of revert data.
+                            mload(retData)
+                        )
+                    }
+                }
 
             // Verify that the searcher paid the amount they bid & emit the event
             if (address(this).balance < balanceBefore + bidAmount) {
@@ -405,7 +482,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         onlyActiveValidators
         nonReentrant
     {
-        // TODO: handle wMATIC differently
         ERC20 oopsToken = ERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
@@ -430,6 +506,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         validatorsTotal -= payableBalance;
         validatorsBalanceMap[_validator] = 1;
+        validatorsDataMap[_validator].blockOfLastWithdraw = block.number;
         SafeTransferLib.safeTransferETH(
                 validatorPayee(_validator), 
                 payableBalance
@@ -449,19 +526,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         address _formerPayee = validatorsDataMap[_validator].payee;
 
-        // Can't override with another validator
-        // Can't override with own validator
+        // Can't override with a validator
         // Can't override an already assigned payee
-        require(payeeMap[_payee] == address(0), "invalid payee 1");
-        require(_formerPayee != _payee, "not a new payee");
-        
-        if (_payee == _validator) {
-            require(validatorsBalanceMap[_payee] > 0, "invalid validator");
-            require(_formerPayee != address(0), "invalid payee 2");
-        
-        } else {
-            require(validatorsBalanceMap[_payee] == 0, "invalid payee 3");
-        }
+        if (payeeMap[_payee] != address(0) || validatorsBalanceMap[_payee] != 0) revert RelayPayeeUpdateInvalid();
 
         if (_formerPayee != address(0)) {
             payeeMap[_formerPayee] = address(0);
@@ -474,13 +541,27 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);   
     }
 
+    /// @notice Clears a validator payee
+    /// @dev Callable by validator
+    function clearValidatorPayee() external nonReentrant {
+        if (validatorsBalanceMap[msg.sender] == 0) revert RelayNotActiveValidator(); 
+        address _validator = msg.sender;
+
+        address _formerPayee = validatorsDataMap[_validator].payee;
+        validatorsDataMap[_validator].payee = address(0);
+        validatorsDataMap[_validator].timeUpdated = block.timestamp;
+        payeeMap[_formerPayee] = address(0);
+
+        emit RelayValidatorPayeeUpdated(_validator, address(0), msg.sender);
+    }
+
     /// @notice Updates a validator's share
     /// @param refundShare the share in % that should be paid to the validator
     function updateValidatorRefundShare(uint256 refundShare) public validPayee nonReentrant {
         address validator = getValidator();
 
         // ensure that validators can't insert txs to boost their refund rates during their own blocks
-        require(validator != block.coinbase, "block author's rate is immutable");
+        if (validator == block.coinbase) revert RelayImmutableBlockAuthorRate();
 
         validatorsRefundShareMap[validator] = refundShare;
     }
@@ -499,7 +580,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     function validatorPayee(address _validator) internal view returns (address _recipient) {
         address _payee = validatorsDataMap[_validator].payee;
-        _recipient = !isPayeeTimeLocked(_validator) && _payee != address(0) ? _payee : _validator;
+        _recipient = !isPayeeTimeLocked(_validator) && _payee != address(0) && validatorsBalanceMap[_payee] == 0 ? _payee : _validator;
     }
 
     /// @notice Returns validator pending balance
@@ -512,12 +593,18 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         _payee = validatorsDataMap[_validator].payee;
     }
 
+    /// @notice Returns the last block in which a validator withdrew their fees
+    function getValidatorBlockOfLastWithdraw(address _validator) public view returns (uint256 _blockNumber) {
+        _blockNumber = validatorsDataMap[_validator].blockOfLastWithdraw;
+    }
+
     /// @notice For validators to determine where their payments will go
     /// @dev Will return the Payee if blockTimeLock has passed, will return Validator if not.
     /// @param _validator Address
     function getValidatorRecipient(address _validator) public view returns (address _recipient) {
         _recipient = validatorPayee(_validator);
     }
+    
 
     function getValidator() internal view returns (address) {
         if (validatorsBalanceMap[msg.sender] > 0) {
@@ -530,95 +617,20 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         revert("Invalid validator");
     }
 
-    function humanizeError(bytes memory _errorData) public pure returns (string memory decoded) {
-        uint256 len = _errorData.length;
-        bytes memory firstPass = abi.decode(slice(_errorData, 4, len-4), (bytes));
-        decoded = abi.decode(slice(firstPass, 4, firstPass.length-4), (string));
-    }
-
-    function slice(
-        bytes memory _bytes,
-        uint256 _start,
-        uint256 _length
-    )
-        internal
-        pure
-        returns (bytes memory)
-    {
-        require(_length + 31 >= _length, "slice_overflow");
-        require(_bytes.length >= _start + _length, "slice_outOfBounds");
-
-        bytes memory tempBytes;
-
-        assembly {
-            switch iszero(_length)
-            case 0 {
-                // Get a location of some free memory and store it in tempBytes as
-                // Solidity does for memory variables.
-                tempBytes := mload(0x40)
-
-                // The first word of the slice result is potentially a partial
-                // word read from the original array. To read it, we calculate
-                // the length of that partial word and start copying that many
-                // bytes into the array. The first word we copy will start with
-                // data we don't care about, but the last `lengthmod` bytes will
-                // land at the beginning of the contents of the new array. When
-                // we're done copying, we overwrite the full first word with
-                // the actual length of the slice.
-                let lengthmod := and(_length, 31)
-
-                // The multiplication in the next line is necessary
-                // because when slicing multiples of 32 bytes (lengthmod == 0)
-                // the following copy loop was copying the origin's length
-                // and then ending prematurely not copying everything it should.
-                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
-                let end := add(mc, _length)
-
-                for {
-                    // The multiplication in the next line has the same exact purpose
-                    // as the one above.
-                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
-                } lt(mc, end) {
-                    mc := add(mc, 0x20)
-                    cc := add(cc, 0x20)
-                } {
-                    mstore(mc, mload(cc))
-                }
-
-                mstore(tempBytes, _length)
-
-                //update free-memory pointer
-                //allocating the array padded to 32 bytes like the compiler does now
-                mstore(0x40, and(add(mc, 31), not(31)))
-            }
-            //if we want a zero-length slice let's just return a zero-length array
-            default {
-                tempBytes := mload(0x40)
-                //zero out the 32 bytes slice we are about to return
-                //we need to do it because Solidity does not garbage collect
-                mstore(tempBytes, 0)
-
-                mstore(0x40, add(tempBytes, 0x20))
-            }
-        }
-
-        return tempBytes;
-    }
-
     /***********************************|
     |             Modifiers             |
     |__________________________________*/
 
     modifier onlyActiveValidators() {
-        require(validatorsBalanceMap[msg.sender] > 0 || validatorsBalanceMap[payeeMap[msg.sender]] > 0, "only active validators");
+        if (validatorsBalanceMap[msg.sender] == 0 && validatorsBalanceMap[payeeMap[msg.sender]] == 0) revert RelayNotActiveValidator();
         _;
     }
 
     modifier validPayee() {
         if (payeeMap[msg.sender] != address(0)) {
-            require(!isPayeeTimeLocked(payeeMap[msg.sender]), "payee is time locked");
+            if (isPayeeTimeLocked(payeeMap[msg.sender])) revert RelayPayeeIsTimelocked();
         } else {
-            require(validatorsBalanceMap[msg.sender] > 0, "invalid msg.sender");
+            if (validatorsBalanceMap[msg.sender] == 0) revert RelayInvalidSender();
         }
         _;
     }
