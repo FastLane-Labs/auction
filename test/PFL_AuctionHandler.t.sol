@@ -22,6 +22,9 @@ import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
 import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
+import { MockPaymentProcessor } from "./mocks/MockPaymentProcessor.sol";
+
+
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     // TODO consider moving addrs to PFLAuction or another helper
@@ -57,6 +60,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.deal(USER, 100 ether);
         vm.coinbase(VALIDATOR1);
         vm.label(VALIDATOR1,"VALIDATOR1");
+        vm.label(VALIDATOR2,"VALIDATOR2");
         vm.label(USER,"USER");
         console.log("Block Coinbase: %s",block.coinbase);
         vm.warp(1641070800);
@@ -148,29 +152,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Failed searcher call inside their contract
         bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()");
-        // Will fail as Error(string), thereafter encoded through the custom error RelaySearcherCallFailure
-        // 0x291bc14c0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006408c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f5345000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-
-        // To recover:
-        // Remove selector 0x291bc14c
-        // bytes memory z = hex"0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006408c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f5345000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        // abi.decode(z,(bytes)); // 0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000
-        // Remove selector 0x08c379a
-        // bytes memory d = hex"00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000"
-        // abi.decode(d,(string)) -> FAIL_ON_PURPOSE
-
-        // Helper: PFR.humanizeError()
- 
         {
-        bytes memory encoded = abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE"));
-        
-        console.logBytes(encoded);
-        console.log(PFR.humanizeError(encoded));
-
-        // Decode error
-        assertEq(PFR.humanizeError(encoded), "FAIL_ON_PURPOSE");
-
-        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE")));
+ 
+        vm.expectRevert("FAIL_ON_PURPOSE");
         PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to,  searcherFailCallData);
 
         }
@@ -193,7 +177,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Set the refund up
         vm.startPrank(VALIDATOR1); // should fail if validator is changing their own block
-        vm.expectRevert(bytes("block author's rate is immutable"));
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayImmutableBlockAuthorRate.selector);
         PFR.updateValidatorRefundShare(0);
         vm.coinbase(address(0));
         PFR.updateValidatorRefundShare(5000); // 50%
@@ -275,33 +259,37 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         to = address(SCE);
 
         // Failed searcher call inside their contract
-        bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()");
-        // Will fail as Error(string), thereafter encoded through the custom error RelaySearcherCallFailure
-        // 0x291bc14c0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006408c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f5345000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-
-        // To recover:
-        // Remove selector 0x291bc14c
-        // bytes memory z = hex"0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006408c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f5345000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        // abi.decode(z,(bytes)); // 0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000
-        // Remove selector 0x08c379a
-        // bytes memory d = hex"00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000f4641494c5f4f4e5f505552504f53450000000000000000000000000000000000"
-        // abi.decode(d,(string)) -> FAIL_ON_PURPOSE
-
-        // Helper: PFR.humanizeError()
- 
+        bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()"); 
         {
-        bytes memory encoded = abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE"));
-        
-        console.logBytes(encoded);
-        console.log(PFR.humanizeError(encoded));
-
-        // Decode error
-        assertEq(PFR.humanizeError(encoded), "FAIL_ON_PURPOSE");
-
-        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelaySearcherCallFailure.selector, abi.encodeWithSignature("Error(string)","FAIL_ON_PURPOSE")));
+        vm.expectRevert("FAIL_ON_PURPOSE");
         PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to,  searcherFailCallData);
-
         }
+    }
+
+    function testCantExternalfastBidWrapper() public {
+        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayMustBeSelf.selector);
+        PFR.fastBidWrapper(address(0),0,address(0),bytes("willfail"));
+    }
+
+    function testSubmitFastBid() public {
+        vm.deal(SEARCHER_ADDRESS1, 150 ether);
+        vm.startPrank(SEARCHER_ADDRESS1);
+
+        SearcherContractExample SCE = new SearcherContractExample();
+        SearcherRepayerOverpayerDouble SCEOverpay = new SearcherRepayerOverpayerDouble();
+        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", vm.addr(12), 1337);
+
+        // Test all rejection cases first
+        vm.txGasPrice(10 gwei);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayAuctionInvalidBid.selector);
+        PFR.submitFastBid(20 gwei, address(SCE), searcherCallData);
+
+        // Then make a successful bid with medium payment
+
+        // Make sure higher bids are rejected
+
+        // And check if lower bids are accepted
     }
 
     function testWrongSearcherRepay() public {
@@ -426,7 +414,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Payee fails because still timelocked 
         vm.prank(SEARCHER_ADDRESS4);
-        vm.expectRevert("payee is time locked");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeIsTimelocked.selector);
         PFR.collectFees();
 
         // Fast forward
@@ -457,7 +445,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(isTimelocked, true);
 
         vm.startPrank(SEARCHER_ADDRESS2);
-        vm.expectRevert("payee is time locked");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeIsTimelocked.selector);
         PFR.collectFees();
 
         // Fast forward
@@ -484,6 +472,12 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testUpdateValidatorPayeeRevertsIfValidatorOrNewPayeeInPayeeMap() public {
         _donateOneWeiToValidatorBalance();
+        vm.coinbase(VALIDATOR2);
+        _donateOneWeiToValidatorBalance();
+        vm.coinbase(VALIDATOR1);
+
+        vm.label(PAYEE1,"PAYEE1");
+        vm.label(PAYEE2,"PAYEE2");
 
         vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
@@ -491,14 +485,132 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
 
         vm.prank(PAYEE1);
-        vm.expectRevert("invalid payee");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeUpdateInvalid.selector);
         PFR.updateValidatorPayee(PAYEE1);
         
-        // The other require statement in updateValidatorPayee is unreachable:
-        //```require(_formerPayee != _payee, "not a new payee");```
-        // Should be triggered by the test case just above,
-        // but that causes the auction to revert with "invalid payee" instead.
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE2);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE2);
+
+        vm.prank(PAYEE2);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
+
+        // Cant relinquish back to own validator
+        vm.prank(PAYEE1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeUpdateInvalid.selector);
+        PFR.updateValidatorPayee(VALIDATOR1);
+
+       
+        // Cant relinquish back to any validator in use
+        vm.prank(PAYEE1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeUpdateInvalid.selector);
+        PFR.updateValidatorPayee(VALIDATOR2);
+   
+
+        // Ensure it's not stuck
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE2);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE2);
+
+        vm.prank(PAYEE2);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
+
     }
+
+    function testClearPayeeAndHostilePayeeUpdate() public {
+
+        _donateOneWeiToValidatorBalance();
+        _donateOneWeiToValidatorBalance();
+        vm.coinbase(VALIDATOR1);
+
+        vm.label(PAYEE1,"PAYEE1");
+        vm.label(PAYEE2,"PAYEE2");
+
+     
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
+
+        uint snap = vm.snapshot();
+
+        // Validator can clear and old Payee can't act anymore.
+
+        vm.prank(VALIDATOR1);
+        PFR.clearValidatorPayee();
+
+        assertEq(PFR.getValidatorRecipient(VALIDATOR1), VALIDATOR1);
+
+        vm.prank(PAYEE1);
+        vm.expectRevert();
+        PFR.collectFees();
+
+        vm.prank(PAYEE1);
+        vm.expectRevert();
+        PFR.updateValidatorPayee(PAYEE2);
+        
+        vm.revertTo(snap);
+
+        // Payee cant clear himself
+        vm.prank(PAYEE1);
+        vm.expectRevert();
+        PFR.clearValidatorPayee();
+
+        vm.prank(VALIDATOR1);
+        PFR.clearValidatorPayee();
+
+        // Validator can then assign anyone it sees fit
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE1);
+
+        // Validator trolls by assigning an upcoming but never seen yet
+        // validator address as payee.
+        // Locking its payeeMap : payeeMap[validator2] = validator1
+        // formerPayee of v1 will be v2 
+
+        vm.prank(VALIDATOR1);
+
+        // Things start getting weird
+        PFR.updateValidatorPayee(VALIDATOR2); // V1 Time locks Validator2
+
+        vm.warp(block.timestamp + 7 days);
+
+
+        vm.coinbase(VALIDATOR2);
+        _donateOneWeiToValidatorBalance();
+        _donateOneWeiToValidatorBalance();
+
+        vm.prank(VALIDATOR2);
+        PFR.updateValidatorPayee(PAYEE2); // Actually updates VALIDATOR1, since PAYEE
+        // So VALIDATOR2 payee is unchanged
+        assertEq(PFR.getValidatorRecipient(VALIDATOR2), VALIDATOR2);
+
+        vm.warp(block.timestamp + 7 days);
+
+        // And then gets unlocked after 7d
+        assertEq(PFR.getValidatorRecipient(VALIDATOR2), PAYEE2);
+
+
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorPayee(PAYEE1);
+        vm.warp(block.timestamp + 7 days);
+        // To get things back 
+        vm.prank(VALIDATOR2);
+        PFR.clearValidatorPayee();
+
+        vm.prank(VALIDATOR2);
+        PFR.updateValidatorPayee(PAYEE2);
+        vm.warp(block.timestamp + 7 days);
+        assertEq(PFR.getValidatorRecipient(VALIDATOR2), PAYEE2);
+
+    }
+
 
     // NOTE: This is unreachable because getValidator is internal and 
     //          only called when checks blocking this revert case have been passed
@@ -510,7 +622,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testPayValidatorFeeRevertsWithZeroValue() public {
         vm.prank(USER);
-        vm.expectRevert("msg.value = 0");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayValueIsZero.selector);
         PFR.payValidatorFee{value: 0}(SEARCHER_ADDRESS1);
     }
 
@@ -542,14 +654,14 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testRandomUserCannotSetValidatorsPayee() public {        
         vm.prank(USER);
-        vm.expectRevert("invalid msg.sender"); // reverts in validPayee modifier
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayInvalidSender.selector); // reverts in validPayee modifier
         PFR.updateValidatorPayee(USER);
     }
 
     function testValidatorCannotSetPayeeIfZeroBalance() public {
         assertTrue(PFR.getValidatorBalance(VALIDATOR1) == 0);
         vm.prank(VALIDATOR1);
-        vm.expectRevert("invalid msg.sender");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayInvalidSender.selector);
         PFR.updateValidatorPayee(PAYEE1);
     }
 
@@ -562,7 +674,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
 
         vm.prank(PAYEE1);
-        vm.expectRevert("payee is time locked");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeIsTimelocked.selector);
         PFR.updateValidatorPayee(PAYEE2);
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
     }
@@ -574,7 +686,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         address(PFR).call{value: stuckNativeAmount}("");
 
         vm.prank(USER);
-        vm.expectRevert("only active validators");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayNotActiveValidator.selector);
         PFR.syncStuckNativeToken();
 
         uint256 validatorBalanceBefore = PFR.getValidatorBalance(VALIDATOR1);
@@ -605,7 +717,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         mockToken.transfer(address(PFR), stuckERC20Amount);
 
         vm.prank(USER);
-        vm.expectRevert("only active validators");
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayNotActiveValidator.selector);
         PFR.withdrawStuckERC20(address(mockToken));
 
         uint256 validatorBalanceBefore = mockToken.balanceOf(address(VALIDATOR1));
@@ -641,6 +753,66 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.warp(block.timestamp + 7 days);
         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
     }
+
+
+    function testGetValidatorBlockOfLastWithdraw() public {
+        // Setup for collectFees testing
+        vm.deal(SEARCHER_ADDRESS1, 100 ether);
+        uint256 bidAmount = 2 ether;
+        uint256 expectedValidatorPayout = bidAmount - 1;
+        bytes32 oppTx = bytes32("tx1");
+        bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
+        SearcherRepayerEcho SRE = new SearcherRepayerEcho();
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+
+        // Returns 0 if no withdraws
+        assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), 0);
+
+        // Returns block number of last withdraw
+        vm.prank(VALIDATOR1);
+        PFR.collectFees();
+        assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), block.number);
+    }
+
+    // TODO handle uninitiatied validators not with startBlock == 0
+    function testPayValidatorCustom() public {
+        // Seed validator with ETH and in auction contract
+        vm.deal(VALIDATOR1, 1 ether);
+        _donateOneWeiToValidatorBalance();
+
+        MockPaymentProcessor MPP = new MockPaymentProcessor();
+        uint256 msgValue = 1 ether;
+        uint256 customAllocation = 1e16; // 1% of 1e18
+        bytes memory addressData = abi.encode(VALIDATOR1);
+
+        // Reverts if payment processor address is zero address
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayProcessorCannotBeZero.selector);
+        PFR.payValidatorCustom{value: msgValue}(address(0), customAllocation, addressData);
+
+        assertEq(address(MPP).balance, 0); // No ETH in PaymentProcessor before
+
+        vm.prank(VALIDATOR1);
+        vm.expectEmit(true, true, false, true, address(PFR));
+        emit CustomPaymentProcessorPaid({
+            payor: VALIDATOR1,
+            paymentProcessor: address(MPP),
+            totalAmount: msgValue,
+            customAllocation: customAllocation, 
+            startBlock: 0,
+            endBlock: block.number
+        });
+        PFR.payValidatorCustom{value: msgValue}(address(MPP), customAllocation, addressData);
+
+        assertEq(MPP.validator(), VALIDATOR1);
+        assertEq(MPP.totalAmount(), msgValue);
+        assertEq(MPP.customAllocation(), customAllocation);
+        assertEq(MPP.startBlock(), 0);
+        assertEq(MPP.endBlock(), block.number);
+        assertEq(address(MPP).balance, msgValue); // ETH in PaymentProcessor after
+    }
+
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
