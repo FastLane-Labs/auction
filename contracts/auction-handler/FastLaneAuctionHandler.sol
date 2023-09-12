@@ -27,7 +27,7 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
-    event CustomPaymentProcessorPaid(address indexed payor, address indexed paymentProcessor, uint256 totalAmount, uint256 customAllocation, uint256 startBlock, uint256 endBlock);
+    event CustomPaymentProcessorPaid(address indexed payor, address indexed payee, address indexed paymentProcessor, uint256 totalAmount, uint256 customAllocation, uint256 startBlock, uint256 endBlock);
 
     // NOTE: Investigated Validators should be presumed innocent.  This event can be triggered inadvertently by honest validators
     // while building a block due to transaction nonces taking precedence over gasPrice.
@@ -59,6 +59,9 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayImmutableBlockAuthorRate();                                  // 0xe9271574
 
     error RelayPayeeUpdateInvalid();                                        // 0x561d7b2d
+    error RelayTxValueMustBeZero();
+    error RelayCustomCallbackLockInvalid();
+    error RelayCustomPayoutCantBePartial();
 }
 
 /// @notice Validator Data Struct
@@ -69,7 +72,7 @@ abstract contract FastLaneAuctionHandlerEvents {
 struct ValidatorData {
     address payee;
     uint256 timeUpdated;
-    uint256 blockOfLastWithdraw;
+    uint64 blockOfLastWithdraw;
 }
 
 struct PGAData {
@@ -113,6 +116,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     uint256 public validatorsTotal;
 
+    bytes32 internal callbackLock;
 
     /// @notice Submits a flash bid
     /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
@@ -230,26 +234,47 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     /// @notice Pays a validator their fee via a custom payment processor
-    function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
+    function payValidatorCustom(address paymentProcessor, bytes calldata data) external nonReentrant {
         if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
-        // TODO: Enforce the customAllocation scale? 1e18?
-        
-        uint256 blockOfLastWithdrawal = validatorsDataMap[getValidator()].blockOfLastWithdraw;
+        if (tx.value != 0) revert RelayTxValueMustBeZero();
+        if (callbackLock != bytes32(0)) revert RelayCustomCallbackLockInvalid();
 
-        IPaymentProcessor(paymentProcessor).payValidator{value: msg.value}({
-            startBlock: blockOfLastWithdrawal,
+        address validator = getValidator();
+        uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
+        
+        callbackLock = keccak256(abi.encodePacked(validator, paymentProcessor));
+
+        IPaymentProcessor(paymentProcessor).payValidator({
+            validator: validator,
+            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
             endBlock: block.number,
-            totalAmount: msg.value,
-            customAllocation: customAllocation,
+            totalAmount: validatorBalance,
             data: data
         });
 
+        if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
+        validatorsDataMap[validator].blockOfLastWithdraw = block.number;
+        
+        delete callbackLock;
+    }
+
+    function paymentCallback(address validator, address payee, uint256 amount) external {
+        if (tx.value != 0) revert RelayProcessorCannotBeZero();
+        if (callbackLock != keccak256(abi.encodePacked(validator, msg.sender))) revert RelayCustomCallbackLockInvalid();
+
+        validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
+
+        SafeTransferLib.safeTransferETH(
+            payee, 
+            amount
+        );
+
         emit CustomPaymentProcessorPaid({
-            payor: msg.sender,
-            paymentProcessor: paymentProcessor,
-            totalAmount: msg.value,
-            customAllocation: customAllocation, 
-            startBlock: blockOfLastWithdrawal,
+            payor: validator,
+            payee: payee,
+            paymentProcessor: msg.sender,
+            totalAmount: amount,
+            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
             endBlock: block.number
         });
     }
