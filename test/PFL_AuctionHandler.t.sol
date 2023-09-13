@@ -839,6 +839,15 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // TODO remove either callbackLock or nonReentrant modifier in payValidatorCustom function
     }
 
+    function testPaymentCallback() public {
+        // NOTE: Positive case of paymentCallback tested above in testPayValidatorCustom.
+        // Check paymentCallback reverts if not called by PaymentProcessor
+        // during the payValidatorCustom function call:
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCustomCallbackLockInvalid.selector);
+        PFR.paymentCallback(VALIDATOR1, VALIDATOR1, 1 ether);
+    }
+
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
