@@ -27,7 +27,7 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
-    event CustomPaymentProcessorPaid(address indexed payor, address indexed payee, address indexed paymentProcessor, uint256 totalAmount, uint256 customAllocation, uint256 startBlock, uint256 endBlock);
+    event CustomPaymentProcessorPaid(address indexed payor, address indexed payee, address indexed paymentProcessor, uint256 totalAmount, uint256 startBlock, uint256 endBlock);
 
     // NOTE: Investigated Validators should be presumed innocent.  This event can be triggered inadvertently by honest validators
     // while building a block due to transaction nonces taking precedence over gasPrice.
@@ -59,7 +59,6 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayImmutableBlockAuthorRate();                                  // 0xe9271574
 
     error RelayPayeeUpdateInvalid();                                        // 0x561d7b2d
-    error RelayTxValueMustBeZero();
     error RelayCustomCallbackLockInvalid();
     error RelayCustomPayoutCantBePartial();
 }
@@ -236,7 +235,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Pays a validator their fee via a custom payment processor
     function payValidatorCustom(address paymentProcessor, bytes calldata data) external nonReentrant {
         if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
-        if (tx.value != 0) revert RelayTxValueMustBeZero();
         if (callbackLock != bytes32(0)) revert RelayCustomCallbackLockInvalid();
 
         address validator = getValidator();
@@ -253,13 +251,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         });
 
         if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
-        validatorsDataMap[validator].blockOfLastWithdraw = block.number;
+        validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
         
         delete callbackLock;
     }
 
     function paymentCallback(address validator, address payee, uint256 amount) external {
-        if (tx.value != 0) revert RelayProcessorCannotBeZero();
         if (callbackLock != keccak256(abi.encodePacked(validator, msg.sender))) revert RelayCustomCallbackLockInvalid();
 
         validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
@@ -531,7 +528,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         validatorsTotal -= payableBalance;
         validatorsBalanceMap[_validator] = 1;
-        validatorsDataMap[_validator].blockOfLastWithdraw = block.number;
+        validatorsDataMap[_validator].blockOfLastWithdraw = uint64(block.number);
         SafeTransferLib.safeTransferETH(
                 validatorPayee(_validator), 
                 payableBalance

@@ -789,7 +789,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Reverts if payment processor address is zero address
         vm.prank(VALIDATOR1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayProcessorCannotBeZero.selector);
-        PFR.payValidatorCustom{value: msgValue}(address(0), customAllocation, addressData);
+        PFR.payValidatorCustom(address(0), addressData);
 
         assertEq(address(MPP).balance, 0); // No ETH in PaymentProcessor before
 
@@ -797,17 +797,16 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectEmit(true, true, false, true, address(PFR));
         emit CustomPaymentProcessorPaid({
             payor: VALIDATOR1,
+            payee: address(0),
             paymentProcessor: address(MPP),
             totalAmount: msgValue,
-            customAllocation: customAllocation, 
             startBlock: 0,
             endBlock: block.number
         });
-        PFR.payValidatorCustom{value: msgValue}(address(MPP), customAllocation, addressData);
+        PFR.payValidatorCustom(address(MPP), addressData);
 
         assertEq(MPP.validator(), VALIDATOR1);
         assertEq(MPP.totalAmount(), msgValue);
-        assertEq(MPP.customAllocation(), customAllocation);
         assertEq(MPP.startBlock(), 0);
         assertEq(MPP.endBlock(), block.number);
         assertEq(address(MPP).balance, msgValue); // ETH in PaymentProcessor after
