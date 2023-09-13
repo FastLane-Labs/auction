@@ -22,7 +22,7 @@ import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
 import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
-import { MockPaymentProcessor } from "./mocks/MockPaymentProcessor.sol";
+import { MockPaymentProcessor, MockPaymentProcessorBroken } from "./mocks/MockPaymentProcessor.sol";
 
 
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
@@ -785,6 +785,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.payValidatorFee{value: 1 ether}(USER);
         assertEq(PFR.getValidatorBalance(VALIDATOR1), 1 ether);
 
+        uint256 snap = vm.snapshot();
+
+        // Testing a working Payment Processor
         vm.startPrank(ppAdmin);
         MockPaymentProcessor MPP = new MockPaymentProcessor();
         MPP.setPayee(ppAdmin); // Set ppAdmin as payee, will recieve ETH from AuctionHanlder
@@ -817,9 +820,23 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(MPP.endBlock(), block.number);
         assertEq(ppAdmin.balance, expectedValidatorBalance, "Payee did not get ETH");
 
+        vm.revertTo(snap);
 
+        // Testing a broken Payment Processor
+        vm.startPrank(ppAdmin);
+        MockPaymentProcessorBroken MPPB = new MockPaymentProcessorBroken();
+        MPPB.setPayee(ppAdmin); // Set ppAdmin as payee, will recieve ETH from AuctionHanlder
+        vm.stopPrank();
+
+        assertEq(ppAdmin.balance, 0, "Payee has ETH before broken pp test");
+
+        // Expected to revert due to paymentCallback not being called inside Payment Processor
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCustomPayoutCantBePartial.selector);
+        PFR.payValidatorCustom(address(MPPB), addressData);
+
+        assertEq(ppAdmin.balance, 0, "Payee should still not have any ETH");
         // TODO remove either callbackLock or nonReentrant modifier in payValidatorCustom function
-        // TODO add test using MockPaymentProcessorBroken to test fail on no callback
     }
 
 
