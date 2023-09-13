@@ -71,8 +71,8 @@ abstract contract FastLaneAuctionHandlerEvents {
 /// @param blockOfLastWithdrawal Last time a withdrawal was initiated
 struct ValidatorData {
     address payee;
-    uint256 timeUpdated;
     uint64 blockOfLastWithdraw;
+    uint256 timeUpdated;
 }
 
 struct PGAData {
