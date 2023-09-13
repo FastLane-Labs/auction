@@ -3,9 +3,9 @@ pragma solidity ^0.8.10;
 interface IFastLaneAuctionHandler {
     event CustomPaymentProcessorPaid(
         address indexed payor,
+        address indexed payee,
         address indexed paymentProcessor,
         uint256 totalAmount,
-        uint256 customAllocation,
         uint256 startBlock,
         uint256 endBlock
     );
@@ -75,11 +75,10 @@ interface IFastLaneAuctionHandler {
     function getValidatorRecipient(address _validator) external view returns (address _recipient);
     function isPayeeTimeLocked(address _validator) external view returns (bool _isTimeLocked);
     function isValidPayee(address _validator, address _payee) external view returns (bool _valid);
-    function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes memory data)
-        external
-        payable;
+    function payValidatorCustom(address paymentProcessor, bytes memory data) external;
     function payValidatorFee(address _payor) external payable;
     function payeeMap(address) external view returns (address);
+    function paymentCallback(address validator, address payee, uint256 amount) external;
     function simulateFlashBid(
         uint256 bidAmount,
         bytes32 oppTxHash,
