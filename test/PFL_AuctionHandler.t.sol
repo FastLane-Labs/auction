@@ -777,13 +777,19 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     // TODO handle uninitiatied validators not with startBlock == 0
     function testPayValidatorCustom() public {
-        // Seed validator with ETH and in auction contract
-        vm.deal(VALIDATOR1, 1 ether);
-        _donateOneWeiToValidatorBalance();
+        address ppAdmin = address(1234321); // PaymentProcessor admin
+        uint256 expectedValidatorBalance = 1 ether - 1;
 
+        // Set validator balance in auction handler to 1 ETH
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1 ether}(USER);
+        assertEq(PFR.getValidatorBalance(VALIDATOR1), 1 ether);
+
+        vm.startPrank(ppAdmin);
         MockPaymentProcessor MPP = new MockPaymentProcessor();
-        uint256 msgValue = 1 ether;
-        uint256 customAllocation = 1e16; // 1% of 1e18
+        MPP.setPayee(ppAdmin); // Set ppAdmin as payee, will recieve ETH from AuctionHanlder
+        vm.stopPrank();
+
         bytes memory addressData = abi.encode(VALIDATOR1);
 
         // Reverts if payment processor address is zero address
@@ -791,25 +797,29 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayProcessorCannotBeZero.selector);
         PFR.payValidatorCustom(address(0), addressData);
 
-        assertEq(address(MPP).balance, 0); // No ETH in PaymentProcessor before
+        assertEq(ppAdmin.balance, 0, "Payee unexpectedly has ETH before"); // Payee has no ETH before
 
         vm.prank(VALIDATOR1);
         vm.expectEmit(true, true, false, true, address(PFR));
         emit CustomPaymentProcessorPaid({
             payor: VALIDATOR1,
-            payee: address(0),
+            payee: ppAdmin,
             paymentProcessor: address(MPP),
-            totalAmount: msgValue,
+            totalAmount: expectedValidatorBalance,
             startBlock: 0,
             endBlock: block.number
         });
         PFR.payValidatorCustom(address(MPP), addressData);
 
         assertEq(MPP.validator(), VALIDATOR1);
-        assertEq(MPP.totalAmount(), msgValue);
+        assertEq(MPP.totalAmount(), expectedValidatorBalance);
         assertEq(MPP.startBlock(), 0);
         assertEq(MPP.endBlock(), block.number);
-        assertEq(address(MPP).balance, msgValue); // ETH in PaymentProcessor after
+        assertEq(ppAdmin.balance, expectedValidatorBalance, "Payee did not get ETH");
+
+
+        // TODO remove either callbackLock or nonReentrant modifier in payValidatorCustom function
+        // TODO add test using MockPaymentProcessorBroken to test fail on no callback
     }
 
 
