@@ -115,7 +115,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     uint256 public validatorsTotal;
 
-    bytes32 internal callbackLock;
+    bytes32 private lock = bytes32(1);
 
     /// @notice Submits a flash bid
     /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
@@ -235,12 +235,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /// @notice Pays a validator their fee via a custom payment processor
     function payValidatorCustom(address paymentProcessor, bytes calldata data) external nonReentrant {
         if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
-        if (callbackLock != bytes32(0)) revert RelayCustomCallbackLockInvalid();
+        if (lock != bytes32(0)) revert RelayCustomCallbackLockInvalid();
 
         address validator = getValidator();
         uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
         
-        callbackLock = keccak256(abi.encodePacked(validator, paymentProcessor));
+        lock = keccak256(abi.encodePacked(validator, paymentProcessor));
 
         IPaymentProcessor(paymentProcessor).payValidator({
             validator: validator,
@@ -253,11 +253,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
         validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
         
-        delete callbackLock;
+        delete lock;
     }
 
     function paymentCallback(address validator, address payee, uint256 amount) external {
-        if (callbackLock != keccak256(abi.encodePacked(validator, msg.sender))) revert RelayCustomCallbackLockInvalid();
+        if (lock != keccak256(abi.encodePacked(validator, msg.sender))) revert RelayCustomCallbackLockInvalid();
 
         validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
 
@@ -639,9 +639,73 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         revert("Invalid validator");
     }
 
+    function _prepReentrancy() internal {
+        bytes4 selectorSwitch = bytes4(data[:4]);
+        
+        if (selectorSwitch == this.payValidatorCustom.selector) {
+            require(lock == bytes32(1), "REENTRANCY");
+
+            address target;
+            assembly {
+                target := calldataload(4)
+            }
+            lock = keccak256(abi.encodePacked(getValidator(), target));
+
+        } else if (selectorSwitch == this.paymentCallback) {
+            require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
+
+            address target;
+            assembly {
+                target := calldataload(4)
+            }
+            
+        } else {
+            require(lock == bytes32(1), "REENTRANCY");
+            lock = bytes32(2);
+        }
+    }
+
     /***********************************|
     |             Modifiers             |
     |__________________________________*/
+
+    modifier nonReentrant() override {
+        /*
+        _prepReentrancy() function:
+            bytes4 selectorSwitch = bytes4(data[:4]);
+            
+            if (selectorSwitch == this.payValidatorCustom.selector) {
+                require(lock == bytes32(1), "REENTRANCY");
+
+                address target;
+                assembly {
+                    target := calldataload(4)
+                }
+                lock = keccak256(abi.encodePacked(getValidator(), target));
+
+            } else if (selectorSwitch == this.paymentCallback) {
+                require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
+
+                address target;
+                assembly {
+                    target := calldataload(4)
+                }
+                
+            } else {
+                require(lock == bytes32(1), "REENTRANCY");
+                lock = bytes32(2);
+            }
+        */
+
+        _prepReentrancy();
+        _;
+        lock = bytes32(1);
+    }
+
+    modifier nonReentrantCallback(address target) {
+        require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
+        _;
+    }
 
     modifier onlyActiveValidators() {
         if (validatorsBalanceMap[msg.sender] == 0 && validatorsBalanceMap[payeeMap[msg.sender]] == 0) revert RelayNotActiveValidator();
