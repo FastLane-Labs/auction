@@ -232,50 +232,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         }
     }
 
-    /// @notice Pays a validator their fee via a custom payment processor
-    function payValidatorCustom(address paymentProcessor, bytes calldata data) external nonReentrant {
-        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
-        if (lock != bytes32(0)) revert RelayCustomCallbackLockInvalid();
-
-        address validator = getValidator();
-        uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
-        
-        lock = keccak256(abi.encodePacked(validator, paymentProcessor));
-
-        IPaymentProcessor(paymentProcessor).payValidator({
-            validator: validator,
-            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
-            endBlock: block.number,
-            totalAmount: validatorBalance,
-            data: data
-        });
-
-        if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
-        validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
-        
-        delete lock;
-    }
-
-    function paymentCallback(address validator, address payee, uint256 amount) external {
-        if (lock != keccak256(abi.encodePacked(validator, msg.sender))) revert RelayCustomCallbackLockInvalid();
-
-        validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
-
-        SafeTransferLib.safeTransferETH(
-            payee, 
-            amount
-        );
-
-        emit CustomPaymentProcessorPaid({
-            payor: validator,
-            payee: payee,
-            paymentProcessor: msg.sender,
-            totalAmount: amount,
-            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
-            endBlock: block.number
-        });
-    }
-
     function fastBidWrapper(
         address msgSender,
         uint256 fastPrice, // Value commited to be paid at the end of execution
@@ -537,6 +493,47 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         return payableBalance;
     }
 
+    /// @notice Pays a validator their fee via a custom payment processor
+    function payValidatorCustom(address paymentProcessor, bytes calldata data) external nonReentrant validPayee {
+        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
+
+        address validator = getValidator();
+        uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
+        
+        IPaymentProcessor(paymentProcessor).payValidator({
+            validator: validator,
+            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
+            endBlock: block.number,
+            totalAmount: validatorBalance,
+            data: data
+        });
+
+        if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
+        validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
+        
+        delete lock;
+    }
+
+    function paymentCallback(address validator, address payee, uint256 amount) nonReentrant external {
+       
+        validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
+        validatorsTotal -= amount;
+
+        SafeTransferLib.safeTransferETH(
+            payee, 
+            amount
+        );
+
+        emit CustomPaymentProcessorPaid({
+            payor: validator,
+            payee: payee,
+            paymentProcessor: msg.sender,
+            totalAmount: amount,
+            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
+            endBlock: block.number
+        });
+    }
+
     /// @notice Updates a validator payee
     /// @dev Callable by either validator address or their payee address (if not changed recently).
     function updateValidatorPayee(address _payee) external validPayee nonReentrant {
@@ -645,19 +642,22 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
         if (selectorSwitch == this.payValidatorCustom.selector) {
             require(lock == bytes32(1), "REENTRANCY");
 
-            address target;
+            address paymentProcessor;
             assembly {
-                target := calldataload(4)
+                paymentProcessor := calldataload(4)
             }
-            lock = keccak256(abi.encodePacked(getValidator(), target));
+            address validator = getValidator();
+
+            lock = keccak256(abi.encodePacked(validator, paymentProcessor));
 
         } else if (selectorSwitch == this.paymentCallback.selector) {
-            address target;
+            address validator;
             assembly {
-                target := calldataload(4)
+                validator := calldataload(4)
             }
-            
-            require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
+            address paymentProcessor = msg.sender;
+
+            require(lock == keccak256(abi.encodePacked(validator, paymentProcessor)), "REENTRANCY");
             
         } else {
             require(lock == bytes32(1), "REENTRANCY");
