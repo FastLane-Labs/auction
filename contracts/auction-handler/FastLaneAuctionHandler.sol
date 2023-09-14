@@ -651,13 +651,13 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             }
             lock = keccak256(abi.encodePacked(getValidator(), target));
 
-        } else if (selectorSwitch == this.paymentCallback) {
-            require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
-
+        } else if (selectorSwitch == this.paymentCallback.selector) {
             address target;
             assembly {
                 target := calldataload(4)
             }
+            
+            require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
             
         } else {
             require(lock == bytes32(1), "REENTRANCY");
@@ -670,33 +670,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     |__________________________________*/
 
     modifier nonReentrant() override {
-        /*
-        _prepReentrancy() function:
-            bytes4 selectorSwitch = bytes4(data[:4]);
-            
-            if (selectorSwitch == this.payValidatorCustom.selector) {
-                require(lock == bytes32(1), "REENTRANCY");
-
-                address target;
-                assembly {
-                    target := calldataload(4)
-                }
-                lock = keccak256(abi.encodePacked(getValidator(), target));
-
-            } else if (selectorSwitch == this.paymentCallback) {
-                require(lock == keccak256(abi.encodePacked(target, msg.sender)), "REENTRANCY");
-
-                address target;
-                assembly {
-                    target := calldataload(4)
-                }
-                
-            } else {
-                require(lock == bytes32(1), "REENTRANCY");
-                lock = bytes32(2);
-            }
-        */
-
         _prepReentrancy();
         _;
         lock = bytes32(1);
