@@ -115,7 +115,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     uint256 public validatorsTotal;
 
-    bytes32 private lock = bytes32(1);
+    bytes32 private constant UNLOCKED = bytes32(uint256(1));
+    bytes32 private constant LOCKED = bytes32(uint256(2));
+
+    bytes32 private lock = UNLOCKED;
 
     /// @notice Submits a flash bid
     /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
@@ -648,19 +651,19 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     |__________________________________*/
 
     modifier nonReentrant() override {
-        require(lock == bytes32(1), "REENTRANCY");
+        require(lock == UNLOCKED, "REENTRANCY");
 
-        lock = bytes32(2);
+        lock = LOCKED;
         _;
-        lock = bytes32(1);
+        lock = UNLOCKED;
     }
 
     modifier limitedReentrant(address paymentProcessor) {
-        require(lock == bytes32(1), "REENTRANCY");
+        require(lock == UNLOCKED, "REENTRANCY");
 
         lock = keccak256(abi.encodePacked(getValidator(), paymentProcessor));
         _;
-        lock = bytes32(1);
+        lock = UNLOCKED;
     }
 
     modifier permittedReentrant(address approver) {
