@@ -517,8 +517,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
         validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
-        
-        delete lock;
     }
 
     function paymentCallback(address validator, address payee, uint256 amount) 
