@@ -519,8 +519,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     function paymentCallback(address validator, address payee, uint256 amount) 
-        permittedReentrant(validator) 
-        external 
+        external
+        permittedReentrant(validator)  
     {
        
         validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
