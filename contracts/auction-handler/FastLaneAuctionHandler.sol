@@ -2,7 +2,6 @@
 pragma solidity ^0.8.16;
 
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
-import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
 import { IPaymentProcessor } from "../interfaces/IPaymentProcessor.sol";
 
@@ -87,7 +86,7 @@ interface ISearcherContract {
     function fastLaneCall(address, uint256, bytes calldata) external payable returns (bool, bytes memory);
 }
 
-contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard {
+contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
@@ -651,7 +650,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     |             Modifiers             |
     |__________________________________*/
 
-    modifier nonReentrant() override {
+    modifier nonReentrant() {
         require(lock == UNLOCKED, "REENTRANCY");
 
         lock = LOCKED;
