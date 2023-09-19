@@ -61,6 +61,9 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayPayeeUpdateInvalid();                                        // 0x561d7b2d
     error RelayCustomCallbackLockInvalid();
     error RelayCustomPayoutCantBePartial();
+
+    error RelayUnapprovedReentrancy();
+
 }
 
 /// @notice Validator Data Struct
@@ -665,7 +668,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     modifier permittedReentrant(address approver) {
-        require(lock == keccak256(abi.encodePacked(approver, msg.sender)), "UNAPPROVED REENTRANCY");
+        if(lock != keccak256(abi.encodePacked(approver, msg.sender))) revert RelayUnapprovedReentrancy();
         _;
     }
 

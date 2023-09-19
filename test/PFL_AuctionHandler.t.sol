@@ -844,7 +844,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Check paymentCallback reverts if not called by PaymentProcessor
         // during the collectFeesCustom function call:
         vm.prank(VALIDATOR1);
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCustomCallbackLockInvalid.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayUnapprovedReentrancy.selector);
         PFR.paymentCallback(VALIDATOR1, VALIDATOR1, 1 ether);
     }
 
