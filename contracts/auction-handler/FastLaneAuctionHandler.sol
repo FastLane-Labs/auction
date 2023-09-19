@@ -497,7 +497,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     }
 
     /// @notice Pays a validator their fee via a custom payment processor
-    function payValidatorCustom(address paymentProcessor, bytes calldata data) 
+    function collectFeesCustom(address paymentProcessor, bytes calldata data) 
         external 
         limitedReentrant(paymentProcessor) 
         validPayee 

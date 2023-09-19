@@ -776,7 +776,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     // TODO handle uninitiatied validators not with startBlock == 0
-    function testPayValidatorCustom() public {
+    function testCollectFeesCustom() public {
         address ppAdmin = address(1234321); // PaymentProcessor admin
         uint256 expectedValidatorBalance = 1 ether - 1;
 
@@ -798,7 +798,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Reverts if payment processor address is zero address
         vm.prank(VALIDATOR1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayProcessorCannotBeZero.selector);
-        PFR.payValidatorCustom(address(0), addressData);
+        PFR.collectFeesCustom(address(0), addressData);
 
         assertEq(ppAdmin.balance, 0, "Payee unexpectedly has ETH before"); // Payee has no ETH before
 
@@ -812,7 +812,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
             startBlock: 0,
             endBlock: block.number
         });
-        PFR.payValidatorCustom(address(MPP), addressData);
+        PFR.collectFeesCustom(address(MPP), addressData);
 
         assertEq(MPP.validator(), VALIDATOR1);
         assertEq(MPP.totalAmount(), expectedValidatorBalance);
@@ -833,16 +833,16 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Expected to revert due to paymentCallback not being called inside Payment Processor
         vm.prank(VALIDATOR1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCustomPayoutCantBePartial.selector);
-        PFR.payValidatorCustom(address(MPPB), addressData);
+        PFR.collectFeesCustom(address(MPPB), addressData);
 
         assertEq(ppAdmin.balance, 0, "Payee should still not have any ETH");
-        // TODO remove either callbackLock or nonReentrant modifier in payValidatorCustom function
+        // TODO remove either callbackLock or nonReentrant modifier in collectFeesCustom function
     }
 
     function testPaymentCallback() public {
-        // NOTE: Positive case of paymentCallback tested above in testPayValidatorCustom.
+        // NOTE: Positive case of paymentCallback tested above in testCollectFeesCustom.
         // Check paymentCallback reverts if not called by PaymentProcessor
-        // during the payValidatorCustom function call:
+        // during the collectFeesCustom function call:
         vm.prank(VALIDATOR1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCustomCallbackLockInvalid.selector);
         PFR.paymentCallback(VALIDATOR1, VALIDATOR1, 1 ether);
