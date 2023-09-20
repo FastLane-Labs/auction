@@ -848,6 +848,31 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.paymentCallback(VALIDATOR1, VALIDATOR1, 1 ether);
     }
 
+    function testNonReentrantModifierBlocksAllReentrancy() public {
+        // Try use collectFees to reenter from validatorPayee
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1 ether}(USER);
+        ReenteringPayee payee = new ReenteringPayee();
+
+        vm.startPrank(VALIDATOR1);
+        PFR.updateValidatorPayee(address(payee));
+
+        // Fast forward
+        vm.warp(block.timestamp + 7 days);
+
+        // This revert message comes from Solmate's SafeTransferLib, and is triggered by "REENTRANCY" revert
+        // Use `forge test --match-test BlocksAllReentrancy -vvv` to see the inner revert message of "REENTRANCY"
+        vm.expectRevert(bytes("ETH_TRANSFER_FAILED")); 
+        PFR.collectFees();
+        vm.stopPrank();
+    }
+
+    function testLimitedAndPermittedReentrantModifiersOnlyAllowPaymentProcessorToReenter() public {
+        // Test only pp allowed
+
+        // Test reverts if reentered by not pp
+    }
+
 
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
@@ -966,5 +991,14 @@ contract SearcherRepayerOverpayerDouble {
 
         require(success, "ETH_TRANSFER_FAILED");
         return (true,bytes("ok"));
+    }
+}
+
+contract ReenteringPayee {
+    fallback() payable external {
+        FastLaneAuctionHandler(payable(msg.sender)).collectFees();
+    }
+    receive() payable external {
+        FastLaneAuctionHandler(payable(msg.sender)).collectFees();
     }
 }
