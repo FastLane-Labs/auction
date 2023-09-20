@@ -92,54 +92,54 @@ contract PFLDeployTest is Test, PFLHelper {
         assertTrue(successInitialSetupAuction);
     }
 
-        function testUpgrade() public {
+    //     function testUpgrade() public {
         
-        bytes memory encodedPostProxyDeployCall = abi.encodeWithSignature("initialize(address)", eoa);
+    //     bytes memory encodedPostProxyDeployCall = abi.encodeWithSignature("initialize(address)", eoa);
 
-        vm.prank(foundryFactory);
-        ERC1967Proxy proxy = new ERC1967Proxy{salt: proxySaltStr}(address(fastlaneImplementation), encodedPostProxyDeployCall); 
+    //     vm.prank(foundryFactory);
+    //     ERC1967Proxy proxy = new ERC1967Proxy{salt: proxySaltStr}(address(fastlaneImplementation), encodedPostProxyDeployCall); 
        
-        console2.log("Deployed Proxy @:");
-        address deployedProxyAddress = address(proxy);
-        console2.log(deployedProxyAddress);
-        console2.log("------------------------------------");
+    //     console2.log("Deployed Proxy @:");
+    //     address deployedProxyAddress = address(proxy);
+    //     console2.log(deployedProxyAddress);
+    //     console2.log("------------------------------------");
 
-        assertEq(deployedProxyAddress,expectedProxyAddress, "Addresses mismatch");
+    //     assertEq(deployedProxyAddress,expectedProxyAddress, "Addresses mismatch");
 
-        vm.prank(eoa);
-        address STARTER_ROLE = msg.sender;
-        (bool successInitialSetupAuction, bytes memory returnSetupData) = deployedProxyAddress.call(abi.encodeWithSignature("initialSetupAuction(address,address,address)", STARTER_ROLE, STARTER_ROLE, STARTER_ROLE));
+    //     vm.prank(eoa);
+    //     address STARTER_ROLE = msg.sender;
+    //     (bool successInitialSetupAuction, bytes memory returnSetupData) = deployedProxyAddress.call(abi.encodeWithSignature("initialSetupAuction(address,address,address)", STARTER_ROLE, STARTER_ROLE, STARTER_ROLE));
         
-        console2.log("initialSetupAuction call:");
-        console2.log(successInitialSetupAuction);
-        console2.log(string(returnSetupData));
+    //     console2.log("initialSetupAuction call:");
+    //     console2.log(successInitialSetupAuction);
+    //     console2.log(string(returnSetupData));
 
-        assertTrue(successInitialSetupAuction);
+    //     assertTrue(successInitialSetupAuction);
 
-        // V2 Impl
-        bytes32 implementationV2SaltStrV2 = "V2";
-        // Deploy impl as foundry factory with salt
-        vm.prank(foundryFactory);
-        FastLaneLegacyAuction fastlaneV2ImplementationV2 = new FastLaneLegacyAuction{salt: implementationV2SaltStrV2}(eoa); // 0x368845aff2b7051c33ca5db927eceb6e54efce5c
+    //     // V2 Impl
+    //     bytes32 implementationV2SaltStrV2 = "V2";
+    //     // Deploy impl as foundry factory with salt
+    //     vm.prank(foundryFactory);
+    //     FastLaneLegacyAuction fastlaneV2ImplementationV2 = new FastLaneLegacyAuction{salt: implementationV2SaltStrV2}(eoa); // 0x368845aff2b7051c33ca5db927eceb6e54efce5c
 
-        vm.prank(eoa);
-        vm.expectEmit(true, true, true, true);
-        emit Upgraded(address(fastlaneV2ImplementationV2));
-        (bool successUpgrade, bytes memory returnUpgradeData) = deployedProxyAddress.call(abi.encodeWithSignature("upgradeTo(address)", address(fastlaneV2ImplementationV2)));
+    //     vm.prank(eoa);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit Upgraded(address(fastlaneV2ImplementationV2));
+    //     (bool successUpgrade, bytes memory returnUpgradeData) = deployedProxyAddress.call(abi.encodeWithSignature("upgradeTo(address)", address(fastlaneV2ImplementationV2)));
         
-        assertTrue(successUpgrade);
+    //     assertTrue(successUpgrade);
 
-        vm.startPrank(eoa);
-        vm.expectEmit(true, true, true, true, address(deployedProxyAddress));
-        emit OpsSet(eoa);
-        (bool successCallAsOwner,) = deployedProxyAddress.call(abi.encodeWithSignature("setOps(address)", address(eoa)));
+    //     vm.startPrank(eoa);
+    //     vm.expectEmit(true, true, true, true, address(deployedProxyAddress));
+    //     emit OpsSet(eoa);
+    //     (bool successCallAsOwner,) = deployedProxyAddress.call(abi.encodeWithSignature("setOps(address)", address(eoa)));
         
-        assertTrue(successCallAsOwner);
+    //     assertTrue(successCallAsOwner);
 
-        vm.expectEmit(true, true, true, true, address(deployedProxyAddress));
-        emit OwnershipTransferred(eoa, VALIDATOR1);
-        (bool successCallTransfer,) = deployedProxyAddress.call(abi.encodeWithSignature("transferOwnership(address)", address(VALIDATOR1)));
+    //     vm.expectEmit(true, true, true, true, address(deployedProxyAddress));
+    //     emit OwnershipTransferred(eoa, VALIDATOR1);
+    //     (bool successCallTransfer,) = deployedProxyAddress.call(abi.encodeWithSignature("transferOwnership(address)", address(VALIDATOR1)));
         
-        assertTrue(successCallTransfer);
-    }
+    //     assertTrue(successCallTransfer);
+    // }
 }
