@@ -867,10 +867,21 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.stopPrank();
     }
 
-    function testLimitedAndPermittedReentrantModifiersOnlyAllowPaymentProcessorToReenter() public {
-        // Test only pp allowed
+    function testLimitedAndPermittedReentrantModifiersBlockNonPaymentProcessorOnReenter() public {
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1 ether}(USER);
 
-        // Test reverts if reentered by not pp
+        address payee = address(1234321);
+        AttackerPaymentProcessorStep1 attackerPP1 = new AttackerPaymentProcessorStep1();
+        AttackerPaymentProcessorStep2 attackerPP2 = new AttackerPaymentProcessorStep2();
+
+        attackerPP1.setAttacker2(address(attackerPP2));
+        attackerPP1.setPayee(payee);
+
+        vm.startPrank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayUnapprovedReentrancy.selector);
+        PFR.collectFeesCustom(address(attackerPP1), "");
+        vm.stopPrank();
     }
 
 
@@ -1000,5 +1011,35 @@ contract ReenteringPayee {
     }
     receive() payable external {
         FastLaneAuctionHandler(payable(msg.sender)).collectFees();
+    }
+}
+
+contract AttackerPaymentProcessorStep1 {
+    address public attacker2; 
+    address public payee; // Receives ETH from AuctionHandler
+
+    function setAttacker2(address _attacker2) external {
+        attacker2 = _attacker2;
+    }
+
+    function setPayee(address _payee) external {
+        payee = _payee;
+    }
+
+    function payValidator(
+        address _validator,
+        uint256 _startBlock,
+        uint256 _endBlock,
+        uint256 _totalAmount,
+        bytes calldata _data
+    ) external {
+        // Then calls to intermediate contract which calls back to auction handler to test reentrancy
+        AttackerPaymentProcessorStep2(attacker2).reenterAuctionHandler(msg.sender, _validator, payee, _totalAmount);
+    }
+}
+
+contract AttackerPaymentProcessorStep2 {
+    function reenterAuctionHandler(address auctionHandlerAddress, address _validator, address payee, uint256 _totalAmount) public {
+        FastLaneAuctionHandler(payable(auctionHandlerAddress)).paymentCallback(_validator, payee, _totalAmount);
     }
 }
