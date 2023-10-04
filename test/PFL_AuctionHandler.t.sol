@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 
-import "contracts/legacy/FastLaneLegacyAuction.sol";
+// import "contracts/legacy/FastLaneLegacyAuction.sol";
 
 
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
@@ -22,7 +22,7 @@ import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
 import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
-import { MockPaymentProcessor } from "./mocks/MockPaymentProcessor.sol";
+import { MockPaymentProcessor, MockPaymentProcessorBroken } from "./mocks/MockPaymentProcessor.sol";
 
 
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
@@ -776,41 +776,112 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     // TODO handle uninitiatied validators not with startBlock == 0
-    function testPayValidatorCustom() public {
-        // Seed validator with ETH and in auction contract
-        vm.deal(VALIDATOR1, 1 ether);
-        _donateOneWeiToValidatorBalance();
+    function testCollectFeesCustom() public {
+        address ppAdmin = address(1234321); // PaymentProcessor admin
+        uint256 expectedValidatorBalance = 1 ether - 1;
 
+        // Set validator balance in auction handler to 1 ETH
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1 ether}(USER);
+        assertEq(PFR.getValidatorBalance(VALIDATOR1), 1 ether);
+
+        uint256 snap = vm.snapshot();
+
+        // Testing a working Payment Processor
+        vm.startPrank(ppAdmin);
         MockPaymentProcessor MPP = new MockPaymentProcessor();
-        uint256 msgValue = 1 ether;
-        uint256 customAllocation = 1e16; // 1% of 1e18
+        MPP.setPayee(ppAdmin); // Set ppAdmin as payee, will recieve ETH from AuctionHanlder
+        vm.stopPrank();
+
         bytes memory addressData = abi.encode(VALIDATOR1);
 
         // Reverts if payment processor address is zero address
         vm.prank(VALIDATOR1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayProcessorCannotBeZero.selector);
-        PFR.payValidatorCustom{value: msgValue}(address(0), customAllocation, addressData);
+        PFR.collectFeesCustom(address(0), addressData);
 
-        assertEq(address(MPP).balance, 0); // No ETH in PaymentProcessor before
+        assertEq(ppAdmin.balance, 0, "Payee unexpectedly has ETH before"); // Payee has no ETH before
 
         vm.prank(VALIDATOR1);
         vm.expectEmit(true, true, false, true, address(PFR));
         emit CustomPaymentProcessorPaid({
             payor: VALIDATOR1,
+            payee: ppAdmin,
             paymentProcessor: address(MPP),
-            totalAmount: msgValue,
-            customAllocation: customAllocation, 
+            totalAmount: expectedValidatorBalance,
             startBlock: 0,
             endBlock: block.number
         });
-        PFR.payValidatorCustom{value: msgValue}(address(MPP), customAllocation, addressData);
+        PFR.collectFeesCustom(address(MPP), addressData);
 
         assertEq(MPP.validator(), VALIDATOR1);
-        assertEq(MPP.totalAmount(), msgValue);
-        assertEq(MPP.customAllocation(), customAllocation);
+        assertEq(MPP.totalAmount(), expectedValidatorBalance);
         assertEq(MPP.startBlock(), 0);
         assertEq(MPP.endBlock(), block.number);
-        assertEq(address(MPP).balance, msgValue); // ETH in PaymentProcessor after
+        assertEq(ppAdmin.balance, expectedValidatorBalance, "Payee did not get ETH");
+
+        vm.revertTo(snap);
+
+        // Testing a broken Payment Processor
+        vm.startPrank(ppAdmin);
+        MockPaymentProcessorBroken MPPB = new MockPaymentProcessorBroken();
+        MPPB.setPayee(ppAdmin); // Set ppAdmin as payee, will recieve ETH from AuctionHanlder
+        vm.stopPrank();
+
+        assertEq(ppAdmin.balance, 0, "Payee has ETH before broken pp test");
+
+        // Expected to revert due to paymentCallback not being called inside Payment Processor
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayCustomPayoutCantBePartial.selector);
+        PFR.collectFeesCustom(address(MPPB), addressData);
+
+        assertEq(ppAdmin.balance, 0, "Payee should still not have any ETH");
+        // TODO remove either callbackLock or nonReentrant modifier in collectFeesCustom function
+    }
+
+    function testPaymentCallback() public {
+        // NOTE: Positive case of paymentCallback tested above in testCollectFeesCustom.
+        // Check paymentCallback reverts if not called by PaymentProcessor
+        // during the collectFeesCustom function call:
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayUnapprovedReentrancy.selector);
+        PFR.paymentCallback(VALIDATOR1, VALIDATOR1, 1 ether);
+    }
+
+    function testNonReentrantModifierBlocksAllReentrancy() public {
+        // Try use collectFees to reenter from validatorPayee
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1 ether}(USER);
+        ReenteringPayee payee = new ReenteringPayee();
+
+        vm.startPrank(VALIDATOR1);
+        PFR.updateValidatorPayee(address(payee));
+
+        // Fast forward
+        vm.warp(block.timestamp + 7 days);
+
+        // This revert message comes from Solmate's SafeTransferLib, and is triggered by "REENTRANCY" revert
+        // Use `forge test --match-test BlocksAllReentrancy -vvv` to see the inner revert message of "REENTRANCY"
+        vm.expectRevert(bytes("ETH_TRANSFER_FAILED")); 
+        PFR.collectFees();
+        vm.stopPrank();
+    }
+
+    function testLimitedAndPermittedReentrantModifiersBlockNonPaymentProcessorOnReenter() public {
+        vm.prank(USER);
+        PFR.payValidatorFee{value: 1 ether}(USER);
+
+        address payee = address(1234321);
+        AttackerPaymentProcessorStep1 attackerPP1 = new AttackerPaymentProcessorStep1();
+        AttackerPaymentProcessorStep2 attackerPP2 = new AttackerPaymentProcessorStep2();
+
+        attackerPP1.setAttacker2(address(attackerPP2));
+        attackerPP1.setPayee(payee);
+
+        vm.startPrank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayUnapprovedReentrancy.selector);
+        PFR.collectFeesCustom(address(attackerPP1), "");
+        vm.stopPrank();
     }
 
 
@@ -931,5 +1002,44 @@ contract SearcherRepayerOverpayerDouble {
 
         require(success, "ETH_TRANSFER_FAILED");
         return (true,bytes("ok"));
+    }
+}
+
+contract ReenteringPayee {
+    fallback() payable external {
+        FastLaneAuctionHandler(payable(msg.sender)).collectFees();
+    }
+    receive() payable external {
+        FastLaneAuctionHandler(payable(msg.sender)).collectFees();
+    }
+}
+
+contract AttackerPaymentProcessorStep1 {
+    address public attacker2; 
+    address public payee; // Receives ETH from AuctionHandler
+
+    function setAttacker2(address _attacker2) external {
+        attacker2 = _attacker2;
+    }
+
+    function setPayee(address _payee) external {
+        payee = _payee;
+    }
+
+    function payValidator(
+        address _validator,
+        uint256 _startBlock,
+        uint256 _endBlock,
+        uint256 _totalAmount,
+        bytes calldata _data
+    ) external {
+        // Then calls to intermediate contract which calls back to auction handler to test reentrancy
+        AttackerPaymentProcessorStep2(attacker2).reenterAuctionHandler(msg.sender, _validator, payee, _totalAmount);
+    }
+}
+
+contract AttackerPaymentProcessorStep2 {
+    function reenterAuctionHandler(address auctionHandlerAddress, address _validator, address payee, uint256 _totalAmount) public {
+        FastLaneAuctionHandler(payable(auctionHandlerAddress)).paymentCallback(_validator, payee, _totalAmount);
     }
 }

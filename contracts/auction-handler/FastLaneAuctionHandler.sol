@@ -2,7 +2,6 @@
 pragma solidity ^0.8.16;
 
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
-import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
 
 import { IPaymentProcessor } from "../interfaces/IPaymentProcessor.sol";
 
@@ -27,7 +26,7 @@ abstract contract FastLaneAuctionHandlerEvents {
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
-    event CustomPaymentProcessorPaid(address indexed payor, address indexed paymentProcessor, uint256 totalAmount, uint256 customAllocation, uint256 startBlock, uint256 endBlock);
+    event CustomPaymentProcessorPaid(address indexed payor, address indexed payee, address indexed paymentProcessor, uint256 totalAmount, uint256 startBlock, uint256 endBlock);
 
     // NOTE: Investigated Validators should be presumed innocent.  This event can be triggered inadvertently by honest validators
     // while building a block due to transaction nonces taking precedence over gasPrice.
@@ -59,6 +58,11 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayImmutableBlockAuthorRate();                                  // 0xe9271574
 
     error RelayPayeeUpdateInvalid();                                        // 0x561d7b2d
+    error RelayCustomCallbackLockInvalid();
+    error RelayCustomPayoutCantBePartial();
+
+    error RelayUnapprovedReentrancy();
+
 }
 
 /// @notice Validator Data Struct
@@ -68,8 +72,8 @@ abstract contract FastLaneAuctionHandlerEvents {
 /// @param blockOfLastWithdrawal Last time a withdrawal was initiated
 struct ValidatorData {
     address payee;
+    uint64 blockOfLastWithdraw;
     uint256 timeUpdated;
-    uint256 blockOfLastWithdraw;
 }
 
 struct PGAData {
@@ -82,7 +86,7 @@ interface ISearcherContract {
     function fastLaneCall(address, uint256, bytes calldata) external payable returns (bool, bytes memory);
 }
 
-contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard {
+contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
@@ -113,6 +117,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
     uint256 public validatorsTotal;
 
+    bytes32 private constant UNLOCKED = bytes32(uint256(1));
+    bytes32 private constant LOCKED = bytes32(uint256(2));
+
+    bytes32 private lock = UNLOCKED;
 
     /// @notice Submits a flash bid
     /// @dev Will revert if: already won, minimum bid not respected, or not from EOA
@@ -227,31 +235,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
             // TODO: Catch specific errors - remove custom errors first before coding. 
             emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
         }
-    }
-
-    /// @notice Pays a validator their fee via a custom payment processor
-    function payValidatorCustom(address paymentProcessor, uint256 customAllocation, bytes calldata data) external payable nonReentrant {
-        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
-        // TODO: Enforce the customAllocation scale? 1e18?
-        
-        uint256 blockOfLastWithdrawal = validatorsDataMap[getValidator()].blockOfLastWithdraw;
-
-        IPaymentProcessor(paymentProcessor).payValidator{value: msg.value}({
-            startBlock: blockOfLastWithdrawal,
-            endBlock: block.number,
-            totalAmount: msg.value,
-            customAllocation: customAllocation,
-            data: data
-        });
-
-        emit CustomPaymentProcessorPaid({
-            payor: msg.sender,
-            paymentProcessor: paymentProcessor,
-            totalAmount: msg.value,
-            customAllocation: customAllocation, 
-            startBlock: blockOfLastWithdrawal,
-            endBlock: block.number
-        });
     }
 
     function fastBidWrapper(
@@ -506,13 +489,59 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
 
         validatorsTotal -= payableBalance;
         validatorsBalanceMap[_validator] = 1;
-        validatorsDataMap[_validator].blockOfLastWithdraw = block.number;
+        validatorsDataMap[_validator].blockOfLastWithdraw = uint64(block.number);
         SafeTransferLib.safeTransferETH(
                 validatorPayee(_validator), 
                 payableBalance
         );
         emit RelayProcessingPaidValidator(_validator, payableBalance, msg.sender);
         return payableBalance;
+    }
+
+    /// @notice Pays a validator their fee via a custom payment processor
+    function collectFeesCustom(address paymentProcessor, bytes calldata data) 
+        external 
+        limitedReentrant(paymentProcessor) 
+        validPayee 
+    {
+        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
+
+        address validator = getValidator();
+        uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
+        
+        IPaymentProcessor(paymentProcessor).payValidator({
+            validator: validator,
+            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
+            endBlock: block.number,
+            totalAmount: validatorBalance,
+            data: data
+        });
+
+        if (validatorsBalanceMap[validator] != 1) revert RelayCustomPayoutCantBePartial();
+        validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
+    }
+
+    function paymentCallback(address validator, address payee, uint256 amount) 
+        external
+        permittedReentrant(validator)  
+    {
+       
+        validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
+        validatorsTotal -= amount;
+
+        SafeTransferLib.safeTransferETH(
+            payee, 
+            amount
+        );
+
+        emit CustomPaymentProcessorPaid({
+            payor: validator,
+            payee: payee,
+            paymentProcessor: msg.sender,
+            totalAmount: amount,
+            startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
+            endBlock: block.number
+        });
     }
 
     /// @notice Updates a validator payee
@@ -620,6 +649,27 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents, ReentrancyGuard
     /***********************************|
     |             Modifiers             |
     |__________________________________*/
+
+    modifier nonReentrant() {
+        require(lock == UNLOCKED, "REENTRANCY");
+
+        lock = LOCKED;
+        _;
+        lock = UNLOCKED;
+    }
+
+    modifier limitedReentrant(address paymentProcessor) {
+        require(lock == UNLOCKED, "REENTRANCY");
+
+        lock = keccak256(abi.encodePacked(getValidator(), paymentProcessor));
+        _;
+        lock = UNLOCKED;
+    }
+
+    modifier permittedReentrant(address approver) {
+        if(lock != keccak256(abi.encodePacked(approver, msg.sender))) revert RelayUnapprovedReentrancy();
+        _;
+    }
 
     modifier onlyActiveValidators() {
         if (validatorsBalanceMap[msg.sender] == 0 && validatorsBalanceMap[payeeMap[msg.sender]] == 0) revert RelayNotActiveValidator();
