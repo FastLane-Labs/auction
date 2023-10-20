@@ -92,7 +92,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
 
     uint256 internal constant MIN_GAS_SPENT_PGA = 100_000;
-    uint256 internal constant REFUND_GAS_SPENT = 2_500; // TODO: This is wrong - add in call cost & verify. 
 
     /// @notice The scale for validator refund share
     uint256 internal constant VALIDATOR_REFUND_SCALE = 10_000; // 1 = 0.01%
@@ -232,7 +231,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         ) returns (uint256 bidAmount) {
             emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
         } catch {
-            // TODO: Catch specific errors - remove custom errors first before coding. 
             emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
         }
     }
@@ -366,27 +364,19 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         uint256 surplus = (address(this).balance - balanceBefore) - _bidAmount;
         if (surplus > 0) {
 
-            // Only refund the searcher if the refund value exceeds its gas cost
-            if (surplus > REFUND_GAS_SPENT * tx.gasprice) {
-                
-                // If value came from the EOA, refund to EOA
-                if (msg.value > _bidAmount) {
-                    SafeTransferLib.safeTransferETH(
-                        tx.origin, 
-                        surplus
-                    );
-                
-                // Otherwise refund the searcher contract
-                } else {
-                    SafeTransferLib.safeTransferETH(
-                        _searcherToAddress, 
-                        surplus
-                    );
-                }
+            // If value came from the EOA, refund to EOA
+            if (msg.value > _bidAmount) {
+                SafeTransferLib.safeTransferETH(
+                    tx.origin, 
+                    surplus
+                );
             
-            // If refunding is too expensive, add it to _bidAmount
+            // Otherwise refund the searcher contract
             } else {
-                _bidAmount += surplus;
+                SafeTransferLib.safeTransferETH(
+                    _searcherToAddress, 
+                    surplus
+                );
             }
         }
 
