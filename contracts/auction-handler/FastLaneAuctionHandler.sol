@@ -231,6 +231,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         ) returns (uint256 bidAmount) {
             emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
         } catch {
+            if (msg.value > 0) {
+                SafeTransferLib.safeTransferETH(
+                    msg.sender, 
+                    msg.value
+                );
+            }
             emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
         }
     }
@@ -494,7 +500,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         limitedReentrant(paymentProcessor) 
         validPayee 
     {
-        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
+        if (paymentProcessor == address(0) || paymentProcessor == address(this)) revert RelayProcessorCannotBeZero();
 
         address validator = getValidator();
         uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
