@@ -80,6 +80,7 @@ struct PGAData {
     uint64 lowestGasPrice;
     uint64 lowestFastPrice;
     uint64 lowestTotalPrice;
+    bool paid;
 }
 
 interface ISearcherContract {
@@ -214,24 +215,68 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @notice Submits a fast bid
     /// @dev Will not revert
     /// @param fastGasPrice Bonus gasPrice rate that Searcher commits to pay to validator for gas used by searcher's call
+    /// @param executeOnLoss Boolean flag that enables Searcher calls to execute even if they lost the auction. 
     /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
     /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(fastPrice,msg.sender,callData)`
     function submitFastBid(
-        uint256 fastGasPrice, // Value commited to be paid at the end of execution
+        uint256 fastGasPrice, // surplus gasprice commited to be paid at the end of execution
+        bool executeOnLoss, // If true, execute even if searcher lost auction
         address searcherToAddress,
         bytes calldata searcherCallData 
-    ) external payable checkPGA(fastGasPrice) onlyEOA nonReentrant {
+    ) external payable onlyEOA nonReentrant {
 
         if (searcherToAddress == address(this) || searcherToAddress == msg.sender) revert RelaySearcherWrongParams();
 
-        // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
-        // proper transaction ordering is being followed. 
-        try this.fastBidWrapper{value: msg.value}(
-            msg.sender, fastGasPrice, searcherToAddress, searcherCallData
-        ) returns (uint256 bidAmount) {
-            emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
-        } catch {
-            emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
+        PGAData memory existing_bid = fulfilledPGAMap[block.number];
+        uint256 lowestFastPrice = uint256(existing_bid.lowestFastPrice);
+        uint256 lowestGasPrice = uint256(existing_bid.lowestGasPrice);
+        uint256 lowestTotalPrice = uint256(existing_bid.lowestTotalPrice);
+        bool alreadyPaid = existing_bid.paid;
+
+        // NOTE: These checks help mitigate the damage to searchers caused by relay error and adversarial validators by reverting
+        // early if the transactions are not sequenced pursuant to auction rules. 
+
+        // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block. 
+        // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management 
+        if (lowestGasPrice != 0 && lowestGasPrice < tx.gasprice) {
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
+        
+        // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.  
+        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= fastGasPrice + tx.gasprice) {
+            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
+        
+        // Execute the tx if there are no issues w/ ordering. 
+        // Execute the tx if the searcher enabled executeOnLoss or if the searcher won
+        } else if (executeOnLoss || !alreadyPaid) {
+
+            // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
+            // proper transaction ordering is being followed. 
+            try this.fastBidWrapper{value: msg.value}(
+                msg.sender, fastGasPrice, searcherToAddress, searcherCallData
+            ) returns (uint256 bidAmount) {
+
+                // Mark this auction as being complete to provide quicker reverts for subsequent searchers
+                fulfilledPGAMap[block.number] = PGAData({
+                    lowestGasPrice: uint64(tx.gasprice), 
+                    lowestFastPrice: uint64(fastGasPrice),
+                    lowestTotalPrice: uint64(fastGasPrice + tx.gasprice),
+                    paid: true
+                });
+
+                emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
+
+            } catch {
+                // Update the auction to provide quicker reverts for subsequent searchers
+                fulfilledPGAMap[block.number] = PGAData({
+                    lowestGasPrice: uint64(tx.gasprice), 
+                    lowestFastPrice: uint64(fastGasPrice),
+                    lowestTotalPrice: uint64(fastGasPrice + tx.gasprice),
+                    paid: alreadyPaid // carry forward any previous wins in the block
+                });
+
+                emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
+
+            }
         }
     }
 
@@ -731,42 +776,5 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             unchecked { ++i; }
         } 
         return false;
-    }
-
-    /// @notice Validates incoming PGA bid
-    /// @dev 
-    /// @param fastGasPrice Amount committed to be repaid
-    modifier checkPGA(uint256 fastGasPrice) {
-        if (fastGasPrice == 0 || fastGasPrice > tx.gasprice) {
-            revert RelayAuctionInvalidBid();
-        }
-
-        PGAData memory existing_bid = fulfilledPGAMap[block.number];
-        uint256 lowestFastPrice = uint256(existing_bid.lowestFastPrice);
-        uint256 lowestGasPrice = uint256(existing_bid.lowestGasPrice);
-        uint256 lowestTotalPrice = uint256(existing_bid.lowestTotalPrice);
-
-        // NOTE: These checks help mitigate the damage to searchers caused by relay error and adversarial validators by reverting
-        // early if the transactions are not sequenced pursuant to auction rules. 
-
-        // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block. 
-        // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management 
-        if (lowestGasPrice != 0 && lowestGasPrice < tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
-        
-        // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.  
-        } else if (lowestTotalPrice != 0 && lowestTotalPrice <= fastGasPrice + tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
-        
-        // Execute the tx if there are no issues w/ ordering. 
-        } else {
-            _;
-            // Mark this auction as being complete to provide quicker reverts for subsequent searchers
-            fulfilledPGAMap[block.number] = PGAData({
-                lowestGasPrice: uint64(tx.gasprice), 
-                lowestFastPrice: uint64(fastGasPrice),
-                lowestTotalPrice: uint64(fastGasPrice + tx.gasprice)
-            });
-        }
     }
 }
