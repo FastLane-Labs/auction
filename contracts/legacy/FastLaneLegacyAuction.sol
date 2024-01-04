@@ -174,7 +174,7 @@ contract FastLaneLegacyAuction is Initializable, OwnableUpgradeable , UUPSUpgrad
     }
 
     function initialize(address _newOwner) public initializer {
-        __Ownable_init();
+        // __Ownable_init();
         __UUPSUpgradeable_init();
         _transferOwnership(_newOwner);
     }
