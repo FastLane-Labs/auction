@@ -274,22 +274,21 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
     function testSubmitFastBid() public {
         vm.deal(SEARCHER_ADDRESS1, 150 ether);
-        vm.startPrank(SEARCHER_ADDRESS1);
+        vm.startPrank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
 
         SearcherContractExample SCE = new SearcherContractExample();
-        SearcherRepayerOverpayerDouble SCEOverpay = new SearcherRepayerOverpayerDouble();
+        SCE.setPFLAuctionAddress(address(PFR));
+
         bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", vm.addr(12), 1337);
 
-        // Test all rejection cases first
-        vm.txGasPrice(10 gwei);
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayAuctionInvalidBid.selector);
-        PFR.submitFastBid(20 gwei, address(SCE), searcherCallData);
+        // RelaySearcherWrongParams revert
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
+        PFR.submitFastBid(20 gwei, false, address(PFR), searcherCallData); // searcherToAddress = PFR
 
-        // Then make a successful bid with medium payment
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
+        PFR.submitFastBid(20 gwei, false, SEARCHER_ADDRESS1, searcherCallData); // searcherToAddress = searcher's EOA
 
-        // Make sure higher bids are rejected
-
-        // And check if lower bids are accepted
+        vm.stopPrank();
     }
 
     function testWrongSearcherRepay() public {
