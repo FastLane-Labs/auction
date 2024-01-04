@@ -16,4 +16,5 @@ names = true
 sizes = true
 gas_price = 60000000000
 solc_version = '0.8.20'
+evm_version = 'paris'
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
