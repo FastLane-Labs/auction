@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicensed
-pragma solidity 0.8.16;
+pragma solidity ^0.8.16;
 
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
