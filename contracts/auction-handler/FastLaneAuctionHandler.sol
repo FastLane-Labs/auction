@@ -96,6 +96,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @notice The scale for validator refund share
     uint256 internal constant VALIDATOR_REFUND_SCALE = 10_000; // 1 = 0.01%
 
+    /// @notice The default refund share for validators
+    int256 internal constant DEFAULT_VALIDATOR_REFUND_SHARE = 5000; // 50%
+
     /// @notice Mapping to Validator Data Struct
     mapping(address => ValidatorData) internal validatorsDataMap;
 
@@ -111,10 +114,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @notice Map key is block.number
     mapping(uint256 => PGAData) public fulfilledPGAMap;
 
-    /// @notice Map[validator] = % payment to validator in a bid with refund
-    mapping(address => uint256) public validatorsRefundShareMap;
-
     uint256 public validatorsTotal;
+
+    /// @notice Map[validator] = % payment to validator in a bid with refund
+    mapping(address => int256) private validatorsRefundShareMap;
 
     bytes32 private constant UNLOCKED = bytes32(uint256(1));
     bytes32 private constant LOCKED = bytes32(uint256(2));
@@ -182,7 +185,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
             
             if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            if (validatorsRefundShareMap[block.coinbase] > VALIDATOR_REFUND_SCALE) revert RelayValidatorNotAcceptingRefundBids();
+            if (getValidatorRefundShare(block.coinbase) > VALIDATOR_REFUND_SCALE) revert RelayValidatorNotAcceptingRefundBids();
 
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
@@ -405,7 +408,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         }
 
         // Calculate the split of payment
-        uint256 validatorShare = (validatorsRefundShareMap[block.coinbase] * bidAmount) / VALIDATOR_REFUND_SCALE;
+        uint256 validatorShare = (getValidatorRefundShare(block.coinbase) * bidAmount) / VALIDATOR_REFUND_SCALE;
         uint256 refundAmount = bidAmount - validatorShare; // subtract to ensure no overflow
 
         // Update balance and make payment
@@ -582,7 +585,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         // ensure that validators can't insert txs to boost their refund rates during their own blocks
         if (validator == block.coinbase) revert RelayImmutableBlockAuthorRate();
 
-        validatorsRefundShareMap[validator] = refundShare;
+        validatorsRefundShareMap[validator] = int256(refundShare) - DEFAULT_VALIDATOR_REFUND_SHARE;
+    }
+
+    function getValidatorRefundShare(address validator) public view returns (uint256) {
+        return uint256(validatorsRefundShareMap[validator] + DEFAULT_VALIDATOR_REFUND_SHARE);
     }
 
     /***********************************|

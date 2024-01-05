@@ -160,6 +160,18 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         }
     }
 
+    function testUpdateValidatorRefundShare() public {
+        uint256 newShare = 7500;
+
+        PFR.payValidatorFee{value: 1}(SEARCHER_ADDRESS1);
+
+        vm.coinbase(address(0));
+        vm.prank(VALIDATOR1);
+        PFR.updateValidatorRefundShare(newShare);
+
+        assertEq(newShare, PFR.getValidatorRefundShare(VALIDATOR1));
+    }
+
     function testSubmitFlashBidWithRefund() public {
 
         vm.deal(SEARCHER_ADDRESS1, 150 ether);
