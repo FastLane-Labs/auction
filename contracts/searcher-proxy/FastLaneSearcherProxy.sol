@@ -38,8 +38,8 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
         // to allow this contract.
         (bool success, bytes memory returnedData) = searcherContract.call(_searcherCallData);
 
-        // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
         if (!success) {
+            // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
             return (false, returnedData);
         }
 

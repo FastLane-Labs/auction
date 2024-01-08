@@ -34,8 +34,8 @@ abstract contract FastLaneSearcherDirectContract is ReentrancyGuard {
         // Execute the searcher's intended function
         (bool success, bytes memory returnedData) = address(this).call(_searcherCallData);
 
-        // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
         if (!success) {
+            // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
             return (false, returnedData);
         }
 
