@@ -7,13 +7,10 @@ import "forge-std/Script.sol";
 import {FastLaneAuctionHandler} from "../contracts/auction-handler/FastLaneAuctionHandler.sol";
 
 contract Deploy is Script {
-
-
     address public fastlane;
 
     mapping(uint256 => address) public gelatoOpsAddresses;
     mapping(uint256 => address) public wrappedNativeAddresses;
-
 
     function getArgs() public view returns (address initial_bid_token, address ops) {
         ops = gelatoOpsAddresses[block.chainid];
@@ -21,7 +18,6 @@ contract Deploy is Script {
     }
 
     function run() public {
-
         gelatoOpsAddresses[1] = 0xB3f5503f93d5Ef84b06993a1975B9D21B962892F;
         gelatoOpsAddresses[137] = 0x527a819db1eb0e34426297b03bae11F2f8B3A19E;
         gelatoOpsAddresses[80001] = 0xB3f5503f93d5Ef84b06993a1975B9D21B962892F;
@@ -32,9 +28,7 @@ contract Deploy is Script {
         wrappedNativeAddresses[80001] = 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889;
         wrappedNativeAddresses[31337] = 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889;
 
-
         (address initial_bid_token, address ops) = getArgs();
-
 
         require(ops != address(0), "O(o)ps");
         require(initial_bid_token != address(0), "Wrapped");
@@ -48,5 +42,4 @@ contract Deploy is Script {
 
         console2.log(fastlane);
     }
-
 }
