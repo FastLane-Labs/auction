@@ -16,7 +16,7 @@ import "contracts/interfaces/IWMatic.sol";
 
 import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
 
-import { PFLHelper } from "./legacy-test/PFLAuction.t.sol";
+import { PFLHelper } from "./PFLHelper.t.sol";
 
 import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
