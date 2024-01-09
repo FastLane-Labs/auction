@@ -15,3 +15,5 @@ mnemonic*
 .mnemonic*
 tmp/
 broadcast/
+lcov.info
+report
