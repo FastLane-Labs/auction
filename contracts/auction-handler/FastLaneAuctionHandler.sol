@@ -215,9 +215,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         address searcherToAddress,
         bytes memory searcherCallData
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
-            
-            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            if (getValidatorRefundShare(block.coinbase) > VALIDATOR_REFUND_SCALE) revert RelayValidatorNotAcceptingRefundBids();
+        if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
+        if (getValidatorRefundShare(block.coinbase) > VALIDATOR_REFUND_SCALE) {
+            revert RelayValidatorNotAcceptingRefundBids();
+        }
 
         // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
         // And forward msg.value
