@@ -7,26 +7,23 @@ import "forge-std/console2.sol";
 
 // import "contracts/legacy/FastLaneLegacyAuction.sol";
 
-
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/utils/Address.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import "contracts/interfaces/IWMatic.sol";
 
-import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
+import {MockERC20} from "solmate/test/utils/mocks/MockERC20.sol";
 
-import { PFLHelper } from "./legacy-test/PFLAuction.t.sol";
+import {PFLHelper} from "./PFLHelper.t.sol";
 
 import "contracts/auction-handler/FastLaneAuctionHandler.sol";
 
-import { SearcherContractExample } from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
+import {SearcherContractExample} from "contracts/searcher-direct/FastLaneSearcherDirect.sol";
 
-import { MockPaymentProcessor, MockPaymentProcessorBroken } from "./mocks/MockPaymentProcessor.sol";
-
+import {MockPaymentProcessor, MockPaymentProcessorBroken} from "./mocks/MockPaymentProcessor.sol";
 
 contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
-
     // TODO consider moving addrs to PFLAuction or another helper
     address constant PAYEE1 = address(0x8881);
     address constant PAYEE2 = address(0x8882);
@@ -38,6 +35,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     FastLaneAuctionHandler PFR;
     BrokenUniswap brokenUniswap;
     address PFL_VAULT = OPS_ADDRESS;
+
     function setUp() public {
         // Give money
         for (uint256 i = 0; i < BIDDERS.length; i++) {
@@ -45,8 +43,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
             address currentSearcher = SEARCHERS[i];
             uint256 soonWMaticBidder = (10 ether * (i + 1));
             uint256 soonWMaticSearcher = (33 ether * (i + 1));
-            vm.label(currentBidder,string.concat("BIDDER",Strings.toString(i+1)));
-            vm.label(currentSearcher,string.concat("SEARCHER",Strings.toString(i+1)));
+            vm.label(currentBidder, string.concat("BIDDER", Strings.toString(i + 1)));
+            vm.label(currentSearcher, string.concat("SEARCHER", Strings.toString(i + 1)));
             vm.deal(currentBidder, soonWMaticBidder + 1);
             vm.deal(currentSearcher, soonWMaticSearcher + 1);
         }
@@ -59,15 +57,14 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.deal(address(brokenUniswap), 100 ether);
         vm.deal(USER, 100 ether);
         vm.coinbase(VALIDATOR1);
-        vm.label(VALIDATOR1,"VALIDATOR1");
-        vm.label(VALIDATOR2,"VALIDATOR2");
-        vm.label(USER,"USER");
-        console.log("Block Coinbase: %s",block.coinbase);
+        vm.label(VALIDATOR1, "VALIDATOR1");
+        vm.label(VALIDATOR2, "VALIDATOR2");
+        vm.label(USER, "USER");
+        console.log("Block Coinbase: %s", block.coinbase);
         vm.warp(1641070800);
     }
 
     function testSubmitFlashBid() public {
-
         vm.deal(SEARCHER_ADDRESS1, 150 ether);
 
         uint256 bidAmount = 0.001 ether;
@@ -84,23 +81,24 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         address expectedAnAddress = vm.addr(12);
         uint256 expectedAnAmount = 1337;
 
-        // Simply abi encode the args we want to forward to the searcher contract so it can execute them 
-        bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", expectedAnAddress, expectedAnAmount);
+        // Simply abi encode the args we want to forward to the searcher contract so it can execute them
+        bytes memory searcherCallData =
+            abi.encodeWithSignature("doStuff(address,uint256)", expectedAnAddress, expectedAnAmount);
 
         console.log("Tx origin: %s", tx.origin);
         console.log("Address this: %s", address(this));
         console.log("Address PFR: %s", address(PFR));
         console.log("Owner SCE: %s", SCE.owner());
 
-        vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        vm.startPrank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
-        PFR.submitFlashBid(bidAmount, oppTx, address(0),  searcherCallData);
+        PFR.submitFlashBid(bidAmount, oppTx, address(0), searcherCallData);
 
         bidAmount = 2 ether;
 
         SCE.setPFLAuctionAddress(address(0));
         vm.expectRevert(bytes("InvalidPermissions"));
-        PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
+        PFR.submitFlashBid(bidAmount, oppTx, to, searcherCallData);
         // Authorize Relay as Searcher
         SCE.setPFLAuctionAddress(address(PFR));
 
@@ -108,12 +106,12 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         SCE.approveFastLaneEOA(address(this));
 
         vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 0"));
-        PFR.submitFlashBid(bidAmount, oppTx, to,  searcherCallData);
+        PFR.submitFlashBid(bidAmount, oppTx, to, searcherCallData);
 
         // Can oddly revert with "EvmError: OutOfFund".
         vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 1000000000000000000"));
         console.log("Balance SCE: %s", to.balance);
-        PFR.submitFlashBid{value: 1 ether}(bidAmount, oppTx, to,  searcherCallData);
+        PFR.submitFlashBid{value: 1 ether}(bidAmount, oppTx, to, searcherCallData);
 
         uint256 snap = vm.snapshot();
 
@@ -131,11 +129,15 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Replay attempt
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayAuctionBidReceivedLate.selector);
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to,  searcherCallData);
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, oppTx, to, searcherCallData);
 
         // Not winner
-        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount));
-        PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, oppTx, to,  searcherCallData);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount
+            )
+        );
+        PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, oppTx, to, searcherCallData);
 
         uint256 snap2 = vm.snapshot();
 
@@ -145,7 +147,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Searcher overpays
         vm.expectEmit(true, true, true, true);
         emit RelayFlashBid(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2.5 ether, 5 ether, address(SCEOverpay));
-        PFR.submitFlashBid{value: 5 ether}(2.5 ether, oppTx, to,  searcherCallData);
+        PFR.submitFlashBid{value: 5 ether}(2.5 ether, oppTx, to, searcherCallData);
 
         vm.revertTo(snap2);
         to = address(SCE);
@@ -153,15 +155,12 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Failed searcher call inside their contract
         bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()");
         {
- 
-        vm.expectRevert("FAIL_ON_PURPOSE");
-        PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to,  searcherFailCallData);
-
+            vm.expectRevert("FAIL_ON_PURPOSE");
+            PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to, searcherFailCallData);
         }
     }
 
     function testSubmitFlashBidWithRefund() public {
-
         vm.deal(SEARCHER_ADDRESS1, 150 ether);
 
         uint256 bidAmount = 0.001 ether;
@@ -189,7 +188,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         address expectedAnAddress = vm.addr(12);
         uint256 expectedAnAmount = 1337;
 
-        // Simply abi encode the args we want to forward to the searcher contract so it can execute them 
+        // Simply abi encode the args we want to forward to the searcher contract so it can execute them
         bytes memory searcherCallData = abi.encodeWithSignature("doStuff(address,uint256)", vm.addr(12), 1337);
 
         console.log("Tx origin: %s", tx.origin);
@@ -197,7 +196,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         console.log("Address PFR: %s", address(PFR));
         console.log("Owner SCE: %s", SCE.owner());
 
-        vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        vm.startPrank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
         PFR.submitFlashBidWithRefund(bidAmount, oppTx, REFUND_RECIPIENT, address(0), searcherCallData);
 
@@ -219,11 +218,13 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectRevert(bytes("SearcherInsufficientFunds  2000000000000000000 1000000000000000000"));
         console.log("Balance SCE: %s", to.balance);
         PFR.submitFlashBidWithRefund{value: 1 ether}(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
-        
+
         uint256 snap = vm.snapshot();
 
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBidWithRefund(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2 ether, 2 ether, address(SCE), 1 ether, REFUND_RECIPIENT);
+        emit RelayFlashBidWithRefund(
+            SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2 ether, 2 ether, address(SCE), 1 ether, REFUND_RECIPIENT
+        );
         PFR.submitFlashBidWithRefund{value: 5 ether}(2 ether, oppTx, REFUND_RECIPIENT, to, searcherCallData);
 
         // Check Balances
@@ -242,7 +243,11 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.submitFlashBidWithRefund{value: 5 ether}(bidAmount, oppTx, REFUND_RECIPIENT, to, searcherCallData);
 
         // Not winner
-        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                FastLaneAuctionHandlerEvents.RelayAuctionSearcherNotWinner.selector, bidAmount - 1, bidAmount
+            )
+        );
         PFR.submitFlashBidWithRefund{value: 5 ether}(bidAmount - 1, oppTx, REFUND_RECIPIENT, to, searcherCallData);
 
         uint256 snap2 = vm.snapshot();
@@ -252,24 +257,26 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // Searcher overpays
         vm.expectEmit(true, true, true, true);
-        emit RelayFlashBidWithRefund(SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2.5 ether, 5 ether, address(SCEOverpay), 2.5 ether, REFUND_RECIPIENT);
+        emit RelayFlashBidWithRefund(
+            SEARCHER_ADDRESS1, oppTx, VALIDATOR1, 2.5 ether, 5 ether, address(SCEOverpay), 2.5 ether, REFUND_RECIPIENT
+        );
         PFR.submitFlashBidWithRefund{value: 5 ether}(2.5 ether, oppTx, REFUND_RECIPIENT, to, searcherCallData);
 
         vm.revertTo(snap2);
         to = address(SCE);
 
         // Failed searcher call inside their contract
-        bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()"); 
+        bytes memory searcherFailCallData = abi.encodeWithSignature("doFail()");
         {
-        vm.expectRevert("FAIL_ON_PURPOSE");
-        PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to,  searcherFailCallData);
+            vm.expectRevert("FAIL_ON_PURPOSE");
+            PFR.submitFlashBid{value: 5 ether}(bidAmount - 1, bytes32("willfailtx"), to, searcherFailCallData);
         }
     }
 
     function testCantExternalfastBidWrapper() public {
         vm.startPrank(SEARCHER_ADDRESS1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayMustBeSelf.selector);
-        PFR.fastBidWrapper(address(0),0,address(0),bytes("willfail"));
+        PFR.fastBidWrapper(address(0), 0, address(0), bytes("willfail"));
     }
 
     function testSubmitFastBid() public {
@@ -293,7 +300,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
     }
 
     function testWrongSearcherRepay() public {
-
         uint256 bidAmount = 2 ether;
 
         vm.startPrank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
@@ -303,29 +309,29 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Searcher BSFFLC contract forgot to implement fastLaneCall(uint256,address,bytes)
         BrokenSearcherForgotFastLaneCallFn BSFFLC = new BrokenSearcherForgotFastLaneCallFn();
         vm.expectRevert();
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BSFFLC),  searcherUnusedData);
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BSFFLC), searcherUnusedData);
 
         // Searcher BSFFLC contract implemented `fastLaneCall` but forgot to return (bool, bytes);
         BrokenSearcherForgotReturnBoolBytes BSFRBB = new BrokenSearcherForgotReturnBoolBytes();
         vm.expectRevert();
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BSFRBB),  searcherUnusedData);
-
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BSFRBB), searcherUnusedData);
 
         // Searcher implemented but doesn't manage to repay the relay
         BrokenSearcherRepayer BRP = new BrokenSearcherRepayer();
         vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayNotRepaid.selector, bidAmount, 0));
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BRP),  searcherUnusedData);
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BRP), searcherUnusedData);
 
         // Searcher implemented but doesn't manage to repay the relay in full
         BrokenSearcherRepayerPartial BRPP = new BrokenSearcherRepayerPartial();
         vm.deal(address(BRPP), 10 ether);
-        vm.expectRevert(abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayNotRepaid.selector, bidAmount, 1 ether));
-        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BRPP),  searcherUnusedData);
-        
+        vm.expectRevert(
+            abi.encodeWithSelector(FastLaneAuctionHandlerEvents.RelayNotRepaid.selector, bidAmount, 1 ether)
+        );
+        PFR.submitFlashBid{value: 5 ether}(bidAmount, bytes32("randomTx"), address(BRPP), searcherUnusedData);
     }
 
     function testSimulateFlashBid() public {
-        vm.startPrank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        vm.startPrank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         SearcherRepayerEcho SRE = new SearcherRepayerEcho();
 
         uint256 bidAmount = 0.00002 ether;
@@ -334,12 +340,12 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         vm.expectEmit(true, true, true, true);
         emit RelaySimulatedFlashBid(SEARCHER_ADDRESS1, bidAmount, oppTx, block.coinbase, address(SRE));
-        PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(SRE),  searcherUnusedData);
+        PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(SRE), searcherUnusedData);
         vm.stopPrank();
 
-        vm.prank(SEARCHER_ADDRESS1,SEARCHER_ADDRESS1);
+        vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelaySearcherWrongParams.selector);
-        PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(0),  searcherUnusedData);
+        PFR.simulateFlashBid{value: 5 ether}(bidAmount, oppTx, address(0), searcherUnusedData);
     }
 
     function testCollectReentrantFail() public {
@@ -354,7 +360,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         vm.expectRevert();
-        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE), searcherUnusedData);
     }
 
     function testCollectFees() public {
@@ -368,7 +374,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         SearcherRepayerEcho SRE = new SearcherRepayerEcho();
 
         vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
-        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE), searcherUnusedData);
 
         uint256 snap = vm.snapshot();
 
@@ -397,7 +403,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // As payee try to pay V1. Assume SEARCHER 4 is V1 payee but not yet set
         vm.startPrank(SEARCHER_ADDRESS4);
         address payee = PFR.getValidatorPayee(VALIDATOR1);
-        assertEq(payee,address(0));
+        assertEq(payee, address(0));
         bool valid = PFR.isValidPayee(VALIDATOR1, SEARCHER_ADDRESS4);
         assertEq(valid, false);
         bool isTimelocked = PFR.isPayeeTimeLocked(VALIDATOR1);
@@ -412,7 +418,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         isTimelocked = PFR.isPayeeTimeLocked(VALIDATOR1);
         assertEq(isTimelocked, true);
 
-        // Payee fails because still timelocked 
+        // Payee fails because still timelocked
         vm.prank(SEARCHER_ADDRESS4);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeIsTimelocked.selector);
         PFR.collectFees();
@@ -476,8 +482,8 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         _donateOneWeiToValidatorBalance();
         vm.coinbase(VALIDATOR1);
 
-        vm.label(PAYEE1,"PAYEE1");
-        vm.label(PAYEE2,"PAYEE2");
+        vm.label(PAYEE1, "PAYEE1");
+        vm.label(PAYEE2, "PAYEE2");
 
         vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
@@ -487,7 +493,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.prank(PAYEE1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeUpdateInvalid.selector);
         PFR.updateValidatorPayee(PAYEE1);
-        
+
         vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE2);
         vm.warp(block.timestamp + 7 days);
@@ -503,12 +509,10 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeUpdateInvalid.selector);
         PFR.updateValidatorPayee(VALIDATOR1);
 
-       
         // Cant relinquish back to any validator in use
         vm.prank(PAYEE1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayPayeeUpdateInvalid.selector);
         PFR.updateValidatorPayee(VALIDATOR2);
-   
 
         // Ensure it's not stuck
         vm.prank(VALIDATOR1);
@@ -520,25 +524,22 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.updateValidatorPayee(PAYEE1);
         vm.warp(block.timestamp + 7 days);
         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
-
     }
 
     function testClearPayeeAndHostilePayeeUpdate() public {
-
         _donateOneWeiToValidatorBalance();
         _donateOneWeiToValidatorBalance();
         vm.coinbase(VALIDATOR1);
 
-        vm.label(PAYEE1,"PAYEE1");
-        vm.label(PAYEE2,"PAYEE2");
+        vm.label(PAYEE1, "PAYEE1");
+        vm.label(PAYEE2, "PAYEE2");
 
-     
         vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
         vm.warp(block.timestamp + 7 days);
         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
 
-        uint snap = vm.snapshot();
+        uint256 snap = vm.snapshot();
 
         // Validator can clear and old Payee can't act anymore.
 
@@ -554,7 +555,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.prank(PAYEE1);
         vm.expectRevert();
         PFR.updateValidatorPayee(PAYEE2);
-        
+
         vm.revertTo(snap);
 
         // Payee cant clear himself
@@ -572,7 +573,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // Validator trolls by assigning an upcoming but never seen yet
         // validator address as payee.
         // Locking its payeeMap : payeeMap[validator2] = validator1
-        // formerPayee of v1 will be v2 
+        // formerPayee of v1 will be v2
 
         vm.prank(VALIDATOR1);
 
@@ -580,7 +581,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.updateValidatorPayee(VALIDATOR2); // V1 Time locks Validator2
 
         vm.warp(block.timestamp + 7 days);
-
 
         vm.coinbase(VALIDATOR2);
         _donateOneWeiToValidatorBalance();
@@ -596,11 +596,10 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         // And then gets unlocked after 7d
         assertEq(PFR.getValidatorRecipient(VALIDATOR2), PAYEE2);
 
-
         vm.prank(VALIDATOR1);
         PFR.updateValidatorPayee(PAYEE1);
         vm.warp(block.timestamp + 7 days);
-        // To get things back 
+        // To get things back
         vm.prank(VALIDATOR2);
         PFR.clearValidatorPayee();
 
@@ -608,11 +607,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         PFR.updateValidatorPayee(PAYEE2);
         vm.warp(block.timestamp + 7 days);
         assertEq(PFR.getValidatorRecipient(VALIDATOR2), PAYEE2);
-
     }
 
-
-    // NOTE: This is unreachable because getValidator is internal and 
+    // NOTE: This is unreachable because getValidator is internal and
     //          only called when checks blocking this revert case have been passed
     // function testGetValidatorRevertsIfInvalidCaller() public {
     //     vm.startPrank(address(this));
@@ -652,7 +649,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE2);
     }
 
-    function testRandomUserCannotSetValidatorsPayee() public {        
+    function testRandomUserCannotSetValidatorsPayee() public {
         vm.prank(USER);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayInvalidSender.selector); // reverts in validPayee modifier
         PFR.updateValidatorPayee(USER);
@@ -754,7 +751,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         assertEq(PFR.getValidatorRecipient(VALIDATOR1), PAYEE1);
     }
 
-
     function testGetValidatorBlockOfLastWithdraw() public {
         // Setup for collectFees testing
         vm.deal(SEARCHER_ADDRESS1, 100 ether);
@@ -764,7 +760,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         bytes memory searcherUnusedData = abi.encodeWithSignature("unused()");
         SearcherRepayerEcho SRE = new SearcherRepayerEcho();
         vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
-        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE),  searcherUnusedData);
+        PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE), searcherUnusedData);
 
         // Returns 0 if no withdraws
         assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), 0);
@@ -862,7 +858,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
 
         // This revert message comes from Solmate's SafeTransferLib, and is triggered by "REENTRANCY" revert
         // Use `forge test --match-test BlocksAllReentrancy -vvv` to see the inner revert message of "REENTRANCY"
-        vm.expectRevert(bytes("ETH_TRANSFER_FAILED")); 
+        vm.expectRevert(bytes("ETH_TRANSFER_FAILED"));
         PFR.collectFees();
         vm.stopPrank();
     }
@@ -884,7 +880,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents {
         vm.stopPrank();
     }
 
-
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
         vm.prank(USER);
@@ -901,37 +896,34 @@ contract BrokenUniswap {
 
 // Purpose is to do nothing, hence not repaying the relay
 contract BrokenSearcherForgotFastLaneCallFn {
-    fallback() external payable {} 
+    fallback() external payable {}
 }
 
 contract BrokenSearcherForgotReturnBoolBytes {
-    function fastLaneCall(
-            address _sender,
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData
-    ) external payable /* returns (bool, bytes memory) <- FORGOTTEN */ {
-    }
+    function fastLaneCall(address _sender, uint256 _bidAmount, bytes calldata _searcherCallData)
+        external
+        payable /* returns (bool, bytes memory) <- FORGOTTEN */
+    {}
 }
-
 
 // Purpose is to do nothing, hence not repaying the relay
 contract BrokenSearcherRepayer {
-    function fastLaneCall(
-            address _sender,
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData
-    ) external payable returns (bool, bytes memory) {
-        return (true,bytes("ok"));
+    function fastLaneCall(address _sender, uint256 _bidAmount, bytes calldata _searcherCallData)
+        external
+        payable
+        returns (bool, bytes memory)
+    {
+        return (true, bytes("ok"));
     }
 }
 
 // Purpose is only repay partially the relay
 contract BrokenSearcherRepayerPartial {
-    function fastLaneCall(
-            address _sender,
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData
-    ) external payable returns (bool, bytes memory) {
+    function fastLaneCall(address _sender, uint256 _bidAmount, bytes calldata _searcherCallData)
+        external
+        payable
+        returns (bool, bytes memory)
+    {
         bool success;
         uint256 amount = 1 ether;
         address to = msg.sender;
@@ -941,17 +933,16 @@ contract BrokenSearcherRepayerPartial {
         }
 
         require(success, "ETH_TRANSFER_FAILED");
-        return (true,bytes("ok"));
+        return (true, bytes("ok"));
     }
 }
 
-
 contract SearcherRepayerEcho {
-    function fastLaneCall(
-            address _sender,
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData
-    ) external payable returns (bool, bytes memory) {
+    function fastLaneCall(address _sender, uint256 _bidAmount, bytes calldata _searcherCallData)
+        external
+        payable
+        returns (bool, bytes memory)
+    {
         bool success;
         address to = msg.sender;
 
@@ -961,17 +952,16 @@ contract SearcherRepayerEcho {
         }
 
         require(success, "ETH_TRANSFER_FAILED");
-        return (true,bytes("ok"));
+        return (true, bytes("ok"));
     }
 }
 
-
 contract SearcherRepayerEvilEcho {
-    function fastLaneCall(
-            address _sender,
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData
-    ) external payable returns (bool, bytes memory) {
+    function fastLaneCall(address _sender, uint256 _bidAmount, bytes calldata _searcherCallData)
+        external
+        payable
+        returns (bool, bytes memory)
+    {
         bool success;
         address payable to = payable(msg.sender);
 
@@ -982,16 +972,16 @@ contract SearcherRepayerEvilEcho {
         }
 
         require(success, "ETH_TRANSFER_FAILED");
-        return (true,bytes("ok"));
+        return (true, bytes("ok"));
     }
 }
 
 contract SearcherRepayerOverpayerDouble {
-    function fastLaneCall(
-            address _sender,
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData
-    ) external payable returns (bool, bytes memory) {
+    function fastLaneCall(address _sender, uint256 _bidAmount, bytes calldata _searcherCallData)
+        external
+        payable
+        returns (bool, bytes memory)
+    {
         bool success;
         uint256 amount = _bidAmount * 2;
         address to = msg.sender;
@@ -1001,21 +991,22 @@ contract SearcherRepayerOverpayerDouble {
         }
 
         require(success, "ETH_TRANSFER_FAILED");
-        return (true,bytes("ok"));
+        return (true, bytes("ok"));
     }
 }
 
 contract ReenteringPayee {
-    fallback() payable external {
+    fallback() external payable {
         FastLaneAuctionHandler(payable(msg.sender)).collectFees();
     }
-    receive() payable external {
+
+    receive() external payable {
         FastLaneAuctionHandler(payable(msg.sender)).collectFees();
     }
 }
 
 contract AttackerPaymentProcessorStep1 {
-    address public attacker2; 
+    address public attacker2;
     address public payee; // Receives ETH from AuctionHandler
 
     function setAttacker2(address _attacker2) external {
@@ -1039,7 +1030,12 @@ contract AttackerPaymentProcessorStep1 {
 }
 
 contract AttackerPaymentProcessorStep2 {
-    function reenterAuctionHandler(address auctionHandlerAddress, address _validator, address payee, uint256 _totalAmount) public {
+    function reenterAuctionHandler(
+        address auctionHandlerAddress,
+        address _validator,
+        address payee,
+        uint256 _totalAmount
+    ) public {
         FastLaneAuctionHandler(payable(auctionHandlerAddress)).paymentCallback(_validator, payee, _totalAmount);
     }
 }

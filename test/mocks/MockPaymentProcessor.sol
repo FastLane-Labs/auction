@@ -5,7 +5,6 @@ import {IPaymentProcessor} from "../../contracts/interfaces/IPaymentProcessor.so
 import {IFastLaneAuctionHandler} from "../../contracts/interfaces/IFastLaneAuctionHandler.sol";
 
 contract MockPaymentProcessor is IPaymentProcessor {
-
     address public payee; // Receives ETH from AuctionHandler
 
     // Test vars to verify data is passed correctly
@@ -40,7 +39,6 @@ contract MockPaymentProcessor is IPaymentProcessor {
 
 // Broken PaymentProcessor which does not call paymentCallback
 contract MockPaymentProcessorBroken is IPaymentProcessor {
-
     address public payee; // Receives ETH from AuctionHandler
 
     // Test vars to verify data is passed correctly
