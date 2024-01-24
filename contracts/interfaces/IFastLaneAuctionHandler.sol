@@ -85,7 +85,7 @@ interface IFastLaneAuctionHandler {
         address searcherToAddress,
         bytes memory searcherCallData
     ) external payable;
-    function submitFastBid(uint256 fastGasPrice, address searcherToAddress, bytes memory searcherCallData)
+    function submitFastBid(uint256 fastGasPrice, bool executeOnLoss, address searcherToAddress, bytes memory searcherCallData)
         external
         payable;
     function submitFlashBid(
