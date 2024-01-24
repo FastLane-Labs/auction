@@ -378,6 +378,14 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         emit RelayFeeCollected(_payor, block.coinbase, msg.value);
     }
 
+    function paySpecificValidatorFee(address _validator) external payable nonReentrant {
+        // TODO: block this when _validator == block.coinbase? 
+        if (msg.value == 0) revert RelayValueIsZero();
+        validatorsBalanceMap[_validator] += msg.value;
+        validatorsTotal += msg.value;
+        emit RelayFeeCollected(_validator, block.coinbase, msg.value);
+    }
+
     // Part of the PaymentProcessor interface. In this case, this is used to transfer a validator's balances from one
     // PFL contract to a new deployment.
     function payValidator(address validator, uint256 startBlock, uint256 endBlock, uint256 totalAmount, bytes calldata)
