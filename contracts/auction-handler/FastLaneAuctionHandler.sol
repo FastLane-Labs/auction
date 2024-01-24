@@ -4,6 +4,7 @@ pragma solidity ^0.8.16;
 import {SafeTransferLib, ERC20} from "solmate/utils/SafeTransferLib.sol";
 
 import {IPaymentProcessor} from "../interfaces/IPaymentProcessor.sol";
+import {IFastLaneAuctionHandler} from "../interfaces/IFastLaneAuctionHandler.sol";
 
 abstract contract FastLaneAuctionHandlerEvents {
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
@@ -57,6 +58,15 @@ abstract contract FastLaneAuctionHandlerEvents {
         uint256 endBlock
     );
 
+    event CustomPaymentProcessorReceived(
+        address indexed payor,
+        address indexed payee,
+        address indexed paymentProcessor,
+        uint256 totalAmount,
+        uint256 startBlock,
+        uint256 endBlock
+    );
+
     // NOTE: Investigated Validators should be presumed innocent.  This event can be triggered inadvertently by honest validators
     // while building a block due to transaction nonces taking precedence over gasPrice.
     event RelayInvestigateOutcome(
@@ -99,6 +109,7 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayCustomPayoutCantBePartial();
 
     error RelayUnapprovedReentrancy();
+    error RelayNotCurrentValidator();
 }
 
 /// @notice Validator Data Struct
@@ -372,6 +383,50 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         emit RelayFeeCollected(_payor, block.coinbase, msg.value);
     }
 
+    // Part of the PaymentProcessor interface. In this case, this is used to transfer a validator's balances from one
+    // PFL contract to a new deployment. 
+    function payValidator(
+        address validator,
+        uint256 startBlock,
+        uint256 endBlock,
+        uint256 totalAmount,
+        bytes calldata
+    ) external nonReentrant {
+        if (endBlock != block.number || startBlock >= block.number) revert RelayUnapprovedReentrancy();
+        if (validator == block.coinbase || msg.sender == block.coinbase || tx.origin == block.coinbase) {
+            // NOTE: Validators can arbitrarily set the block.coinbase. This should only be used to prevent
+            // withdraws and deposits / MEV payments to block.coinbase from occuring in the same block.
+            revert RelayNotCurrentValidator();
+        }
+        if (totalAmount == 0) revert RelayCannotBeZero();
+
+        // Store the current balance, don't necessarily trust the caller. 
+        uint256 balance = address(this).balance;
+        uint256 vTotal = validatorsTotal;
+
+        // Callback into the previous contract
+        IFastLaneAuctionHandler(msg.sender).paymentCallback(validator, address(this), totalAmount);
+
+        // Revert if balance hasn't been incremented by the expected amount.
+        if (address(this).balance != balance + totalAmount) revert RelayCustomPayoutCantBePartial();
+
+        // Make sure validator balances are unchanged to prevent double counting. 
+        if (vTotal != validatorsTotal) revert RelayUnapprovedReentrancy();
+
+        // Increment the balances.
+        validatorsBalanceMap[validator] += totalAmount;
+        validatorsTotal += totalAmount;
+
+        emit CustomPaymentProcessorReceived({
+            payor: msg.sender,
+            payee: validator,
+            paymentProcessor: address(this),
+            totalAmount: totalAmount,
+            startBlock: 0, // 0 to indicate this was a transfer
+            endBlock: 0 // 0 to indicate this was a transfer
+        });
+    }
+
     /// @notice Submits a SIMULATED flash bid. THE HTTP RELAY won't accept calls for this function.
     /// @notice This is just a convenience function for you to test by simulating a call to simulateFlashBid
     /// @notice To ensure your calldata correctly works when relayed to `_searcherToAddress`.fastLaneCall(_searcherCallData)
@@ -554,7 +609,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @dev Callable by either validator address or their payee address (if not changed recently).
     function collectFees() external nonReentrant validPayee returns (uint256) {
         // NOTE: Do not let validatorsBalanceMap[validator] balance go to 0, that will remove them from being an "active validator"
-        address _validator = getValidator();
+        address _validator = getValidatorIfNotCurrent();
 
         uint256 payableBalance = validatorsBalanceMap[_validator] - 1;
         if (payableBalance <= 0) revert RelayCannotBeZero();
@@ -575,7 +630,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     {
         if (paymentProcessor == address(0) || paymentProcessor == address(this)) revert RelayProcessorCannotBeZero();
 
-        address validator = getValidator();
+        address validator = getValidatorIfNotCurrent();
+
         uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
 
         IPaymentProcessor(paymentProcessor).payValidator({
@@ -649,11 +705,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @notice Updates a validator's share
     /// @param refundShare the share in % that should be paid to the validator
     function updateValidatorRefundShare(uint256 refundShare) public validPayee nonReentrant {
-        address validator = getValidator();
-
-        // ensure that validators can't insert txs to boost their refund rates during their own blocks
-        if (validator == block.coinbase) revert RelayImmutableBlockAuthorRate();
-
+        address validator = getValidatorIfNotCurrent();
         validatorsRefundShareMap[validator] = int256(refundShare) - DEFAULT_VALIDATOR_REFUND_SHARE;
     }
 
@@ -712,6 +764,23 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         }
         // throw if invalid
         revert("Invalid validator");
+    }
+
+    function getValidatorIfNotCurrent() internal view returns (address validator) {
+        if (validatorsBalanceMap[msg.sender] > 0) {
+            validator = msg.sender;
+        } else if (payeeMap[msg.sender] != address(0)) {
+            validator = payeeMap[msg.sender];
+        } else {
+            // throw if invalid
+            revert("Invalid validator");
+        }
+        
+        if (validator == block.coinbase || msg.sender == block.coinbase || tx.origin == block.coinbase) {
+            // NOTE: Validators can arbitrarily set the block.coinbase. This should only be used to prevent
+            // withdraws and deposits from occuring in the same block.
+            revert RelayNotCurrentValidator();
+        }
     }
 
     /**
