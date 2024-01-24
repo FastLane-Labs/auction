@@ -1,11 +1,10 @@
 //SPDX-License-Identifier: Unlicensed
 pragma solidity ^0.8.16;
 
-import { ReentrancyGuard } from "solmate/utils/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 
 contract FastLaneSearcherProxyContract is ReentrancyGuard {
-
     address public owner;
     address payable private PFLAuction;
     address payable private searcherContract;
@@ -27,32 +26,38 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
     // PFL will pass along the original msg.sender as _sender for the searcher to do additional checks
     // Do NOT forget `onlyRelayer` and `checkFastLaneEOA(_sender);` or ANYONE will be able to call your contract with arbitrary calldata
     function fastLaneCall(
-            address _sender, // Relay will always set this to msg.sender that called it. Ideally you (owner) or an approvedEOA.
-            uint256 _bidAmount,
-            bytes calldata _searcherCallData // contains func selector and calldata for your MEV transaction ie: abi.encodeWithSignature("doStuff(address,uint256)", 0xF00, 1212);
+        address _sender, // Relay will always set this to msg.sender that called it. Ideally you (owner) or an approvedEOA.
+        uint256 _bidAmount,
+        bytes calldata _searcherCallData // contains func selector and calldata for your MEV transaction ie: abi.encodeWithSignature("doStuff(address,uint256)", 0xF00, 1212);
     ) external payable onlyRelayer nonReentrant returns (bool, bytes memory) {
-        
-        // Make sure it's your own EOA that's calling your contract 
+        // Make sure it's your own EOA that's calling your contract
         checkFastLaneEOA(_sender);
 
         // Execute the searcher's intended function
         // /!\ Don't forget to whitelist `searcherContract` called function
         // to allow this contract.
         (bool success, bytes memory returnedData) = searcherContract.call(_searcherCallData);
-        
-        // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
+
         if (!success) {
+            // If the call didn't turn out the way you wanted, revert either here or inside your MEV function itself
             return (false, returnedData);
         }
 
         // Balance check then pay FastLane Auction Handler contract at the end
         require(
-            (address(this).balance >= _bidAmount), 
-            string(abi.encodePacked("SearcherInsufficientFunds  ", Strings.toString(_bidAmount), " ", Strings.toString(address(this).balance)))
+            (address(this).balance >= _bidAmount),
+            string(
+                abi.encodePacked(
+                    "SearcherInsufficientFunds  ",
+                    Strings.toString(_bidAmount),
+                    " ",
+                    Strings.toString(address(this).balance)
+                )
+            )
         );
 
         safeTransferETH(PFLAuction, _bidAmount);
-        
+
         // /!\ Important to return success true or relay will revert.
         // In case of success == false, `returnedData` will be used as revert message that can be decoded with `.humanizeError()`
         return (success, returnedData);
@@ -92,7 +97,7 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
         approvedEOAs[_eoaAddress] = false;
     }
 
-    function checkFastLaneEOA(address _eoaAddress) view internal {
+    function checkFastLaneEOA(address _eoaAddress) internal view {
         require(approvedEOAs[_eoaAddress] || _eoaAddress == owner, "SenderEOANotApproved");
     }
 
@@ -101,16 +106,14 @@ contract FastLaneSearcherProxyContract is ReentrancyGuard {
     }
 
     // Be aware with a fallback fn that:
-    // `address(this).call(_searcherCallData);` 
-    // Will hit this if _searcherCallData function is not implemented. 
+    // `address(this).call(_searcherCallData);`
+    // Will hit this if _searcherCallData function is not implemented.
     // And success will be true.
-    fallback() external payable {
-        
-    }
+    fallback() external payable {}
     receive() external payable {}
 
-    modifier onlyRelayer {
-          if (!isTrustedForwarder(msg.sender)) revert("InvalidPermissions");
-          _;
-     }
+    modifier onlyRelayer() {
+        if (!isTrustedForwarder(msg.sender)) revert("InvalidPermissions");
+        _;
+    }
 }

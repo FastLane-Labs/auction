@@ -1,68 +1,104 @@
 //SPDX-License-Identifier: Unlicensed
 pragma solidity ^0.8.16;
 
-import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
+import {SafeTransferLib, ERC20} from "solmate/utils/SafeTransferLib.sol";
 
-import { IPaymentProcessor } from "../interfaces/IPaymentProcessor.sol";
-
+import {IPaymentProcessor} from "../interfaces/IPaymentProcessor.sol";
 
 abstract contract FastLaneAuctionHandlerEvents {
-
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
 
-    event RelayFlashBid(address indexed sender, bytes32 indexed oppTxHash, address indexed validator, uint256 bidAmount, uint256 amountPaid, address searcherContractAddress);
-    event RelayFlashBidWithRefund(address indexed sender, bytes32 indexed oppTxHash, address indexed validator, uint256 bidAmount, uint256 amountPaid, address searcherContractAddress, uint256 refundedAmount, address refundAddress);
-    event RelayFastBid(address indexed sender, address indexed validator, bool success, uint256 bidAmount, address searcherContractAddress);
-    event RelaySimulatedFlashBid(address indexed sender, uint256 amount, bytes32 indexed oppTxHash, address indexed validator, address searcherContractAddress);
-
-    event RelayWithdrawStuckERC20(
-        address indexed receiver,
-        address indexed token,
-        uint256 amount
+    event RelayFlashBid(
+        address indexed sender,
+        bytes32 indexed oppTxHash,
+        address indexed validator,
+        uint256 bidAmount,
+        uint256 amountPaid,
+        address searcherContractAddress
     );
+    event RelayFlashBidWithRefund(
+        address indexed sender,
+        bytes32 indexed oppTxHash,
+        address indexed validator,
+        uint256 bidAmount,
+        uint256 amountPaid,
+        address searcherContractAddress,
+        uint256 refundedAmount,
+        address refundAddress
+    );
+    event RelayFastBid(
+        address indexed sender,
+        address indexed validator,
+        bool success,
+        uint256 bidAmount,
+        address searcherContractAddress
+    );
+    event RelaySimulatedFlashBid(
+        address indexed sender,
+        uint256 amount,
+        bytes32 indexed oppTxHash,
+        address indexed validator,
+        address searcherContractAddress
+    );
+
+    event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
     event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
-    
+
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
-    event CustomPaymentProcessorPaid(address indexed payor, address indexed payee, address indexed paymentProcessor, uint256 totalAmount, uint256 startBlock, uint256 endBlock);
+    event CustomPaymentProcessorPaid(
+        address indexed payor,
+        address indexed payee,
+        address indexed paymentProcessor,
+        uint256 totalAmount,
+        uint256 startBlock,
+        uint256 endBlock
+    );
 
     // NOTE: Investigated Validators should be presumed innocent.  This event can be triggered inadvertently by honest validators
     // while building a block due to transaction nonces taking precedence over gasPrice.
-    event RelayInvestigateOutcome(address indexed validator, address indexed sender, uint256 blockNumber, uint256 existingBidAmount, uint256 newBidAmount, uint256 existingGasPrice, uint256 newGasPrice);
+    event RelayInvestigateOutcome(
+        address indexed validator,
+        address indexed sender,
+        uint256 blockNumber,
+        uint256 existingBidAmount,
+        uint256 newBidAmount,
+        uint256 existingGasPrice,
+        uint256 newGasPrice
+    );
 
-    error RelayPermissionSenderNotOrigin();                                 // 0x5c8a268a
+    error RelayPermissionSenderNotOrigin(); // 0x5c8a268a
 
-    error RelaySearcherWrongParams();                                       // 0x31ae2a9d
+    error RelaySearcherWrongParams(); // 0x31ae2a9d
 
     // error RelaySearcherCallFailure(bytes retData);                       // 0x291bc14c /!\ Deprecated in favor of bubbling up
-    error RelayValueIsZero();                                               // 0x7da21207
+    error RelayValueIsZero(); // 0x7da21207
     // error RelaySimulatedSearcherCallFailure(bytes retData);              // 0x5be08ca5 /!\ Deprecated in favor of bubbling up
-    error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount);          // 0x53dc88d9
+    error RelayNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0x53dc88d9
     error RelaySimulatedNotRepaid(uint256 bidAmount, uint256 actualAmount); // 0xd47ae88a
 
-    error RelayAuctionInvalidBid();                                         // 0xa51c0e05
-    error RelayAuctionBidReceivedLate();                                    // 0xb61e767e
+    error RelayAuctionInvalidBid(); // 0xa51c0e05
+    error RelayAuctionBidReceivedLate(); // 0xb61e767e
     error RelayAuctionSearcherNotWinner(uint256 current, uint256 existing); // 0x5db6f7d9
 
-    error RelayCannotBeZero();                                              // 0x3c9cfe50
-    error RelayCannotBeSelf();                                              // 0x6a64f641
-    error RelayMustBeSelf();                                                // 0x3ee08eb4
+    error RelayCannotBeZero(); // 0x3c9cfe50
+    error RelayCannotBeSelf(); // 0x6a64f641
+    error RelayMustBeSelf(); // 0x3ee08eb4
 
-    error RelayValidatorNotAcceptingRefundBids();                           // 0x8b2dbdac
-    error RelayProcessorCannotBeZero();                                     // 0x779f4778
-    error RelayNotActiveValidator();                                        // 0x68a251a0
-    error RelayPayeeIsTimelocked();                                         // 0x9ec568f3
-    error RelayInvalidSender();                                             // 0x3e82c9f4
-    error RelayImmutableBlockAuthorRate();                                  // 0xe9271574
+    error RelayValidatorNotAcceptingRefundBids(); // 0x8b2dbdac
+    error RelayProcessorCannotBeZero(); // 0x779f4778
+    error RelayNotActiveValidator(); // 0x68a251a0
+    error RelayPayeeIsTimelocked(); // 0x9ec568f3
+    error RelayInvalidSender(); // 0x3e82c9f4
+    error RelayImmutableBlockAuthorRate(); // 0xe9271574
 
-    error RelayPayeeUpdateInvalid();                                        // 0x561d7b2d
+    error RelayPayeeUpdateInvalid(); // 0x561d7b2d
     error RelayCustomCallbackLockInvalid();
     error RelayCustomPayoutCantBePartial();
 
     error RelayUnapprovedReentrancy();
-
 }
 
 /// @notice Validator Data Struct
@@ -88,7 +124,6 @@ interface ISearcherContract {
 }
 
 contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
-
     /// @notice Constant delay before the stake share can be changed
     uint32 internal constant BLOCK_TIMELOCK = 6 days;
 
@@ -132,39 +167,36 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         uint256 bidAmount, // Value commited to be repaid at the end of execution
         bytes32 oppTxHash, // Target TX
         address searcherToAddress,
-        bytes calldata searcherCallData 
+        bytes calldata searcherCallData
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
+        if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
 
-            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            
-            // Store the current balance, excluding msg.value
-            uint256 balanceBefore = address(this).balance - msg.value;
+        // Store the current balance, excluding msg.value
+        uint256 balanceBefore = address(this).balance - msg.value;
 
-            {
+        {
             // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
             // And forward msg.value
             (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
-                        msg.sender,
-                        bidAmount,
-                        searcherCallData
+                msg.sender, bidAmount, searcherCallData
             );
 
             if (!success) {
-                    assembly {
-                        revert(
-                            // Start of revert data bytes. The 0x20 offset is always the same.
-                            add(retData, 0x20),
-                            // Length of revert data.
-                            mload(retData)
-                        )
-                    }
+                assembly {
+                    revert(
+                        // Start of revert data bytes. The 0x20 offset is always the same.
+                        add(retData, 0x20),
+                        // Length of revert data.
+                        mload(retData)
+                    )
                 }
             }
+        }
 
-            // Verify that the searcher paid the amount they bid & emit the event
-            uint256 amountPaid = _handleBalances(bidAmount, balanceBefore);
+        // Verify that the searcher paid the amount they bid & emit the event
+        uint256 amountPaid = _handleBalances(bidAmount, balanceBefore);
 
-            emit RelayFlashBid(msg.sender, oppTxHash, block.coinbase, bidAmount, amountPaid, searcherToAddress);
+        emit RelayFlashBid(msg.sender, oppTxHash, block.coinbase, bidAmount, amountPaid, searcherToAddress);
     }
 
     /// @notice Submits a flash bid which refunds a portion of payment to `refundAddress`
@@ -181,35 +213,34 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         address searcherToAddress,
         bytes memory searcherCallData
     ) external payable checkBid(oppTxHash, bidAmount) onlyEOA nonReentrant {
-            
-            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            if (validatorsRefundShareMap[block.coinbase] > VALIDATOR_REFUND_SCALE) revert RelayValidatorNotAcceptingRefundBids();
+        if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
+        if (validatorsRefundShareMap[block.coinbase] > VALIDATOR_REFUND_SCALE) {
+            revert RelayValidatorNotAcceptingRefundBids();
+        }
 
-            // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
-            // And forward msg.value
-            // Store the current balance, excluding msg.value
-            uint256 balanceBefore = address(this).balance - msg.value;
+        // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
+        // And forward msg.value
+        // Store the current balance, excluding msg.value
+        uint256 balanceBefore = address(this).balance - msg.value;
 
-            {
+        {
             (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
-                        msg.sender,
-                        bidAmount,
-                        searcherCallData
+                msg.sender, bidAmount, searcherCallData
             );
             if (!success) {
-                    assembly {
-                        revert(
-                            // Start of revert data bytes. The 0x20 offset is always the same.
-                            add(retData, 0x20),
-                            // Length of revert data.
-                            mload(retData)
-                        )
-                    }
+                assembly {
+                    revert(
+                        // Start of revert data bytes. The 0x20 offset is always the same.
+                        add(retData, 0x20),
+                        // Length of revert data.
+                        mload(retData)
+                    )
                 }
             }
+        }
 
-            // Verify that the searcher paid the amount they bid & emit the event
-            _handleBalancesWithRefundAndEmit(bidAmount, balanceBefore, refundAddress, oppTxHash, searcherToAddress);
+        // Verify that the searcher paid the amount they bid & emit the event
+        _handleBalancesWithRefundAndEmit(bidAmount, balanceBefore, refundAddress, oppTxHash, searcherToAddress);
     }
 
     /// @notice Submits a fast bid
@@ -265,6 +296,8 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
                 emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
 
+                return; // return early so that we don't refund the searcher's msg.value
+
             } catch {
                 // Update the auction to provide quicker reverts for subsequent searchers
                 fulfilledPGAMap[block.number] = PGAData({
@@ -278,15 +311,22 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
             }
         }
+
+        if (msg.value > 0) {
+            // Refund the searcher any msg.value for failed txs. 
+            SafeTransferLib.safeTransferETH(
+                msg.sender, 
+                msg.value
+            );
+        }
     }
 
     function fastBidWrapper(
         address msgSender,
         uint256 fastPrice, // Value commited to be paid at the end of execution
         address searcherToAddress,
-        bytes calldata searcherCallData 
+        bytes calldata searcherCallData
     ) external payable returns (uint256) {
-
         // This is meant to be called inside of a try/catch by address(this)
         if (msg.sender != address(this)) revert RelayMustBeSelf();
 
@@ -295,24 +335,22 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         uint256 gasSpent = gasleft();
 
         {
-        // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
-        // And forward msg.value
-        (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
-                    msgSender,
-                    fastPrice,
-                    searcherCallData
-        );
+            // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
+            // And forward msg.value
+            (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
+                msgSender, fastPrice, searcherCallData
+            );
 
-        if (!success) {
-                    assembly {
-                        revert(
-                            // Start of revert data bytes. The 0x20 offset is always the same.
-                            add(retData, 0x20),
-                            // Length of revert data.
-                            mload(retData)
-                        )
-                    }
+            if (!success) {
+                assembly {
+                    revert(
+                        // Start of revert data bytes. The 0x20 offset is always the same.
+                        add(retData, 0x20),
+                        // Length of revert data.
+                        mload(retData)
+                    )
                 }
+            }
         }
 
         // Calculate how much gas was spent by searcher
@@ -320,7 +358,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
         // Multiply the fastBidAmount (a rate) by the gas spent to get the total amount
         uint256 bidAmount = fastPrice * (gasSpent < MIN_GAS_SPENT_PGA ? MIN_GAS_SPENT_PGA : gasSpent);
-        
+
         return _handleBalancesFast(bidAmount, balanceBefore, searcherToAddress);
     }
 
@@ -332,7 +370,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     }
 
     /// @notice Submits a SIMULATED flash bid. THE HTTP RELAY won't accept calls for this function.
-    /// @notice This is just a convenience function for you to test by simulating a call to simulateFlashBid 
+    /// @notice This is just a convenience function for you to test by simulating a call to simulateFlashBid
     /// @notice To ensure your calldata correctly works when relayed to `_searcherToAddress`.fastLaneCall(_searcherCallData)
     /// @dev This does NOT check that current coinbase is participating in PFL.
     /// @dev Only use for testing _searcherCallData
@@ -345,45 +383,42 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         uint256 bidAmount, // Value commited to be repaid at the end of execution, can be set very low in simulated
         bytes32 oppTxHash, // Target TX
         address searcherToAddress,
-        bytes calldata searcherCallData 
-        ) external payable nonReentrant onlyEOA {
+        bytes calldata searcherCallData
+    ) external payable nonReentrant onlyEOA {
+        // Relax check on min bid amount for simulated
+        if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
 
-            // Relax check on min bid amount for simulated
-            if (searcherToAddress == address(0)) revert RelaySearcherWrongParams();
-            
-            // Store the current balance, excluding msg.value
-            uint256 balanceBefore = address(this).balance - msg.value;
+        // Store the current balance, excluding msg.value
+        uint256 balanceBefore = address(this).balance - msg.value;
 
-            // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
-            // And forward msg.value
-            (bool success, bytes memory retData) = ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(
-                        msg.sender,
-                        bidAmount,
-                        searcherCallData
-            );
+        // Call the searcher's contract (see searcher_contract.sol for example of call receiver)
+        // And forward msg.value
+        (bool success, bytes memory retData) =
+            ISearcherContract(searcherToAddress).fastLaneCall{value: msg.value}(msg.sender, bidAmount, searcherCallData);
 
-            if (!success) {
-                    assembly {
-                        revert(
-                            // Start of revert data bytes. The 0x20 offset is always the same.
-                            add(retData, 0x20),
-                            // Length of revert data.
-                            mload(retData)
-                        )
-                    }
-                }
-
-            // Verify that the searcher paid the amount they bid & emit the event
-            if (address(this).balance < balanceBefore + bidAmount) {
-                revert RelaySimulatedNotRepaid(bidAmount, address(this).balance - balanceBefore);
+        if (!success) {
+            assembly {
+                revert(
+                    // Start of revert data bytes. The 0x20 offset is always the same.
+                    add(retData, 0x20),
+                    // Length of revert data.
+                    mload(retData)
+                )
             }
-            emit RelaySimulatedFlashBid(msg.sender, bidAmount, oppTxHash, block.coinbase, searcherToAddress);
+        }
+
+        // Verify that the searcher paid the amount they bid & emit the event
+        if (address(this).balance < balanceBefore + bidAmount) {
+            revert RelaySimulatedNotRepaid(bidAmount, address(this).balance - balanceBefore);
+        }
+        emit RelaySimulatedFlashBid(msg.sender, bidAmount, oppTxHash, block.coinbase, searcherToAddress);
     }
 
-    /***********************************|
-    |    Internal Bid Helper Functions  |
-    |__________________________________*/
-
+    /**
+     * |
+     * |    Internal Bid Helper Functions  |
+     * |__________________________________
+     */
     function _handleBalances(uint256 _bidAmount, uint256 balanceBefore) internal returns (uint256) {
         if (address(this).balance < balanceBefore + _bidAmount) {
             revert RelayNotRepaid(_bidAmount, address(this).balance - balanceBefore);
@@ -399,7 +434,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         return _bidAmount;
     }
 
-    function _handleBalancesFast(uint256 _bidAmount, uint256 balanceBefore, address _searcherToAddress) internal returns (uint256) {
+    function _handleBalancesFast(uint256 _bidAmount, uint256 balanceBefore, address _searcherToAddress)
+        internal
+        returns (uint256)
+    {
         // Verify that the searcher paid the amount they bid & emit the event
         if (address(this).balance - balanceBefore < _bidAmount) {
             revert RelayNotRepaid(_bidAmount, address(this).balance - balanceBefore);
@@ -408,26 +446,19 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         // Check if searcher overpaid and, if so, initiate a refund
         uint256 surplus = (address(this).balance - balanceBefore) - _bidAmount;
         if (surplus > 0) {
-
             // If value came from the EOA, refund to EOA
             if (msg.value > _bidAmount) {
-                SafeTransferLib.safeTransferETH(
-                    tx.origin, 
-                    surplus
-                );
+                SafeTransferLib.safeTransferETH(tx.origin, surplus);
 
-            // Otherwise refund the searcher contract
+                // Otherwise refund the searcher contract
             } else {
-                SafeTransferLib.safeTransferETH(
-                    _searcherToAddress, 
-                    surplus
-                );
+                SafeTransferLib.safeTransferETH(_searcherToAddress, surplus);
             }
         }
 
         validatorsBalanceMap[block.coinbase] += _bidAmount;
         validatorsTotal += _bidAmount;
-        
+
         return _bidAmount;
     }
 
@@ -458,29 +489,34 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         validatorsTotal += validatorShare;
         payable(refundAddress).transfer(refundAmount);
 
-        emit RelayFlashBidWithRefund(msg.sender, oppTxHash, block.coinbase, originalBidAmount, bidAmount, searcherContract, refundAmount, refundAddress);
+        emit RelayFlashBidWithRefund(
+            msg.sender,
+            oppTxHash,
+            block.coinbase,
+            originalBidAmount,
+            bidAmount,
+            searcherContract,
+            refundAmount,
+            refundAddress
+        );
     }
 
     receive() external payable {}
 
     fallback() external payable {}
 
-
-    /***********************************|
-    |             Maintenance           |
-    |__________________________________*/
+    /**
+     * |
+     * |             Maintenance           |
+     * |__________________________________
+     */
 
     /// @notice Syncs stuck matic to calling validator
     /// @dev In the event something went really wrong / vuln report
-    function syncStuckNativeToken()
-        external
-        onlyActiveValidators
-        nonReentrant
-    {
+    function syncStuckNativeToken() external onlyActiveValidators nonReentrant {
         uint256 _expectedBalance = validatorsTotal;
         uint256 _currentBalance = address(this).balance;
         if (_currentBalance >= _expectedBalance) {
-
             address _validator = getValidator();
 
             uint256 _surplus = _currentBalance - _expectedBalance;
@@ -493,13 +529,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     }
 
     /// @notice Withdraws stuck ERC20
-    /// @dev In the event people send ERC20 instead of Matic we can send them back 
+    /// @dev In the event people send ERC20 instead of Matic we can send them back
     /// @param _tokenAddress Address of the stuck token
-    function withdrawStuckERC20(address _tokenAddress)
-        external
-        onlyActiveValidators
-        nonReentrant
-    {
+    function withdrawStuckERC20(address _tokenAddress) external onlyActiveValidators nonReentrant {
         ERC20 oopsToken = ERC20(_tokenAddress);
         uint256 oopsTokenBalance = oopsToken.balanceOf(address(this));
 
@@ -509,41 +541,40 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         }
     }
 
-    /***********************************|
-    |          Validator Functions      |
-    |__________________________________*/
+    /**
+     * |
+     * |          Validator Functions      |
+     * |__________________________________
+     */
 
     /// @notice Pays the validator their outstanding balance
     /// @dev Callable by either validator address or their payee address (if not changed recently).
-    function collectFees() external nonReentrant validPayee returns (uint256) { 
-        // NOTE: Do not let validatorsBalanceMap[validator] balance go to 0, that will remove them from being an "active validator"       
+    function collectFees() external nonReentrant validPayee returns (uint256) {
+        // NOTE: Do not let validatorsBalanceMap[validator] balance go to 0, that will remove them from being an "active validator"
         address _validator = getValidator();
 
-        uint256 payableBalance = validatorsBalanceMap[_validator] - 1;  
+        uint256 payableBalance = validatorsBalanceMap[_validator] - 1;
         if (payableBalance <= 0) revert RelayCannotBeZero();
 
         validatorsTotal -= payableBalance;
         validatorsBalanceMap[_validator] = 1;
         validatorsDataMap[_validator].blockOfLastWithdraw = uint64(block.number);
-        SafeTransferLib.safeTransferETH(
-                validatorPayee(_validator), 
-                payableBalance
-        );
+        SafeTransferLib.safeTransferETH(validatorPayee(_validator), payableBalance);
         emit RelayProcessingPaidValidator(_validator, payableBalance, msg.sender);
         return payableBalance;
     }
 
     /// @notice Pays a validator their fee via a custom payment processor
-    function collectFeesCustom(address paymentProcessor, bytes calldata data) 
-        external 
-        limitedReentrant(paymentProcessor) 
-        validPayee 
+    function collectFeesCustom(address paymentProcessor, bytes calldata data)
+        external
+        limitedReentrant(paymentProcessor)
+        validPayee
     {
-        if (paymentProcessor == address(0)) revert RelayProcessorCannotBeZero();
+        if (paymentProcessor == address(0) || paymentProcessor == address(this)) revert RelayProcessorCannotBeZero();
 
         address validator = getValidator();
         uint256 validatorBalance = validatorsBalanceMap[validator] - 1;
-        
+
         IPaymentProcessor(paymentProcessor).payValidator({
             validator: validator,
             startBlock: validatorsDataMap[validator].blockOfLastWithdraw,
@@ -556,18 +587,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         validatorsDataMap[validator].blockOfLastWithdraw = uint64(block.number);
     }
 
-    function paymentCallback(address validator, address payee, uint256 amount) 
-        external
-        permittedReentrant(validator)  
-    {
-       
+    function paymentCallback(address validator, address payee, uint256 amount) external permittedReentrant(validator) {
         validatorsBalanceMap[validator] -= amount; // Expect EVM revert on underflow
         validatorsTotal -= amount;
 
-        SafeTransferLib.safeTransferETH(
-            payee, 
-            amount
-        );
+        SafeTransferLib.safeTransferETH(payee, amount);
 
         emit CustomPaymentProcessorPaid({
             payor: validator,
@@ -585,7 +609,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         // NOTE: Payee cannot be updated until there is a valid balance in the fee vault
         if (_payee == address(0)) revert RelayCannotBeZero();
         if (_payee == address(this)) revert RelayCannotBeSelf();
-        
+
         address _validator = getValidator();
 
         address _formerPayee = validatorsDataMap[_validator].payee;
@@ -602,13 +626,13 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         validatorsDataMap[_validator].timeUpdated = block.timestamp;
         payeeMap[_payee] = _validator;
 
-        emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);   
+        emit RelayValidatorPayeeUpdated(_validator, _payee, msg.sender);
     }
 
     /// @notice Clears a validator payee
     /// @dev Callable by validator
     function clearValidatorPayee() external nonReentrant {
-        if (validatorsBalanceMap[msg.sender] == 0) revert RelayNotActiveValidator(); 
+        if (validatorsBalanceMap[msg.sender] == 0) revert RelayNotActiveValidator();
         address _validator = msg.sender;
 
         address _formerPayee = validatorsDataMap[_validator].payee;
@@ -630,10 +654,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         validatorsRefundShareMap[validator] = refundShare;
     }
 
-    /***********************************|
-    |              Views                |
-    |__________________________________*/
-
+    /**
+     * |
+     * |              Views                |
+     * |__________________________________
+     */
     function isPayeeTimeLocked(address _validator) public view returns (bool _isTimeLocked) {
         _isTimeLocked = block.timestamp < validatorsDataMap[_validator].timeUpdated + BLOCK_TIMELOCK;
     }
@@ -644,7 +669,9 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
     function validatorPayee(address _validator) internal view returns (address _recipient) {
         address _payee = validatorsDataMap[_validator].payee;
-        _recipient = !isPayeeTimeLocked(_validator) && _payee != address(0) && validatorsBalanceMap[_payee] == 0 ? _payee : _validator;
+        _recipient = !isPayeeTimeLocked(_validator) && _payee != address(0) && validatorsBalanceMap[_payee] == 0
+            ? _payee
+            : _validator;
     }
 
     /// @notice Returns validator pending balance
@@ -668,7 +695,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     function getValidatorRecipient(address _validator) public view returns (address _recipient) {
         _recipient = validatorPayee(_validator);
     }
-    
 
     function getValidator() internal view returns (address) {
         if (validatorsBalanceMap[msg.sender] > 0) {
@@ -681,10 +707,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         revert("Invalid validator");
     }
 
-    /***********************************|
-    |             Modifiers             |
-    |__________________________________*/
-
+    /**
+     * |
+     * |             Modifiers             |
+     * |__________________________________
+     */
     modifier nonReentrant() {
         require(lock == UNLOCKED, "REENTRANCY");
 
@@ -702,12 +729,14 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     }
 
     modifier permittedReentrant(address approver) {
-        if(lock != keccak256(abi.encodePacked(approver, msg.sender))) revert RelayUnapprovedReentrancy();
+        if (lock != keccak256(abi.encodePacked(approver, msg.sender))) revert RelayUnapprovedReentrancy();
         _;
     }
 
     modifier onlyActiveValidators() {
-        if (validatorsBalanceMap[msg.sender] == 0 && validatorsBalanceMap[payeeMap[msg.sender]] == 0) revert RelayNotActiveValidator();
+        if (validatorsBalanceMap[msg.sender] == 0 && validatorsBalanceMap[payeeMap[msg.sender]] == 0) {
+            revert RelayNotActiveValidator();
+        }
         _;
     }
 
@@ -726,7 +755,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     }
 
     /// @notice Validates incoming bid
-    /// @dev 
+    /// @dev
     /// @param _oppTxHash Target Transaction hash
     /// @param _bidAmount Amount committed to be repaid
     modifier checkBid(bytes32 _oppTxHash, uint256 _bidAmount) {
@@ -762,19 +791,17 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         }
     }
 
-    function _validateValidator(address[] calldata approvedVals) 
-        internal 
-        view 
-        returns (bool validValidator) 
-    {
+    function _validateValidator(address[] calldata approvedVals) internal view returns (bool validValidator) {
         uint256 valsLength = approvedVals.length;
         uint256 i;
-        for(;i<valsLength;) {
+        for (; i < valsLength;) {
             if (block.coinbase == approvedVals[i]) {
                 return true;
             }
-            unchecked { ++i; }
-        } 
+            unchecked {
+                ++i;
+            }
+        }
         return false;
     }
 }
