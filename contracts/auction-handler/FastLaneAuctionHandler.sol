@@ -260,16 +260,15 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @notice Submits a fast bid
     /// @dev Will not revert
     /// @param fastGasPrice Bonus gasPrice rate that Searcher commits to pay to validator for gas used by searcher's call
-    /// @param executeOnLoss Boolean flag that enables Searcher calls to execute even if they lost the auction. 
+    /// @param executeOnLoss Boolean flag that enables Searcher calls to execute even if they lost the auction.
     /// @param searcherToAddress Searcher contract address to be called on its `fastLaneCall` function.
     /// @param searcherCallData callData to be passed to `_searcherToAddress.fastLaneCall(fastPrice,msg.sender,callData)`
     function submitFastBid(
         uint256 fastGasPrice, // surplus gasprice commited to be paid at the end of execution
         bool executeOnLoss, // If true, execute even if searcher lost auction
         address searcherToAddress,
-        bytes calldata searcherCallData 
+        bytes calldata searcherCallData
     ) external payable onlyEOA nonReentrant {
-
         if (searcherToAddress == address(this) || searcherToAddress == msg.sender) revert RelaySearcherWrongParams();
 
         PGAData memory existing_bid = fulfilledPGAMap[block.number];
@@ -279,30 +278,31 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         bool alreadyPaid = existing_bid.paid;
 
         // NOTE: These checks help mitigate the damage to searchers caused by relay error and adversarial validators by reverting
-        // early if the transactions are not sequenced pursuant to auction rules. 
+        // early if the transactions are not sequenced pursuant to auction rules.
 
-        // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block. 
-        // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management 
+        // Do not execute if a fastBid tx with a lower gasPrice was executed prior to this tx in the same block.
+        // NOTE: This edge case should only be achieveable via validator manipulation or erratic searcher nonce management
         if (lowestGasPrice != 0 && lowestGasPrice < tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
-        
-        // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.  
+            emit RelayInvestigateOutcome(
+                block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice
+            );
+
+            // Do not execute if a fastBid tx with a lower bid amount was executed prior to this tx in the same block.
         } else if (lowestTotalPrice != 0 && lowestTotalPrice <= fastGasPrice + tx.gasprice) {
-            emit RelayInvestigateOutcome(block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice);
-        
-        // Execute the tx if there are no issues w/ ordering. 
-        // Execute the tx if the searcher enabled executeOnLoss or if the searcher won
+            emit RelayInvestigateOutcome(
+                block.coinbase, msg.sender, block.number, lowestFastPrice, fastGasPrice, lowestGasPrice, tx.gasprice
+            );
+
+            // Execute the tx if there are no issues w/ ordering.
+            // Execute the tx if the searcher enabled executeOnLoss or if the searcher won
         } else if (executeOnLoss || !alreadyPaid) {
-
             // Use a try/catch pattern so that tx.gasprice and bidAmount can be saved to verify that
-            // proper transaction ordering is being followed. 
-            try this.fastBidWrapper{value: msg.value}(
-                msg.sender, fastGasPrice, searcherToAddress, searcherCallData
-            ) returns (uint256 bidAmount) {
-
+            // proper transaction ordering is being followed.
+            try this.fastBidWrapper{value: msg.value}(msg.sender, fastGasPrice, searcherToAddress, searcherCallData)
+            returns (uint256 bidAmount) {
                 // Mark this auction as being complete to provide quicker reverts for subsequent searchers
                 fulfilledPGAMap[block.number] = PGAData({
-                    lowestGasPrice: uint64(tx.gasprice), 
+                    lowestGasPrice: uint64(tx.gasprice),
                     lowestFastPrice: uint64(fastGasPrice),
                     lowestTotalPrice: uint64(fastGasPrice + tx.gasprice),
                     paid: true
@@ -311,27 +311,22 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
                 emit RelayFastBid(msg.sender, block.coinbase, true, bidAmount, searcherToAddress);
 
                 return; // return early so that we don't refund the searcher's msg.value
-
             } catch {
                 // Update the auction to provide quicker reverts for subsequent searchers
                 fulfilledPGAMap[block.number] = PGAData({
-                    lowestGasPrice: uint64(tx.gasprice), 
+                    lowestGasPrice: uint64(tx.gasprice),
                     lowestFastPrice: uint64(fastGasPrice),
                     lowestTotalPrice: uint64(fastGasPrice + tx.gasprice),
                     paid: alreadyPaid // carry forward any previous wins in the block
                 });
 
                 emit RelayFastBid(msg.sender, block.coinbase, false, 0, searcherToAddress);
-
             }
         }
 
         if (msg.value > 0) {
-            // Refund the searcher any msg.value for failed txs. 
-            SafeTransferLib.safeTransferETH(
-                msg.sender, 
-                msg.value
-            );
+            // Refund the searcher any msg.value for failed txs.
+            SafeTransferLib.safeTransferETH(msg.sender, msg.value);
         }
     }
 
@@ -384,14 +379,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     }
 
     // Part of the PaymentProcessor interface. In this case, this is used to transfer a validator's balances from one
-    // PFL contract to a new deployment. 
-    function payValidator(
-        address validator,
-        uint256 startBlock,
-        uint256 endBlock,
-        uint256 totalAmount,
-        bytes calldata
-    ) external nonReentrant {
+    // PFL contract to a new deployment.
+    function payValidator(address validator, uint256 startBlock, uint256 endBlock, uint256 totalAmount, bytes calldata)
+        external
+        nonReentrant
+    {
         if (endBlock != block.number || startBlock >= block.number) revert RelayUnapprovedReentrancy();
         if (validator == block.coinbase || msg.sender == block.coinbase || tx.origin == block.coinbase) {
             // NOTE: Validators can arbitrarily set the block.coinbase. This should only be used to prevent
@@ -400,7 +392,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         }
         if (totalAmount == 0) revert RelayCannotBeZero();
 
-        // Store the current balance, don't necessarily trust the caller. 
+        // Store the current balance, don't necessarily trust the caller.
         uint256 balance = address(this).balance;
         uint256 vTotal = validatorsTotal;
 
@@ -410,7 +402,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         // Revert if balance hasn't been incremented by the expected amount.
         if (address(this).balance != balance + totalAmount) revert RelayCustomPayoutCantBePartial();
 
-        // Make sure validator balances are unchanged to prevent double counting. 
+        // Make sure validator balances are unchanged to prevent double counting.
         if (vTotal != validatorsTotal) revert RelayUnapprovedReentrancy();
 
         // Increment the balances.
@@ -775,7 +767,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             // throw if invalid
             revert("Invalid validator");
         }
-        
+
         if (validator == block.coinbase || msg.sender == block.coinbase || tx.origin == block.coinbase) {
             // NOTE: Validators can arbitrarily set the block.coinbase. This should only be used to prevent
             // withdraws and deposits from occuring in the same block.
