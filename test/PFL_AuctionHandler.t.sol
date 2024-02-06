@@ -888,6 +888,24 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         vm.stopPrank();
     }
 
+    function testForwardBalanceBetweenContracts() public {
+        uint256 startingBalance = 100;
+        FastLaneAuctionHandler PFRNew = new FastLaneAuctionHandler();
+
+        PFR.paySpecificValidatorFee{value: startingBalance}(VALIDATOR1);
+        PFRNew.paySpecificValidatorFee{value: startingBalance}(VALIDATOR1);
+
+        assertEq(PFR.getValidatorBalance(VALIDATOR1), startingBalance);
+        assertEq(PFRNew.getValidatorBalance(VALIDATOR1), startingBalance);
+
+        vm.coinbase(VALIDATOR2);
+        vm.prank(VALIDATOR1);
+        PFR.collectFeesCustom(address(PFRNew), "");
+
+        assertEq(PFR.getValidatorBalance(VALIDATOR1), 1);
+        assertEq(PFRNew.getValidatorBalance(VALIDATOR1), startingBalance * 2 - 1);
+    }
+
     // Useful to get past the "validatorsBalanceMap[validator] > 0" checks
     function _donateOneWeiToValidatorBalance() internal {
         vm.prank(USER);
