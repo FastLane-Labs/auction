@@ -166,9 +166,9 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
 
         // Set the refund up
         vm.startPrank(VALIDATOR1); // should fail if validator is changing their own block
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayImmutableBlockAuthorRate.selector);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayNotCurrentValidator.selector);
         PFR.updateValidatorRefundShare(0);
-        vm.coinbase(address(0));
+        vm.coinbase(VALIDATOR2);
         PFR.updateValidatorRefundShare(5000); // 50%
         vm.coinbase(VALIDATOR1);
         vm.stopPrank();
@@ -364,6 +364,14 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
 
         vm.prank(SEARCHER_ADDRESS1, SEARCHER_ADDRESS1);
         PFR.submitFlashBid{value: bidAmount}(bidAmount, bytes32("randomTx"), address(SRE), searcherUnusedData);
+
+        // Validator can't collect fees when they are the current coinbase
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayNotCurrentValidator.selector);
+        PFR.collectFees();
+
+        // Set another validator as coinbase for the rest of the test
+        vm.coinbase(VALIDATOR2);
 
         uint256 snap = vm.snapshot();
 
@@ -755,6 +763,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), 0);
 
         // Returns block number of last withdraw
+        vm.coinbase(VALIDATOR2);
         vm.prank(VALIDATOR1);
         PFR.collectFees();
         assertEq(PFR.getValidatorBlockOfLastWithdraw(VALIDATOR1), block.number);
@@ -769,6 +778,14 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         vm.prank(USER);
         PFR.payValidatorFee{value: 1 ether}(USER);
         assertEq(PFR.getValidatorBalance(VALIDATOR1), 1 ether);
+
+        // Reverts if validator is the current coinbase
+        vm.prank(VALIDATOR1);
+        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayNotCurrentValidator.selector);
+        PFR.collectFeesCustom(address(1), "");
+
+        // Set another validator as coinbase for the rest of the test
+        vm.coinbase(VALIDATOR2);
 
         uint256 snap = vm.snapshot();
 
@@ -845,6 +862,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         // Fast forward
         vm.warp(block.timestamp + 7 days);
 
+        vm.coinbase(VALIDATOR2);
         // This revert message comes from Solmate's SafeTransferLib, and is triggered by "REENTRANCY" revert
         // Use `forge test --match-test BlocksAllReentrancy -vvv` to see the inner revert message of "REENTRANCY"
         vm.expectRevert(bytes("ETH_TRANSFER_FAILED"));
@@ -863,6 +881,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         attackerPP1.setAttacker2(address(attackerPP2));
         attackerPP1.setPayee(payee);
 
+        vm.coinbase(VALIDATOR2);
         vm.startPrank(VALIDATOR1);
         vm.expectRevert(FastLaneAuctionHandlerEvents.RelayUnapprovedReentrancy.selector);
         PFR.collectFeesCustom(address(attackerPP1), "");
