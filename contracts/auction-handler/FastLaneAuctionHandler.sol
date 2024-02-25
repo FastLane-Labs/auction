@@ -45,6 +45,7 @@ abstract contract FastLaneAuctionHandlerEvents {
     event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
 
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
+    event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
@@ -99,6 +100,7 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayCustomPayoutCantBePartial();
 
     error RelayUnapprovedReentrancy();
+    error RelayOnlyStakeShareRecipient();
 }
 
 /// @notice Validator Data Struct
@@ -154,6 +156,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
     /// @notice Map[validator] = % payment to validator in a bid with refund
     mapping(address => int256) private validatorsRefundShareMap;
+    
+    uint24 internal constant FEE_BASE = 1_000_000;
+    uint24 internal constant flStakeShareRatio = 50_000; // 5%
+    address internal constant StakeShareRecipient = address(0x01);
+    uint256 public flStakeSharePayable;
 
     bytes32 private constant UNLOCKED = bytes32(uint256(1));
     bytes32 private constant LOCKED = bytes32(uint256(2));
@@ -431,8 +438,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             _bidAmount = address(this).balance - balanceBefore;
         }
 
-        validatorsBalanceMap[block.coinbase] += _bidAmount;
-        validatorsTotal += _bidAmount;
+        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(_bidAmount, flStakeShareRatio);
+
+        validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
+        validatorsTotal += amtPayableToValidator;
+        flStakeSharePayable += amtPayableToStakers;
 
         return _bidAmount;
     }
@@ -459,8 +469,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             }
         }
 
-        validatorsBalanceMap[block.coinbase] += _bidAmount;
-        validatorsTotal += _bidAmount;
+        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(_bidAmount, flStakeShareRatio);
+
+        validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
+        validatorsTotal += amtPayableToValidator;
+        flStakeSharePayable += amtPayableToStakers;
 
         return _bidAmount;
     }
@@ -486,10 +499,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         // Calculate the split of payment
         uint256 validatorShare = (getValidatorRefundShare(block.coinbase) * bidAmount) / VALIDATOR_REFUND_SCALE;
         uint256 refundAmount = bidAmount - validatorShare; // subtract to ensure no overflow
+        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(validatorShare, flStakeShareRatio);
 
         // Update balance and make payment
-        validatorsBalanceMap[block.coinbase] += validatorShare;
-        validatorsTotal += validatorShare;
+        validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
+        validatorsTotal += amtPayableToValidator;
+        flStakeSharePayable += amtPayableToStakers;
         payable(refundAddress).transfer(refundAmount);
 
         emit RelayFlashBidWithRefund(
@@ -502,6 +517,38 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             refundAmount,
             refundAddress
         );
+    }
+
+    /// @notice Internal, calculates shares
+    /// @param _amount Amount to calculates cuts from
+    /// @param _share Share bps
+    /// @return validatorCut Validator cut
+    /// @return stakeCut Stake cut
+    function _calculateStakeShare(uint256 _amount, uint24 _share) internal pure returns (uint256 validatorCut, uint256 stakeCut) {
+        validatorCut = (_amount * (FEE_BASE - _share)) / FEE_BASE;
+        stakeCut = _amount - validatorCut;
+    }
+
+    /// @notice Withdraws fl stake share
+    /// @dev fl only
+    /// @param _recipient Recipient
+    /// @param _amount Amount
+    function withdrawStakeShare(address _recipient, uint256 _amount) external onlyStakeShareRecipient nonReentrant {
+        if (_recipient == address(0) || _amount == 0) revert RelayCannotBeZero();
+        flStakeSharePayable -= _amount;
+        SafeTransferLib.safeTransferETH(
+            _recipient, 
+            _amount
+        );
+        emit RelayProcessingWithdrewStakeShare(_recipient, _amount);
+    }
+
+    function getCurrentStakeRatio() public view returns (uint24) {
+        return flStakeShareRatio;
+    }
+
+    function getCurrentStakeBalance() public view returns (uint256) {
+       return flStakeSharePayable;
     }
 
     receive() external payable {}
@@ -758,6 +805,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
     modifier onlyEOA() {
         if (msg.sender != tx.origin) revert RelayPermissionSenderNotOrigin();
+        _;
+    }
+
+    modifier onlyStakeShareRecipient() {
+        if (msg.sender != StakeShareRecipient) revert RelayOnlyStakeShareRecipient();
         _;
     }
 
