@@ -665,35 +665,6 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         assertEq(PFR.getValidatorPayee(VALIDATOR1), PAYEE1);
     }
 
-    function testSyncNativeTokenCanOnlyBeCalledByValidators() public {
-        _donateOneWeiToValidatorBalance();
-        uint256 stuckNativeAmount = 1 ether;
-        vm.prank(USER);
-        address(PFR).call{value: stuckNativeAmount}("");
-
-        vm.prank(USER);
-        vm.expectRevert(FastLaneAuctionHandlerEvents.RelayNotActiveValidator.selector);
-        PFR.syncStuckNativeToken();
-
-        uint256 validatorBalanceBefore = PFR.getValidatorBalance(VALIDATOR1);
-        vm.prank(VALIDATOR1);
-        PFR.syncStuckNativeToken();
-        uint256 validatorBalanceAfter = PFR.getValidatorBalance(VALIDATOR1);
-        assertEq(validatorBalanceAfter - validatorBalanceBefore, stuckNativeAmount);
-    }
-
-    function testSyncNativeTokenDoesNotIncreaseBalanceIfNoExcess() public {
-        _donateOneWeiToValidatorBalance();
-        uint256 auctionContractBalanceBefore = address(PFR).balance;
-        uint256 validatorBalanceBefore = PFR.getValidatorBalance(VALIDATOR1);
-        vm.prank(VALIDATOR1);
-        PFR.syncStuckNativeToken();
-        uint256 auctionContractBalanceAfter = address(PFR).balance;
-        uint256 validatorBalanceAfter = PFR.getValidatorBalance(VALIDATOR1);
-        assertEq(validatorBalanceBefore, validatorBalanceAfter);
-        assertEq(auctionContractBalanceBefore, auctionContractBalanceAfter);
-    }
-
     function testWithdrawStuckERC20CanOnlyBeCalledByValidators() public {
         _donateOneWeiToValidatorBalance();
         uint256 stuckERC20Amount = 1 ether;

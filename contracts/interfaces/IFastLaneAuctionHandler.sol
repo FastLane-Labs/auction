@@ -45,7 +45,6 @@ interface IFastLaneAuctionHandler {
         uint256 newGasPrice
     );
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
-    event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
     event RelaySimulatedFlashBid(
         address indexed sender,
         uint256 amount,
@@ -55,7 +54,7 @@ interface IFastLaneAuctionHandler {
     );
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
-    event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
+    event RelayWithdrawExcessBalance(address indexed receiver, uint256 amount);
 
     function clearValidatorPayee() external;
     function collectFees() external returns (uint256);

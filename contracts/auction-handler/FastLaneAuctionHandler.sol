@@ -42,10 +42,9 @@ abstract contract FastLaneAuctionHandlerEvents {
     );
 
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
-    event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
+    event RelayWithdrawExcessBalance(address indexed receiver, uint256 amount);
 
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
-    event RelayProcessingWithdrewStakeShare(address indexed recipient, uint256 amountWithdrawn);
 
     event RelayFeeCollected(address indexed payor, address indexed payee, uint256 amount);
 
@@ -100,7 +99,6 @@ abstract contract FastLaneAuctionHandlerEvents {
     error RelayCustomPayoutCantBePartial();
 
     error RelayUnapprovedReentrancy();
-    error RelayOnlyStakeShareRecipient();
 }
 
 /// @notice Validator Data Struct
@@ -135,7 +133,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     uint256 internal constant VALIDATOR_REFUND_SCALE = 10_000; // 1 = 0.01%
 
     /// @notice The default refund share for validators
-    int256 internal constant DEFAULT_VALIDATOR_REFUND_SHARE = 5000; // 50%
+    int256 internal constant DEFAULT_VALIDATOR_REFUND_SHARE = 5_000; // 50%
 
     /// @notice Mapping to Validator Data Struct
     mapping(address => ValidatorData) internal validatorsDataMap;
@@ -157,10 +155,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @notice Map[validator] = % payment to validator in a bid with refund
     mapping(address => int256) private validatorsRefundShareMap;
     
-    uint24 internal constant FEE_BASE = 1_000_000;
-    uint24 internal constant flStakeShareRatio = 50_000; // 5%
-    address internal constant StakeShareRecipient = address(0x01);
-    uint256 public flStakeSharePayable;
+    uint24 internal constant VALIDATOR_SHARE_BASE = 1_000_000;
+    uint24 internal constant STAKE_RATIO = 50_000; // 5%
+
+    // TODO: update to point to the correct address
+    address internal excessBalanceRecipient = address(0);
 
     bytes32 private constant UNLOCKED = bytes32(uint256(1));
     bytes32 private constant LOCKED = bytes32(uint256(2));
@@ -438,11 +437,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             _bidAmount = address(this).balance - balanceBefore;
         }
 
-        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(_bidAmount, flStakeShareRatio);
+        uint256 amtPayableToValidator = _calculateValidatorShare(_bidAmount, STAKE_RATIO);
 
         validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
         validatorsTotal += amtPayableToValidator;
-        flStakeSharePayable += amtPayableToStakers;
 
         return _bidAmount;
     }
@@ -469,11 +467,10 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             }
         }
 
-        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(_bidAmount, flStakeShareRatio);
+        uint256 amtPayableToValidator = _calculateValidatorShare(_bidAmount, STAKE_RATIO);
 
         validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
         validatorsTotal += amtPayableToValidator;
-        flStakeSharePayable += amtPayableToStakers;
 
         return _bidAmount;
     }
@@ -499,12 +496,11 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         // Calculate the split of payment
         uint256 validatorShare = (getValidatorRefundShare(block.coinbase) * bidAmount) / VALIDATOR_REFUND_SCALE;
         uint256 refundAmount = bidAmount - validatorShare; // subtract to ensure no overflow
-        (uint256 amtPayableToValidator, uint256 amtPayableToStakers) = _calculateStakeShare(validatorShare, flStakeShareRatio);
+        uint256 amtPayableToValidator = _calculateValidatorShare(validatorShare, STAKE_RATIO);
 
         // Update balance and make payment
         validatorsBalanceMap[block.coinbase] += amtPayableToValidator;
         validatorsTotal += amtPayableToValidator;
-        flStakeSharePayable += amtPayableToStakers;
         payable(refundAddress).transfer(refundAmount);
 
         emit RelayFlashBidWithRefund(
@@ -523,32 +519,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
     /// @param _amount Amount to calculates cuts from
     /// @param _share Share bps
     /// @return validatorCut Validator cut
-    /// @return stakeCut Stake cut
-    function _calculateStakeShare(uint256 _amount, uint24 _share) internal pure returns (uint256 validatorCut, uint256 stakeCut) {
-        validatorCut = (_amount * (FEE_BASE - _share)) / FEE_BASE;
-        stakeCut = _amount - validatorCut;
-    }
-
-    /// @notice Withdraws fl stake share
-    /// @dev fl only
-    /// @param _recipient Recipient
-    /// @param _amount Amount
-    function withdrawStakeShare(address _recipient, uint256 _amount) external onlyStakeShareRecipient nonReentrant {
-        if (_recipient == address(0) || _amount == 0) revert RelayCannotBeZero();
-        flStakeSharePayable -= _amount;
-        SafeTransferLib.safeTransferETH(
-            _recipient, 
-            _amount
-        );
-        emit RelayProcessingWithdrewStakeShare(_recipient, _amount);
+    function _calculateValidatorShare(uint256 _amount, uint24 _share) internal pure returns (uint256 validatorCut) {
+        validatorCut = (_amount * (VALIDATOR_SHARE_BASE - _share)) / VALIDATOR_SHARE_BASE;
     }
 
     function getCurrentStakeRatio() public view returns (uint24) {
-        return flStakeShareRatio;
-    }
-
-    function getCurrentStakeBalance() public view returns (uint256) {
-       return flStakeSharePayable;
+        return STAKE_RATIO;
     }
 
     receive() external payable {}
@@ -561,23 +537,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
      * |__________________________________
      */
 
-    /// @notice Syncs stuck matic to calling validator
-    /// @dev In the event something went really wrong / vuln report
-    function syncStuckNativeToken() external onlyActiveValidators nonReentrant {
-        uint256 _expectedBalance = validatorsTotal;
-        uint256 _currentBalance = address(this).balance;
-        if (_currentBalance >= _expectedBalance) {
-            address _validator = getValidator();
-
-            uint256 _surplus = _currentBalance - _expectedBalance;
-
-            validatorsBalanceMap[_validator] += _surplus;
-            validatorsTotal += _surplus;
-
-            emit RelayWithdrawStuckNativeToken(_validator, _surplus);
-        }
-    }
-
     /// @notice Withdraws stuck ERC20
     /// @dev In the event people send ERC20 instead of Matic we can send them back
     /// @param _tokenAddress Address of the stuck token
@@ -589,6 +548,14 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
             SafeTransferLib.safeTransfer(oopsToken, msg.sender, oopsTokenBalance);
             emit RelayWithdrawStuckERC20(address(this), msg.sender, oopsTokenBalance);
         }
+    }
+
+    /// @notice Updates the excess balance recipient address
+    /// @dev Callable by the current recipient only
+    /// @param newRecipient New recipient address
+    function updateExcessBalanceRecipient(address newRecipient) external {
+        require(msg.sender == excessBalanceRecipient, "Caller is not the current excess balance recipient");
+        excessBalanceRecipient = newRecipient;
     }
 
     /**
@@ -610,6 +577,12 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         validatorsBalanceMap[_validator] = 1;
         validatorsDataMap[_validator].blockOfLastWithdraw = uint64(block.number);
         SafeTransferLib.safeTransferETH(validatorPayee(_validator), payableBalance);
+        uint256 totalBalance = address(this).balance;
+        uint256 excessBalance = totalBalance - validatorsTotal;
+        if (excessBalance > 0) {
+            SafeTransferLib.safeTransferETH(excessBalanceRecipient, excessBalance);
+            emit RelayWithdrawExcessBalance(excessBalanceRecipient, excessBalance);
+        }
         emit RelayProcessingPaidValidator(_validator, payableBalance, msg.sender);
         return payableBalance;
     }
@@ -805,11 +778,6 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
 
     modifier onlyEOA() {
         if (msg.sender != tx.origin) revert RelayPermissionSenderNotOrigin();
-        _;
-    }
-
-    modifier onlyStakeShareRecipient() {
-        if (msg.sender != StakeShareRecipient) revert RelayOnlyStakeShareRecipient();
         _;
     }
 
