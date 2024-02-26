@@ -42,7 +42,7 @@ abstract contract FastLaneAuctionHandlerEvents {
     );
 
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
-    event RelayWithdrawExcessBalance(address indexed receiver, uint256 amount);
+    event RelayProcessingExcessBalance(address indexed receiver, uint256 amount);
 
     event RelayProcessingPaidValidator(address indexed validator, uint256 validatorPayment, address indexed initiator);
 
@@ -581,7 +581,7 @@ contract FastLaneAuctionHandler is FastLaneAuctionHandlerEvents {
         uint256 excessBalance = totalBalance - validatorsTotal;
         if (excessBalance > 0) {
             SafeTransferLib.safeTransferETH(excessBalanceRecipient, excessBalance);
-            emit RelayWithdrawExcessBalance(excessBalanceRecipient, excessBalance);
+            emit RelayProcessingExcessBalance(excessBalanceRecipient, excessBalance);
         }
         emit RelayProcessingPaidValidator(_validator, payableBalance, msg.sender);
         return payableBalance;

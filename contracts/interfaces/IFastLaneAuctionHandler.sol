@@ -54,7 +54,7 @@ interface IFastLaneAuctionHandler {
     );
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
-    event RelayWithdrawExcessBalance(address indexed receiver, uint256 amount);
+    event RelayProcessingExcessBalance(address indexed receiver, uint256 amount);
 
     function clearValidatorPayee() external;
     function collectFees() external returns (uint256);

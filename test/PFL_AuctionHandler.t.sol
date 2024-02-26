@@ -375,7 +375,7 @@ contract PFLAuctionHandlerTest is PFLHelper, FastLaneAuctionHandlerEvents, Test 
         uint256 balanceBefore = VALIDATOR1.balance;
         vm.expectEmit(true, true, true, true);
         emit RelayProcessingPaidValidator(VALIDATOR1, expectedValidatorPayout, VALIDATOR1);
-        emit RelayWithdrawExcessBalance(address(0), excessBalance);
+        emit RelayProcessingExcessBalance(address(0), excessBalance);
 
         vm.prank(VALIDATOR1);
         
