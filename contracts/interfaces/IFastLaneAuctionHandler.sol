@@ -54,7 +54,7 @@ interface IFastLaneAuctionHandler {
     );
     event RelayValidatorPayeeUpdated(address validator, address payee, address indexed initiator);
     event RelayWithdrawStuckERC20(address indexed receiver, address indexed token, uint256 amount);
-    event RelayWithdrawStuckNativeToken(address indexed receiver, uint256 amount);
+    event RelayProcessingExcessBalance(address indexed receiver, uint256 amount);
 
     function clearValidatorPayee() external;
     function collectFees() external returns (uint256);
@@ -85,9 +85,12 @@ interface IFastLaneAuctionHandler {
         address searcherToAddress,
         bytes memory searcherCallData
     ) external payable;
-    function submitFastBid(uint256 fastGasPrice, bool executeOnLoss, address searcherToAddress, bytes memory searcherCallData)
-        external
-        payable;
+    function submitFastBid(
+        uint256 fastGasPrice,
+        bool executeOnLoss,
+        address searcherToAddress,
+        bytes memory searcherCallData
+    ) external payable;
     function submitFlashBid(
         uint256 bidAmount,
         bytes32 oppTxHash,
@@ -107,5 +110,6 @@ interface IFastLaneAuctionHandler {
     function validatorsBalanceMap(address) external view returns (uint256);
     function validatorsRefundShareMap(address) external view returns (uint256);
     function validatorsTotal() external view returns (uint256);
+    function withdrawStakeShare(address _recipient, uint256 _amount) external;
     function withdrawStuckERC20(address _tokenAddress) external;
 }
